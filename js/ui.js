@@ -25,43 +25,35 @@ function initAudioContext() {
 
 function startRingtone() {
     try {
-        // Stop any existing ringtone
         stopRingtone();
         
         const ctx = initAudioContext();
         if (!ctx) return;
         
-        // Resume audio context if suspended (browsers require user interaction)
         if (ctx.state === 'suspended') {
             ctx.resume();
         }
         
-        // Create gain node for volume control
         ringtoneGain = ctx.createGain();
-        ringtoneGain.gain.value = 0.3; // 30% volume
+        ringtoneGain.gain.value = 0.3;
         ringtoneGain.connect(ctx.destination);
         
-        // Create oscillator for the ringtone
         ringtoneOscillator = ctx.createOscillator();
-        ringtoneOscillator.type = 'sine'; // Sine wave for softer ring
-        ringtoneOscillator.frequency.value = 440; // A4 note
+        ringtoneOscillator.type = 'sine';
+        ringtoneOscillator.frequency.value = 440;
         
-        // Connect oscillator to gain
         ringtoneOscillator.connect(ringtoneGain);
-        
-        // Start the oscillator
         ringtoneOscillator.start();
         
-        // Create on/off pattern for ringing effect
         let isOn = true;
         ringtoneInterval = setInterval(() => {
             if (ringtoneGain) {
                 ringtoneGain.gain.value = isOn ? 0.3 : 0;
                 isOn = !isOn;
             }
-        }, 500); // 500ms on, 500ms off
+        }, 500);
         
-        log('🔔 Ringtone started');
+        console.log('🔔 Ringtone started');
     } catch (error) {
         console.error('❌ Failed to start ringtone:', error);
     }
@@ -77,9 +69,7 @@ function stopRingtone() {
         try {
             ringtoneOscillator.stop();
             ringtoneOscillator.disconnect();
-        } catch (error) {
-            // Ignore errors if already stopped
-        }
+        } catch (error) {}
         ringtoneOscillator = null;
     }
     
@@ -88,7 +78,7 @@ function stopRingtone() {
         ringtoneGain = null;
     }
     
-    log('🔕 Ringtone stopped');
+    console.log('🔕 Ringtone stopped');
 }
 
 // Initialize DOM elements when document is ready
@@ -106,8 +96,6 @@ function initDOM() {
     dom.localVideo = document.getElementById('local-video');
     dom.remoteVideo = document.getElementById('remote-video');
     dom.usersContainer = document.getElementById('users-container');
-    dom.debugContent = document.getElementById('debug-content');
-    dom.clearDebugBtn = document.getElementById('clear-debug');
     dom.modalOverlay = document.getElementById('modal-overlay');
     dom.incomingModal = document.getElementById('incoming-call-modal');
     dom.callerNameSpan = document.getElementById('caller-name');
@@ -130,18 +118,6 @@ function initDOM() {
     return true;
 }
 
-// ==================== DEBUG LOGGING ====================
-window.log = function(message) {
-    const timestamp = new Date().toLocaleTimeString();
-    const line = `[${timestamp}] ${message}`;
-    
-    if (dom.debugContent) {
-        dom.debugContent.innerHTML += line + '\n';
-        dom.debugContent.scrollTop = dom.debugContent.scrollHeight;
-    }
-    console.log(message);
-};
-
 // ==================== MODAL FUNCTIONS WITH RINGTONE ====================
 window.showIncomingCallModal = function(callerId, callId, offer) {
     if (!dom.modalOverlay || !dom.incomingModal || !dom.callerNameSpan) {
@@ -154,13 +130,11 @@ window.showIncomingCallModal = function(callerId, callId, offer) {
     dom.modalOverlay.style.display = 'block';
     dom.incomingModal.style.display = 'block';
     
-    // Start ringing
     startRingtone();
     
-    // Auto-stop after 30 seconds (timeout)
     setTimeout(() => {
         if (CONFIG.currentIncomingCall) {
-            log('⏰ Incoming call timed out');
+            console.log('⏰ Incoming call timed out');
             hideIncomingCallModal();
         }
     }, 30000);
@@ -173,7 +147,6 @@ window.hideIncomingCallModal = function() {
     dom.incomingModal.style.display = 'none';
     CONFIG.currentIncomingCall = null;
     
-    // Stop ringing
     stopRingtone();
 };
 
@@ -183,16 +156,6 @@ document.addEventListener('DOMContentLoaded', function() {
     
     if (initDOM() && !uiInitialized) {
         // Clone and replace buttons to ensure clean event listeners
-        if (dom.clearDebugBtn) {
-            const newClearBtn = dom.clearDebugBtn.cloneNode(true);
-            dom.clearDebugBtn.parentNode.replaceChild(newClearBtn, dom.clearDebugBtn);
-            dom.clearDebugBtn = newClearBtn;
-            
-            dom.clearDebugBtn.addEventListener('click', () => {
-                if (dom.debugContent) dom.debugContent.innerHTML = '';
-            });
-        }
-
         if (dom.acceptBtn) {
             const newAcceptBtn = dom.acceptBtn.cloneNode(true);
             dom.acceptBtn.parentNode.replaceChild(newAcceptBtn, dom.acceptBtn);
@@ -220,7 +183,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         endedAt: firebase.firestore.FieldValue.serverTimestamp()
                     }).catch(err => console.error('Error rejecting call:', err));
                     hideIncomingCallModal();
-                    log('📞 Call rejected');
+                    console.log('📞 Call rejected');
                 }
             });
         }
@@ -236,9 +199,8 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         uiInitialized = true;
-        log('🚀 UI loaded with ringtone support');
+        console.log('🚀 UI loaded with ringtone support');
         
-        // Signal that UI is ready
         window.dispatchEvent(new Event('ui-ready'));
     }
 });
@@ -249,3 +211,7 @@ document.addEventListener('click', () => {
         audioContext.resume();
     }
 }, { once: false });
+
+// Make functions available globally
+window.startRingtone = startRingtone;
+window.stopRingtone = stopRingtone;
