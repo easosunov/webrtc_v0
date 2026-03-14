@@ -1,41 +1,45 @@
-// ==================== LOAD USERS ====================
 console.log('✅ users.js loaded');
+
+// ==================== LOAD USERS ====================
 window.loadUsers = async function() {
     try {
-        log('📋 Loading users from Firestore...');
+        console.log('📋 Loading users from Firestore...');
         const usersSnapshot = await db.collection('users').get();
         const users = [];
         
-        log(`📊 Total users in database: ${usersSnapshot.size}`);
+        console.log(`📊 Total users in database: ${usersSnapshot.size}`);
         
         usersSnapshot.forEach(doc => {
-            log(`🔍 Found user: ${doc.id}`);
+            console.log(`🔍 Found user: ${doc.id}`);
             if (doc.id !== CONFIG.myUsername) {
                 const userData = doc.data();
-                log(`✅ Adding user ${doc.id} to list`);
+                console.log(`✅ Adding user ${doc.id} to list`);
                 users.push({
                     username: doc.id,
                     displayName: userData.displayName || doc.id,
                     isAdmin: userData.isAdmin || false
                 });
             } else {
-                log(`⏭️ Skipping self: ${doc.id}`);
+                console.log(`⏭️ Skipping self: ${doc.id}`);
             }
         });
         
-        log(`📋 Users found (excluding self): ${users.length}`);
+        console.log(`📋 Users found (excluding self): ${users.length}`);
         renderUsersList(users);
         
     } catch (error) {
-        log(`❌ Error loading users: ${error.message}`);
+        console.log(`❌ Error loading users: ${error.message}`);
     }
 };
 
 function renderUsersList(users) {
-    if (!dom.usersContainer) return;
+    if (!window.dom || !window.dom.usersContainer) {
+        console.error('usersContainer not found in dom');
+        return;
+    }
     
     if (users.length === 0) {
-        dom.usersContainer.innerHTML = '<div class="user-item">No other users available</div>';
+        window.dom.usersContainer.innerHTML = '<div class="user-item">No other users available</div>';
         return;
     }
     
@@ -65,7 +69,7 @@ function renderUsersList(users) {
             </div>
         `;
     });
-    dom.usersContainer.innerHTML = html;
+    window.dom.usersContainer.innerHTML = html;
 }
 
 window.debugUsers = async function() {
