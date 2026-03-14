@@ -1,5 +1,5 @@
 // ==================== CLEANUP STALE CALLS ====================
-async function cleanupStaleCalls() {
+window.cleanupStaleCalls = async function() {
     if (!CONFIG.myUsername) return;
     
     try {
@@ -25,7 +25,7 @@ async function cleanupStaleCalls() {
     } catch (error) {
         log(`Error cleaning up stale calls: ${error.message}`);
     }
-}
+};
 
 // ==================== CALL FUNCTIONS ====================
 window.callUser = async function(targetUsername) {
@@ -47,7 +47,7 @@ window.callUser = async function(targetUsername) {
         
         updateCallButtons(targetUsername);
         
-        await window.createPeerConnection(targetUsername, true);
+        await window.createPeerConnection?.(targetUsername, true);
         
         const offer = await CONFIG.peerConnection.createOffer();
         await CONFIG.peerConnection.setLocalDescription(offer);
@@ -95,7 +95,7 @@ window.callUser = async function(targetUsername) {
         log(`❌ Call error: ${error.message}`);
         CONFIG.isInCall = false;
         CONFIG.currentCallId = null;
-        window.loadUsers();
+        window.loadUsers?.();
     }
 };
 
@@ -119,7 +119,7 @@ window.answerCall = async function(callId, callerId, offer) {
         CONFIG.isInCall = true;
         CONFIG.currentCallId = callId;
         
-        await window.createPeerConnection(callerId, false);
+        await window.createPeerConnection?.(callerId, false);
         
         await CONFIG.peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
         
@@ -152,7 +152,7 @@ window.answerCall = async function(callId, callerId, offer) {
         
     } catch (error) {
         log(`❌ Error answering call: ${error.message}`);
-        window.hangup('answer_error');
+        window.hangup?.('answer_error');
     }
 };
 
@@ -178,8 +178,9 @@ window.listenForIncomingCalls = function() {
                     
                     log(`📞 Incoming call from ${callData.callerId}!`);
                     
-                    // Show custom modal
-                    window.showIncomingCallModal(callData.callerId, callId, callData.offer);
+                    if (window.showIncomingCallModal) {
+                        window.showIncomingCallModal(callData.callerId, callId, callData.offer);
+                    }
                 }
             });
         }, (error) => {
@@ -217,16 +218,15 @@ window.hangup = async function(reason = 'user_initiated') {
     CONFIG.currentCallId = null;
     CONFIG.iceRestartAttempts = 0;
     
-    dom.remoteVideo.srcObject = null;
-    dom.hangupBtn.disabled = true;
+    if (dom.remoteVideo) dom.remoteVideo.srcObject = null;
+    if (dom.hangupBtn) dom.hangupBtn.disabled = true;
     
-    window.hideIncomingCallModal();
+    if (window.hideIncomingCallModal) window.hideIncomingCallModal();
     
     log('📞 Call ended');
-    window.loadUsers();
+    window.loadUsers?.();
 };
 
-dom.hangupBtn.addEventListener('click', () => window.hangup('user_initiated'));
-
-// Make cleanupStaleCalls available globally
-window.cleanupStaleCalls = cleanupStaleCalls;
+if (dom.hangupBtn) {
+    dom.hangupBtn.addEventListener('click', () => window.hangup('user_initiated'));
+}
