@@ -1,5 +1,92 @@
 console.log('✅ calls.js loaded');
 
+// Audio context for ringback tone (caller hears this)
+let ringbackContext = null;
+let ringbackGain = null;
+let ringbackOscillator = null;
+let ringbackInterval = null;
+
+// ==================== RINGBACK TONE FUNCTIONS (for caller) ====================
+function initRingbackContext() {
+    if (ringbackContext) return ringbackContext;
+    
+    try {
+        ringbackContext = new (window.AudioContext || window.webkitAudioContext)();
+        console.log('🔊 Ringback audio context initialized');
+    } catch (error) {
+        console.error('❌ Failed to create ringback audio context:', error);
+    }
+    return ringbackContext;
+}
+
+function startRingbackTone() {
+    try {
+        // Stop any existing ringback
+        stopRingbackTone();
+        
+        const ctx = initRingbackContext();
+        if (!ctx) return;
+        
+        // Resume audio context if suspended
+        if (ctx.state === 'suspended') {
+            ctx.resume();
+        }
+        
+        // Create gain node for volume control
+        ringbackGain = ctx.createGain();
+        ringbackGain.gain.value = 0.2; // 20% volume (softer than incoming ring)
+        ringbackGain.connect(ctx.destination);
+        
+        // Create oscillator for the ringback tone
+        ringbackOscillator = ctx.createOscillator();
+        ringbackOscillator.type = 'sine';
+        ringbackOscillator.frequency.value = 440; // A4 note
+        
+        // Connect oscillator to gain
+        ringbackOscillator.connect(ringbackGain);
+        
+        // Start the oscillator
+        ringbackOscillator.start();
+        
+        // Different pattern for ringback (2 seconds on, 4 seconds off - like US ringback)
+        let isOn = true;
+        ringbackInterval = setInterval(() => {
+            if (ringbackGain) {
+                ringbackGain.gain.value = isOn ? 0.2 : 0;
+                isOn = !isOn;
+            }
+        }, 2000); // 2 seconds on, 2 seconds off (alternating)
+        
+        log('🔊 Ringback tone started');
+    } catch (error) {
+        console.error('❌ Failed to start ringback tone:', error);
+    }
+}
+
+function stopRingbackTone() {
+    if (ringbackInterval) {
+        clearInterval(ringbackInterval);
+        ringbackInterval = null;
+    }
+    
+    if (ringbackOscillator) {
+        try {
+            ringbackOscillator.stop();
+            ringbackOscillator.disconnect();
+        } catch (error) {
+            // Ignore errors if already stopped
+        }
+        ringbackOscillator = null;
+    }
+    
+    if (ringbackGain) {
+        ringbackGain.disconnect();
+        ringbackGain = null;
+    }
+    
+    log('🔇 Ringback tone stopped');
+}
+
 // ==================== CLEANUP STALE CALLS ====================
 window.cleanupStaleCalls = async function() {
     if (!CONFIG.myUsername) return;
@@ -49,6 +136,9 @@ window.callUser = async function(targetUsername) {
         
         updateCallButtons(targetUsername);
         
+        // Start ringback tone for caller
+        startRingbackTone();
+        
         await window.createPeerConnection(targetUsername, true);
         
         const offer = await CONFIG.peerConnection.createOffer();
@@ -68,14 +158,18 @@ window.callUser = async function(targetUsername) {
         
         log('📤 Offer sent, waiting for answer...');
         
-        db.collection('calls').doc(CONFIG.currentCallId).onSnapshot((snapshot) => {
+        // Listen for answer
+        const unsubscribe = db.collection('calls').doc(CONFIG.currentCallId).onSnapshot((snapshot) => {
             if (!snapshot.exists) return;
             
             const data = snapshot.data();
             if (data.answer && CONFIG.peerConnection && !CONFIG.peerConnection.currentRemoteDescription) {
                 log('📥 Received answer');
+                // Stop ringback tone when answer received
+                stopRingbackTone();
                 CONFIG.peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer))
                     .catch(err => log(`❌ Error setting remote description: ${err.message}`));
+                unsubscribe(); // Stop listening after answer
             }
         });
         
@@ -93,8 +187,18 @@ window.callUser = async function(targetUsername) {
                 });
             });
         
+        // Auto-stop ringback after 30 seconds (timeout)
+        setTimeout(() => {
+            if (CONFIG.isInCall && !CONFIG.peerConnection?.currentRemoteDescription) {
+                log('⏰ Call timeout - no answer received');
+                stopRingbackTone();
+                window.hangup('timeout');
+            }
+        }, 30000);
+        
     } catch (error) {
         log(`❌ Call error: ${error.message}`);
+        stopRingbackTone();
         CONFIG.isInCall = false;
         CONFIG.currentCallId = null;
         window.loadUsers?.();
@@ -158,87 +262,6 @@ window.answerCall = async function(callId, callerId, offer) {
     }
 };
 
-
-// ==================== SIMPLE VERSION - JUST DELETE ALL BUT LATEST ====================
-window.cleanupAllButLatest = async function() {
-    if (!CONFIG.myUsername) return;
-    
-    try {
-        log('🧹 Cleaning up all but latest call per user...');
-        
-        // Get all calls
-        const allCallsSnapshot = await db.collection('calls').get();
-        
-        if (allCallsSnapshot.empty) {
-            log('📭 No calls to clean up');
-            return;
-        }
-        
-        // Group calls by user pair (caller-callee combination)
-        const callsByPair = {};
-        
-        allCallsSnapshot.forEach(doc => {
-            const callData = doc.data();
-            // Create a unique key for the pair (sorted so A-B and B-A are the same)
-            const users = [callData.callerId, callData.calleeId].sort();
-            const pairKey = `${users[0]}-${users[1]}`;
-            
-            if (!callsByPair[pairKey]) {
-                callsByPair[pairKey] = [];
-            }
-            
-            let timestamp = 0;
-            if (callData.timestamp) {
-                timestamp = callData.timestamp.toMillis?.() || 
-                           callData.timestamp._seconds * 1000 || 
-                           callData.timestamp;
-            }
-            
-            callsByPair[pairKey].push({
-                id: doc.id,
-                timestamp: timestamp,
-                ref: doc.ref,
-                data: callData
-            });
-        });
-        
-        // Keep only the most recent for each pair
-        const batch = db.batch();
-        let deletedCount = 0;
-        let keptCount = 0;
-        
-        Object.keys(callsByPair).forEach(pairKey => {
-            const pairCalls = callsByPair[pairKey];
-            
-            // Sort by timestamp (newest first)
-            pairCalls.sort((a, b) => b.timestamp - a.timestamp);
-            
-            // Keep the most recent
-            pairCalls.forEach((call, index) => {
-                if (index === 0) {
-                    keptCount++;
-                    log(`✅ Keeping latest call for pair ${pairKey}`);
-                } else {
-                    batch.delete(call.ref);
-                    deletedCount++;
-                    log(`🗑️ Deleting old call for pair ${pairKey}`);
-                }
-            });
-        });
-        
-        if (deletedCount > 0) {
-            await batch.commit();
-            log(`🧹 Cleanup complete: kept ${keptCount} calls, deleted ${deletedCount} old calls`);
-        } else {
-            log(`📭 No old calls to delete`);
-        }
-        
-    } catch (error) {
-        log(`❌ Error during cleanup: ${error.message}`);
-    }
-};
-
-
 // ==================== INCOMING CALL LISTENER ====================
 window.listenForIncomingCalls = function() {
     if (!CONFIG.myUsername) return;
@@ -271,10 +294,13 @@ window.listenForIncomingCalls = function() {
         });
 };
 
-// ==================== HANGUP FUNCTION ====================
 // ==================== HANGUP FUNCTION WITH AUTO-CLEANUP ====================
 window.hangup = async function(reason = 'user_initiated') {
     log(`📞 Call ended - reason: ${reason}`);
+    
+    // Stop both ringtone and ringback
+    if (window.stopRingtone) window.stopRingtone();
+    stopRingbackTone();
     
     if (CONFIG.peerConnection) {
         CONFIG.peerConnection.close();
@@ -314,28 +340,25 @@ window.hangup = async function(reason = 'user_initiated') {
     log('📞 Call ended');
     window.loadUsers?.();
     
-    // ===== AUTO-CLEANUP AFTER HANGUP =====
-    // Clean up old calls, keeping only the latest for each user pair
+    // Auto-cleanup after hangup
     setTimeout(async () => {
         log('🧹 Running post-call cleanup...');
         await window.cleanupOldCallsKeepLatest();
-    }, 1000); // Small delay to ensure call status is updated first
+    }, 1000);
 };
 
-// ==================== ENHANCED CLEANUP FUNCTION ====================
+// ==================== CLEANUP OLD CALLS ====================
 window.cleanupOldCallsKeepLatest = async function() {
     if (!CONFIG.myUsername) return;
     
     try {
         log('🧹 Starting smart cleanup - keeping only latest call per user...');
         
-        // Get all calls where this user is involved (as caller or callee)
         const [callerCalls, calleeCalls] = await Promise.all([
             db.collection('calls').where('callerId', '==', CONFIG.myUsername).get(),
             db.collection('calls').where('calleeId', '==', CONFIG.myUsername).get()
         ]);
         
-        // Combine all calls
         const allCalls = [...callerCalls.docs, ...calleeCalls.docs];
         
         if (allCalls.length === 0) {
@@ -345,7 +368,6 @@ window.cleanupOldCallsKeepLatest = async function() {
         
         log(`📊 Found ${allCalls.length} total calls`);
         
-        // Group calls by the other user
         const callsByUser = {};
         
         allCalls.forEach(doc => {
@@ -357,7 +379,6 @@ window.cleanupOldCallsKeepLatest = async function() {
                 callsByUser[otherUser] = [];
             }
             
-            // Get timestamp (handle different timestamp formats)
             let timestamp = 0;
             if (callData.timestamp) {
                 timestamp = callData.timestamp.toMillis?.() || 
@@ -373,18 +394,14 @@ window.cleanupOldCallsKeepLatest = async function() {
             });
         });
         
-        // For each user, keep only the most recent call
         const batch = db.batch();
         let deletedCount = 0;
         let keptCount = 0;
         
         Object.keys(callsByUser).forEach(otherUser => {
             const userCalls = callsByUser[otherUser];
-            
-            // Sort by timestamp (newest first)
             userCalls.sort((a, b) => b.timestamp - a.timestamp);
             
-            // Keep the first one (most recent), delete the rest
             userCalls.forEach((call, index) => {
                 if (index === 0) {
                     keptCount++;
@@ -401,7 +418,7 @@ window.cleanupOldCallsKeepLatest = async function() {
             await batch.commit();
             log(`🧹 Cleanup complete: kept ${keptCount} calls, deleted ${deletedCount} old calls`);
         } else {
-            log(`📭 No old calls to delete - all calls are already the latest`);
+            log(`📭 No old calls to delete`);
         }
         
     } catch (error) {
@@ -409,13 +426,9 @@ window.cleanupOldCallsKeepLatest = async function() {
     }
 };
 
-
-
 // ==================== ATTACH HANGUP BUTTON LISTENER ====================
-// This needs to run after DOM is ready
 function attachHangupListener() {
     if (window.dom && window.dom.hangupBtn) {
-        // Remove any existing listeners by cloning
         const oldBtn = window.dom.hangupBtn;
         const newBtn = oldBtn.cloneNode(true);
         oldBtn.parentNode.replaceChild(newBtn, oldBtn);
@@ -439,3 +452,10 @@ if (window.dom) {
 } else {
     window.addEventListener('ui-ready', attachHangupListener);
 }
+
+// Ensure audio context is resumed on user interaction
+document.addEventListener('click', () => {
+    if (ringbackContext && ringbackContext.state === 'suspended') {
+        ringbackContext.resume();
+    }
+}, { once: false });
