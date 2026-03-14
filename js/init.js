@@ -1,15 +1,9 @@
-// Main initialization file - load this last
-window.initApp = function() {
-    // Initialize auth
-    if (window.initAuth) window.initAuth();
-    
-    log('🚀 Application fully initialized');
-};
+// This file just waits for DOM and UI
+console.log('Init.js loaded');
 
-// If DOM is already loaded, run init directly
+// If DOM is already loaded, trigger ui-ready
 if (document.readyState === 'complete' || document.readyState === 'interactive') {
     setTimeout(() => {
-        if (window.initAuth) window.initAuth();
-        log('🚀 Application fully initialized');
+        window.dispatchEvent(new Event('ui-ready'));
     }, 100);
 }
