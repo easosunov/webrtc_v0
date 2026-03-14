@@ -768,20 +768,128 @@
         }
 
         // ==================== CALL FUNCTIONS ====================
-        async function callUser(targetUsername) {
-            if (!CONFIG.localStream) {
-                alert('Please wait for camera access');
-                return;
+// Replace your existing callUser function with this:
+async function callUser(targetUsername) {
+    if (!CONFIG.localStream) {
+        alert('Please wait for camera access');
+        return;
+    }
+    
+    log(`📞 Calling ${targetUsername}...`);
+    
+    try {
+        // Create a unique call ID
+        const callId = `${CONFIG.myUsername}_${targetUsername}_${Date.now()}`;
+        
+        // Create peer connection
+        const config = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' }
+            ]
+        };
+        
+        CONFIG.peerConnection = new RTCPeerConnection(config);
+        
+        // Add local stream
+        CONFIG.localStream.getTracks().forEach(track => {
+            CONFIG.peerConnection.addTrack(track, CONFIG.localStream);
+        });
+        
+        // Handle remote stream
+        CONFIG.remoteStream = new MediaStream();
+        remoteVideo.srcObject = CONFIG.remoteStream;
+        
+        CONFIG.peerConnection.ontrack = (event) => {
+            event.streams[0].getTracks().forEach(track => {
+                CONFIG.remoteStream.addTrack(track);
+            });
+            log('✅ Remote stream received');
+            hangupBtn.disabled = false;
+        };
+        
+        // Handle ICE candidates
+        CONFIG.peerConnection.onicecandidate = (event) => {
+            if (event.candidate) {
+                log('🧊 Sending ICE candidate');
+                // Store in Firestore
+                db.collection('ice-candidates').add({
+                    callId: callId,
+                    fromUserId: CONFIG.myUsername,
+                    toUserId: targetUsername,
+                    candidate: event.candidate.toJSON(),
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                });
             }
+        };
+        
+        // Create offer
+        const offer = await CONFIG.peerConnection.createOffer();
+        await CONFIG.peerConnection.setLocalDescription(offer);
+        
+        // Store offer in Firestore
+        await db.collection('calls').doc(callId).set({
+            callerId: CONFIG.myUsername,
+            calleeId: targetUsername,
+            offer: {
+                type: offer.type,
+                sdp: offer.sdp
+            },
+            status: 'ringing',
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        
+        log('📤 Offer sent, waiting for answer...');
+        
+        // Listen for answer
+        db.collection('calls').doc(callId).onSnapshot((snapshot) => {
+            if (!snapshot.exists) return;
             
-            log(`📞 Calling ${targetUsername}...`);
-            
-            // TODO: Implement WebRTC call logic
-            alert(`Call initiated to ${targetUsername}`);
-        }
+            const data = snapshot.data();
+            if (data.answer && CONFIG.peerConnection && !CONFIG.peerConnection.currentRemoteDescription) {
+                log('📥 Received answer');
+                const answer = new RTCSessionDescription(data.answer);
+                CONFIG.peerConnection.setRemoteDescription(answer);
+            }
+        });
+        
+        // Listen for ICE candidates from callee
+        db.collection('ice-candidates')
+            .where('callId', '==', callId)
+            .where('fromUserId', '==', targetUsername)
+            .onSnapshot((snapshot) => {
+                snapshot.docChanges().forEach(change => {
+                    if (change.type === 'added' && CONFIG.peerConnection) {
+                        const data = change.doc.data();
+                        CONFIG.peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+                        log('🧊 Added remote ICE candidate');
+                    }
+                });
+            });
+        
+        // Disable call button during call
+        event.target.disabled = true;
+        
+    } catch (error) {
+        log(`❌ Call error: ${error.message}`);
+    }
+}
 
         window.callUser = callUser;
+		//============CLEAN UP======================================
 
+// Add this for hangup button
+async function hangup() {
+    if (CONFIG.peerConnection) {
+        CONFIG.peerConnection.close();
+        CONFIG.peerConnection = null;
+    }
+    remoteVideo.srcObject = null;
+    hangupBtn.disabled = true;
+    log('📞 Call ended');
+}
+
+hangupBtn.addEventListener('click', hangup);
         // ==================== MEDIA INITIALIZATION ====================
         async function initMedia() {
             try {
