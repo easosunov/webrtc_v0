@@ -2,41 +2,53 @@
 let currentCode = '';
 
 function updateDisplay() {
+    if (!dom.codeDisplay) return;
     dom.codeDisplay.textContent = currentCode || '▪'.repeat(6);
-    dom.loginBtn.disabled = currentCode.length === 0;
+    if (dom.loginBtn) dom.loginBtn.disabled = currentCode.length === 0;
 }
 
-document.querySelectorAll('.keypad-btn[data-digit]').forEach(btn => {
-    btn.addEventListener('click', () => {
-        const digit = btn.dataset.digit;
-        handleKeypadInput(digit);
-    });
-});
+// Only set up event listeners if DOM is ready
+function initAuth() {
+    if (!dom.loginBtn) return false;
 
-document.addEventListener('keydown', (event) => {
-    if (dom.callScreen.style.display === 'block') return;
-    
-    const key = event.key;
-    
-    if (/^[0-9]$/.test(key)) {
-        event.preventDefault();
-        handleKeypadInput(key);
-    }
-    else if (key === 'Backspace' || key === 'Delete') {
-        event.preventDefault();
-        handleKeypadInput('back');
-    }
-    else if (key === 'c' || key === 'C') {
-        event.preventDefault();
-        handleKeypadInput('clear');
-    }
-    else if (key === 'Enter') {
-        event.preventDefault();
-        if (!dom.loginBtn.disabled) {
-            login();
+    document.querySelectorAll('.keypad-btn[data-digit]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const digit = btn.dataset.digit;
+            handleKeypadInput(digit);
+        });
+    });
+
+    document.addEventListener('keydown', (event) => {
+        if (dom.callScreen && dom.callScreen.style.display === 'block') return;
+        
+        const key = event.key;
+        
+        if (/^[0-9]$/.test(key)) {
+            event.preventDefault();
+            handleKeypadInput(key);
         }
-    }
-});
+        else if (key === 'Backspace' || key === 'Delete') {
+            event.preventDefault();
+            handleKeypadInput('back');
+        }
+        else if (key === 'c' || key === 'C') {
+            event.preventDefault();
+            handleKeypadInput('clear');
+        }
+        else if (key === 'Enter') {
+            event.preventDefault();
+            if (dom.loginBtn && !dom.loginBtn.disabled) {
+                login();
+            }
+        }
+    });
+
+    dom.loginBtn.addEventListener('click', login);
+    dom.logoutBtn.addEventListener('click', logout);
+
+    updateDisplay();
+    return true;
+}
 
 function handleKeypadInput(digit) {
     if (digit === 'clear') {
@@ -91,10 +103,10 @@ async function login() {
         
         log(`✅ Logged in as ${CONFIG.myDisplayName} (${accessCode})`);
         
-        await cleanupStaleCalls();
-        await window.initMedia();
-        await window.loadUsers();
-        window.listenForIncomingCalls();
+        await window.cleanupStaleCalls?.();
+        await window.initMedia?.();
+        await window.loadUsers?.();
+        window.listenForIncomingCalls?.();
         
     } catch (error) {
         log(`❌ Login error: ${error.message}`);
@@ -105,7 +117,7 @@ async function login() {
 
 async function logout() {
     try {
-        await window.hangup();
+        await window.hangup?.();
         
         if (CONFIG.localStream) {
             CONFIG.localStream.getTracks().forEach(track => track.stop());
@@ -131,8 +143,7 @@ async function logout() {
     }
 }
 
-dom.loginBtn.addEventListener('click', login);
-dom.logoutBtn.addEventListener('click', logout);
-
-// Initialize
-updateDisplay();
+// Make functions available globally
+window.login = login;
+window.logout = logout;
+window.initAuth = initAuth;
