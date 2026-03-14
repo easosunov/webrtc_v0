@@ -939,78 +939,168 @@ window.debugUsers = async function() {
                 }
             }
 
-            // ==================== CALL FUNCTIONS ====================
-            window.callUser = async function(targetUsername) {
-                if (!CONFIG.localStream) {
-                    alert('Please wait for camera access');
-                    return;
-                }
-                
-                if (CONFIG.isInCall) {
-                    alert('Already in a call');
-                    return;
-                }
-                
-                log(`📞 Calling ${targetUsername}...`);
-                
-                try {
-                    CONFIG.isInCall = true;
-                    CONFIG.currentCallId = `${CONFIG.myUsername}_${targetUsername}_${Date.now()}`;
-                    
-                    renderUsersList([]);
-                    
-                    await createPeerConnection(targetUsername, true);
-                    
-                    const offer = await CONFIG.peerConnection.createOffer();
-                    await CONFIG.peerConnection.setLocalDescription(offer);
-                    
-                    await db.collection('calls').doc(CONFIG.currentCallId).set({
-                        callerId: CONFIG.myUsername,
-                        calleeId: targetUsername,
-                        offer: {
-                            type: offer.type,
-                            sdp: offer.sdp
-                        },
-                        status: 'ringing',
-                        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-                        restartAttempt: 0
-                    });
-                    
-                    log('📤 Offer sent, waiting for answer...');
-                    
-                    db.collection('calls').doc(CONFIG.currentCallId).onSnapshot((snapshot) => {
-                        if (!snapshot.exists) return;
-                        
-                        const data = snapshot.data();
-                        if (data.answer && CONFIG.peerConnection && !CONFIG.peerConnection.currentRemoteDescription) {
-                            log('📥 Received answer');
-                            CONFIG.peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer))
-                                .catch(err => log(`❌ Error setting remote description: ${err.message}`));
-                        }
-                    });
-                    
-                    db.collection('ice-candidates')
-                        .where('callId', '==', CONFIG.currentCallId)
-                        .where('fromUserId', '==', targetUsername)
-                        .onSnapshot((snapshot) => {
-                            snapshot.docChanges().forEach(change => {
-                                if (change.type === 'added' && CONFIG.peerConnection) {
-                                    const data = change.doc.data();
-                                    CONFIG.peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate))
-                                        .catch(err => log(`❌ Error adding ICE candidate: ${err.message}`));
-                                    log('🧊 Added remote ICE candidate');
-                                }
-                            });
-                        });
-                    
-                } catch (error) {
-                    log(`❌ Call error: ${error.message}`);
-                    CONFIG.isInCall = false;
-                    CONFIG.currentCallId = null;
-                    renderUsersList([]);
-                }
-            };
+ // ==================== CALL FUNCTIONS ====================
+window.callUser = async function(targetUsername) {
+    if (!CONFIG.localStream) {
+        alert('Please wait for camera access');
+        return;
+    }
+    
+    if (CONFIG.isInCall) {
+        alert('Already in a call');
+        return;
+    }
+    
+    log(`📞 Calling ${targetUsername}...`);
+    
+    try {
+        CONFIG.isInCall = true;
+        CONFIG.currentCallId = `${CONFIG.myUsername}_${targetUsername}_${Date.now()}`;
+        
+        // Don't clear the user list - just disable the button for the called user
+        // Instead of renderUsersList([]), we'll update the button states
+        updateCallButtons(targetUsername);
+        
+        await createPeerConnection(targetUsername, true);
+        
+        const offer = await CONFIG.peerConnection.createOffer();
+        await CONFIG.peerConnection.setLocalDescription(offer);
+        
+        await db.collection('calls').doc(CONFIG.currentCallId).set({
+            callerId: CONFIG.myUsername,
+            calleeId: targetUsername,
+            offer: {
+                type: offer.type,
+                sdp: offer.sdp
+            },
+            status: 'ringing',
+            timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+            restartAttempt: 0
+        });
+        
+        log('📤 Offer sent, waiting for answer...');
+        
+        db.collection('calls').doc(CONFIG.currentCallId).onSnapshot((snapshot) => {
+            if (!snapshot.exists) return;
+            
+            const data = snapshot.data();
+            if (data.answer && CONFIG.peerConnection && !CONFIG.peerConnection.currentRemoteDescription) {
+                log('📥 Received answer');
+                CONFIG.peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer))
+                    .catch(err => log(`❌ Error setting remote description: ${err.message}`));
+            }
+        });
+        
+        db.collection('ice-candidates')
+            .where('callId', '==', CONFIG.currentCallId)
+            .where('fromUserId', '==', targetUsername)
+            .onSnapshot((snapshot) => {
+                snapshot.docChanges().forEach(change => {
+                    if (change.type === 'added' && CONFIG.peerConnection) {
+                        const data = change.doc.data();
+                        CONFIG.peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate))
+                            .catch(err => log(`❌ Error adding ICE candidate: ${err.message}`));
+                        log('🧊 Added remote ICE candidate');
+                    }
+                });
+            });
+        
+    } catch (error) {
+        log(`❌ Call error: ${error.message}`);
+        CONFIG.isInCall = false;
+        CONFIG.currentCallId = null;
+        // Reload users to restore buttons
+        loadUsers();
+    }
+};
 
+// Add this helper function to update button states without clearing the list
+function updateCallButtons(calledUsername) {
+    const buttons = document.querySelectorAll('.call-user-btn');
+    buttons.forEach(button => {
+        if (button.getAttribute('onclick')?.includes(calledUsername)) {
+            button.disabled = true;
+            button.textContent = 'Calling...';
+        } else {
+            button.disabled = true;
+        }
+    });
+}
+
+// Update hangup function to restore buttons
+async function hangup() {
+    if (CONFIG.peerConnection) {
+        CONFIG.peerConnection.close();
+        CONFIG.peerConnection = null;
+    }
+    
+    if (CONFIG.currentCallId) {
+        try {
+            await db.collection('calls').doc(CONFIG.currentCallId).update({
+                status: 'ended',
+                endedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        } catch (err) {
+            log(`Error updating call status: ${err.message}`);
+        }
+    }
+    
+    if (CONFIG.connectionTimeout) {
+        clearTimeout(CONFIG.connectionTimeout);
+        CONFIG.connectionTimeout = null;
+    }
+    
+    CONFIG.remoteStream = null;
+    CONFIG.isInCall = false;
+    CONFIG.currentCallId = null;
+    CONFIG.iceRestartAttempts = 0;
+    
+    remoteVideo.srcObject = null;
+    hangupBtn.disabled = true;
+    
+    log('📞 Call ended');
+    
+    // Reload users to re-enable all buttons
+    loadUsers();
+}
+
+// Also update the renderUsersList function to handle "Calling..." state
+function renderUsersList(users) {
+    if (users.length === 0) {
+        usersContainer.innerHTML = '<div class="user-item">No other users available</div>';
+        return;
+    }
+    
+    let html = '';
+    users.forEach(user => {
+        const isCallActive = CONFIG.currentCallId && CONFIG.isInCall;
+        const isThisUserBeingCalled = CONFIG.currentCallId?.includes(user.username);
+        
+        let buttonText = 'Call';
+        let disabled = !CONFIG.localStream || (isCallActive && !isThisUserBeingCalled);
+        
+        if (isThisUserBeingCalled) {
+            buttonText = 'Calling...';
+            disabled = true;
+        }
+        
+        html += `
+            <div class="user-item">
+                <div class="user-info-left">
+                    <span class="user-name">${user.displayName} ${user.isAdmin ? '👑' : ''}</span>
+                </div>
+                <button class="call-user-btn" 
+                        onclick="window.callUser('${user.username}')"
+                        ${disabled ? 'disabled' : ''}>
+                    ${buttonText}
+                </button>
+            </div>
+        `;
+    });
+    usersContainer.innerHTML = html;
+}
+ 
+ 
             // ==================== ANSWER FUNCTION ====================
             window.answerCall = async function(callId, callerId, offer) {
                 log(`✅ Answering call from ${callerId}`);
