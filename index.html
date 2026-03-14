@@ -542,7 +542,8 @@
             peerConnection: null,
             localStream: null,
             remoteStream: null,
-            isInCall: false
+            isInCall: false,
+            currentCallId: null
         };
 
         // DOM Elements
@@ -636,7 +637,6 @@
             loginStatus.textContent = 'Logging in...';
             
             try {
-                // Check if user exists in Firestore
                 const userRef = db.collection('users').doc(accessCode);
                 const userDoc = await userRef.get();
                 
@@ -656,12 +656,10 @@
                 
                 const userData = userDoc.data();
                 
-                // Set user data
                 CONFIG.myUsername = accessCode;
                 CONFIG.myDisplayName = userData.displayName || accessCode;
                 CONFIG.isAdmin = userData.isAdmin || false;
                 
-                // Update UI
                 currentUserSpan.textContent = CONFIG.myDisplayName;
                 loginScreen.style.display = 'none';
                 callScreen.style.display = 'block';
@@ -669,10 +667,7 @@
                 
                 log(`✅ Logged in as ${CONFIG.myDisplayName} (${accessCode})`);
                 
-                // Initialize media
                 await initMedia();
-                
-                // Load users
                 await loadUsers();
                 
             } catch (error) {
@@ -684,23 +679,17 @@
 
         async function logout() {
             try {
-                if (CONFIG.peerConnection) {
-                    CONFIG.peerConnection.close();
-                    CONFIG.peerConnection = null;
-                }
+                await hangup();
                 
                 if (CONFIG.localStream) {
                     CONFIG.localStream.getTracks().forEach(track => track.stop());
                     CONFIG.localStream = null;
                 }
                 
-                // Reset state
                 CONFIG.myUsername = null;
                 CONFIG.myDisplayName = null;
                 CONFIG.isAdmin = false;
-                CONFIG.isInCall = false;
                 
-                // Update UI
                 callScreen.style.display = 'none';
                 loginScreen.style.display = 'block';
                 currentCode = '';
@@ -751,6 +740,7 @@
             
             let html = '';
             users.forEach(user => {
+                const isCallActive = CONFIG.currentCallId && CONFIG.isInCall;
                 html += `
                     <div class="user-item">
                         <div class="user-info-left">
@@ -758,7 +748,7 @@
                         </div>
                         <button class="call-user-btn" 
                                 onclick="callUser('${user.username}')"
-                                ${!CONFIG.localStream ? 'disabled' : ''}>
+                                ${!CONFIG.localStream || isCallActive ? 'disabled' : ''}>
                             Call
                         </button>
                     </div>
@@ -768,128 +758,151 @@
         }
 
         // ==================== CALL FUNCTIONS ====================
-// Replace your existing callUser function with this:
-async function callUser(targetUsername) {
-    if (!CONFIG.localStream) {
-        alert('Please wait for camera access');
-        return;
-    }
-    
-    log(`📞 Calling ${targetUsername}...`);
-    
-    try {
-        // Create a unique call ID
-        const callId = `${CONFIG.myUsername}_${targetUsername}_${Date.now()}`;
-        
-        // Create peer connection
-        const config = {
-            iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' }
-            ]
-        };
-        
-        CONFIG.peerConnection = new RTCPeerConnection(config);
-        
-        // Add local stream
-        CONFIG.localStream.getTracks().forEach(track => {
-            CONFIG.peerConnection.addTrack(track, CONFIG.localStream);
-        });
-        
-        // Handle remote stream
-        CONFIG.remoteStream = new MediaStream();
-        remoteVideo.srcObject = CONFIG.remoteStream;
-        
-        CONFIG.peerConnection.ontrack = (event) => {
-            event.streams[0].getTracks().forEach(track => {
-                CONFIG.remoteStream.addTrack(track);
-            });
-            log('✅ Remote stream received');
-            hangupBtn.disabled = false;
-        };
-        
-        // Handle ICE candidates
-        CONFIG.peerConnection.onicecandidate = (event) => {
-            if (event.candidate) {
-                log('🧊 Sending ICE candidate');
-                // Store in Firestore
-                db.collection('ice-candidates').add({
-                    callId: callId,
-                    fromUserId: CONFIG.myUsername,
-                    toUserId: targetUsername,
-                    candidate: event.candidate.toJSON(),
+        async function callUser(targetUsername) {
+            if (!CONFIG.localStream) {
+                alert('Please wait for camera access');
+                return;
+            }
+            
+            if (CONFIG.isInCall) {
+                alert('Already in a call');
+                return;
+            }
+            
+            log(`📞 Calling ${targetUsername}...`);
+            
+            try {
+                CONFIG.isInCall = true;
+                CONFIG.currentCallId = `${CONFIG.myUsername}_${targetUsername}_${Date.now()}`;
+                
+                // Update UI to disable call buttons
+                renderUsersList([]);
+                
+                const config = {
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' }
+                    ]
+                };
+                
+                CONFIG.peerConnection = new RTCPeerConnection(config);
+                
+                CONFIG.localStream.getTracks().forEach(track => {
+                    CONFIG.peerConnection.addTrack(track, CONFIG.localStream);
+                });
+                
+                CONFIG.remoteStream = new MediaStream();
+                remoteVideo.srcObject = CONFIG.remoteStream;
+                
+                CONFIG.peerConnection.ontrack = (event) => {
+                    event.streams[0].getTracks().forEach(track => {
+                        CONFIG.remoteStream.addTrack(track);
+                    });
+                    log('✅ Remote stream received');
+                    hangupBtn.disabled = false;
+                };
+                
+                CONFIG.peerConnection.onicecandidate = (event) => {
+                    if (event.candidate) {
+                        log('🧊 Sending ICE candidate');
+                        db.collection('ice-candidates').add({
+                            callId: CONFIG.currentCallId,
+                            fromUserId: CONFIG.myUsername,
+                            toUserId: targetUsername,
+                            candidate: event.candidate.toJSON(),
+                            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                    }
+                };
+                
+                CONFIG.peerConnection.oniceconnectionstatechange = () => {
+                    log(`🧊 ICE state: ${CONFIG.peerConnection.iceConnectionState}`);
+                };
+                
+                const offer = await CONFIG.peerConnection.createOffer();
+                await CONFIG.peerConnection.setLocalDescription(offer);
+                
+                await db.collection('calls').doc(CONFIG.currentCallId).set({
+                    callerId: CONFIG.myUsername,
+                    calleeId: targetUsername,
+                    offer: {
+                        type: offer.type,
+                        sdp: offer.sdp
+                    },
+                    status: 'ringing',
                     timestamp: firebase.firestore.FieldValue.serverTimestamp()
                 });
-            }
-        };
-        
-        // Create offer
-        const offer = await CONFIG.peerConnection.createOffer();
-        await CONFIG.peerConnection.setLocalDescription(offer);
-        
-        // Store offer in Firestore
-        await db.collection('calls').doc(callId).set({
-            callerId: CONFIG.myUsername,
-            calleeId: targetUsername,
-            offer: {
-                type: offer.type,
-                sdp: offer.sdp
-            },
-            status: 'ringing',
-            timestamp: firebase.firestore.FieldValue.serverTimestamp()
-        });
-        
-        log('📤 Offer sent, waiting for answer...');
-        
-        // Listen for answer
-        db.collection('calls').doc(callId).onSnapshot((snapshot) => {
-            if (!snapshot.exists) return;
-            
-            const data = snapshot.data();
-            if (data.answer && CONFIG.peerConnection && !CONFIG.peerConnection.currentRemoteDescription) {
-                log('📥 Received answer');
-                const answer = new RTCSessionDescription(data.answer);
-                CONFIG.peerConnection.setRemoteDescription(answer);
-            }
-        });
-        
-        // Listen for ICE candidates from callee
-        db.collection('ice-candidates')
-            .where('callId', '==', callId)
-            .where('fromUserId', '==', targetUsername)
-            .onSnapshot((snapshot) => {
-                snapshot.docChanges().forEach(change => {
-                    if (change.type === 'added' && CONFIG.peerConnection) {
-                        const data = change.doc.data();
-                        CONFIG.peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-                        log('🧊 Added remote ICE candidate');
+                
+                log('📤 Offer sent, waiting for answer...');
+                
+                // Listen for answer
+                db.collection('calls').doc(CONFIG.currentCallId).onSnapshot((snapshot) => {
+                    if (!snapshot.exists) return;
+                    
+                    const data = snapshot.data();
+                    if (data.answer && CONFIG.peerConnection && !CONFIG.peerConnection.currentRemoteDescription) {
+                        log('📥 Received answer');
+                        const answer = new RTCSessionDescription(data.answer);
+                        CONFIG.peerConnection.setRemoteDescription(answer)
+                            .catch(err => log(`❌ Error setting remote description: ${err.message}`));
                     }
                 });
-            });
-        
-        // Disable call button during call
-        event.target.disabled = true;
-        
-    } catch (error) {
-        log(`❌ Call error: ${error.message}`);
-    }
-}
+                
+                // Listen for ICE candidates
+                db.collection('ice-candidates')
+                    .where('callId', '==', CONFIG.currentCallId)
+                    .where('fromUserId', '==', targetUsername)
+                    .onSnapshot((snapshot) => {
+                        snapshot.docChanges().forEach(change => {
+                            if (change.type === 'added' && CONFIG.peerConnection) {
+                                const data = change.doc.data();
+                                CONFIG.peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate))
+                                    .catch(err => log(`❌ Error adding ICE candidate: ${err.message}`));
+                                log('🧊 Added remote ICE candidate');
+                            }
+                        });
+                    });
+                
+            } catch (error) {
+                log(`❌ Call error: ${error.message}`);
+                CONFIG.isInCall = false;
+                CONFIG.currentCallId = null;
+                renderUsersList([]);
+            }
+        }
 
         window.callUser = callUser;
-		//============CLEAN UP======================================
 
-// Add this for hangup button
-async function hangup() {
-    if (CONFIG.peerConnection) {
-        CONFIG.peerConnection.close();
-        CONFIG.peerConnection = null;
-    }
-    remoteVideo.srcObject = null;
-    hangupBtn.disabled = true;
-    log('📞 Call ended');
-}
+        async function hangup() {
+            if (CONFIG.peerConnection) {
+                CONFIG.peerConnection.close();
+                CONFIG.peerConnection = null;
+            }
+            
+            if (CONFIG.currentCallId) {
+                try {
+                    await db.collection('calls').doc(CONFIG.currentCallId).update({
+                        status: 'ended',
+                        endedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                } catch (err) {
+                    log(`Error updating call status: ${err.message}`);
+                }
+            }
+            
+            CONFIG.remoteStream = null;
+            CONFIG.isInCall = false;
+            CONFIG.currentCallId = null;
+            
+            remoteVideo.srcObject = null;
+            hangupBtn.disabled = true;
+            
+            log('📞 Call ended');
+            renderUsersList([]);
+        }
 
-hangupBtn.addEventListener('click', hangup);
+        hangupBtn.addEventListener('click', hangup);
+
         // ==================== MEDIA INITIALIZATION ====================
         async function initMedia() {
             try {
