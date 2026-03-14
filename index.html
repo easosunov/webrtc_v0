@@ -646,54 +646,58 @@
             }
 
             // ==================== AUTHENTICATION ====================
-            async function login() {
-                const accessCode = currentCode;
-                if (!accessCode) return;
-                
-                log(`🔐 Attempting login with code: ${accessCode}`);
-                loginStatus.className = 'status-message info';
-                loginStatus.textContent = 'Logging in...';
-                
-                try {
-                    const userRef = db.collection('users').doc(accessCode);
-                    const userDoc = await userRef.get();
-                    
-                    if (!userDoc.exists) {
-                        log(`❌ User ${accessCode} not found in database`);
-                        loginStatus.className = 'status-message error';
-                        loginStatus.textContent = 'Invalid access code';
-                        
-                        setTimeout(() => {
-                            currentCode = '';
-                            updateDisplay();
-                            loginStatus.textContent = '';
-                        }, 2000);
-                        
-                        return;
-                    }
-                    
-                    const userData = userDoc.data();
-                    
-                    CONFIG.myUsername = accessCode;
-                    CONFIG.myDisplayName = userData.displayName || accessCode;
-                    CONFIG.isAdmin = userData.isAdmin || false;
-                    
-                    currentUserSpan.textContent = CONFIG.myDisplayName;
-                    loginScreen.style.display = 'none';
-                    callScreen.style.display = 'block';
-                    loginStatus.textContent = '';
-                    
-                    log(`✅ Logged in as ${CONFIG.myDisplayName} (${accessCode})`);
-                    
-                    await initMedia();
-                    await loadUsers();
-                    
-                } catch (error) {
-                    log(`❌ Login error: ${error.message}`);
-                    loginStatus.className = 'status-message error';
-                    loginStatus.textContent = 'Login failed. Please try again.';
-                }
-            }
+async function login() {
+    const accessCode = currentCode;
+    if (!accessCode) return;
+    
+    log(`🔐 Attempting login with code: ${accessCode}`);
+    loginStatus.className = 'status-message info';
+    loginStatus.textContent = 'Logging in...';
+    
+    try {
+        const userRef = db.collection('users').doc(accessCode);
+        const userDoc = await userRef.get();
+        
+        if (!userDoc.exists) {
+            log(`❌ User ${accessCode} not found in database`);
+            loginStatus.className = 'status-message error';
+            loginStatus.textContent = 'Invalid access code';
+            
+            setTimeout(() => {
+                currentCode = '';
+                updateDisplay();
+                loginStatus.textContent = '';
+            }, 2000);
+            
+            return;
+        }
+        
+        const userData = userDoc.data();
+        
+        CONFIG.myUsername = accessCode;
+        CONFIG.myDisplayName = userData.displayName || accessCode;
+        CONFIG.isAdmin = userData.isAdmin || false;
+        
+        currentUserSpan.textContent = CONFIG.myDisplayName;
+        loginScreen.style.display = 'none';
+        callScreen.style.display = 'block';
+        loginStatus.textContent = '';
+        
+        log(`✅ Logged in as ${CONFIG.myDisplayName} (${accessCode})`);
+        
+        await initMedia();
+        await loadUsers();
+        
+        // Start listening for incoming calls
+        listenForIncomingCalls();
+        
+    } catch (error) {
+        log(`❌ Login error: ${error.message}`);
+        loginStatus.className = 'status-message error';
+        loginStatus.textContent = 'Login failed. Please try again.';
+    }
+}
+
 
             async function logout() {
                 try {
@@ -1145,6 +1149,50 @@ function renderUsersList(users) {
                     hangup();
                 }
             };
+
+function listenForIncomingCalls() {
+    if (!CONFIG.myUsername) return;
+    
+    log(`👂 Listening for incoming calls as ${CONFIG.myUsername}...`);
+    
+    // Listen for any call where this user is the callee
+    db.collection('calls')
+        .where('calleeId', '==', CONFIG.myUsername)
+        .where('status', '==', 'ringing')
+        .onSnapshot((snapshot) => {
+            snapshot.docChanges().forEach(change => {
+                if (change.type === 'added') {
+                    const callData = change.doc.data();
+                    const callId = change.doc.id;
+                    
+                    log(`📞 Incoming call from ${callData.callerId}!`);
+                    
+                    // Show incoming call notification
+                    showIncomingCall(callId, callData);
+                }
+            });
+        }, (error) => {
+            log(`❌ Error listening for calls: ${error.message}`);
+        });
+}
+
+// Add function to show incoming call UI
+function showIncomingCall(callId, callData) {
+    // Create a simple notification
+    const answer = confirm(`Incoming call from ${callData.callerId}. Answer?`);
+    
+    if (answer) {
+        answerCall(callId, callData.callerId, callData.offer);
+    } else {
+        // Reject the call
+        db.collection('calls').doc(callId).update({
+            status: 'rejected',
+            endedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+    }
+}
+
+
 
             // ==================== HANGUP FUNCTION ====================
             async function hangup() {
