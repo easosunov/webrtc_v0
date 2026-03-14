@@ -19,7 +19,7 @@ window.initMedia = async function() {
     }
 };
 
-// ==================== ROBUST PEER CONNECTION CREATION ====================
+// ==================== PEER CONNECTION CREATION ====================
 window.createPeerConnection = async function(targetUsername, isCaller = true) {
     log(`🔧 Creating peer connection with ${targetUsername} (${isCaller ? 'caller' : 'callee'})`);
     
