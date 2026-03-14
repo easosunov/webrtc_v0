@@ -33,6 +33,6 @@ const CONFIG = {
     currentIncomingCall: null
 };
 
-// Make CONFIG globally available
+// Make CONFIG and db globally available
 window.CONFIG = CONFIG;
 window.db = db;
