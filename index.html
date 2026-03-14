@@ -727,29 +727,48 @@
             logoutBtn.addEventListener('click', logout);
 
             // ==================== LOAD USERS ====================
-            async function loadUsers() {
-                try {
-                    const usersSnapshot = await db.collection('users').get();
-                    const users = [];
-                    
-                    usersSnapshot.forEach(doc => {
-                        if (doc.id !== CONFIG.myUsername) {
-                            const userData = doc.data();
-                            users.push({
-                                username: doc.id,
-                                displayName: userData.displayName || doc.id,
-                                isAdmin: userData.isAdmin || false
-                            });
-                        }
-                    });
-                    
-                    renderUsersList(users);
-                    
-                } catch (error) {
-                    log(`❌ Error loading users: ${error.message}`);
-                }
+  
+  // Replace the loadUsers function with this improved version:
+async function loadUsers() {
+    try {
+        log('📋 Loading users from Firestore...');
+        const usersSnapshot = await db.collection('users').get();
+        const users = [];
+        
+        log(`📊 Total users in database: ${usersSnapshot.size}`);
+        
+        usersSnapshot.forEach(doc => {
+            log(`🔍 Found user: ${doc.id}`);
+            if (doc.id !== CONFIG.myUsername) {
+                const userData = doc.data();
+                log(`✅ Adding user ${doc.id} to list`);
+                users.push({
+                    username: doc.id,
+                    displayName: userData.displayName || doc.id,
+                    isAdmin: userData.isAdmin || false
+                });
+            } else {
+                log(`⏭️ Skipping self: ${doc.id}`);
             }
+        });
+        
+        log(`📋 Users found (excluding self): ${users.length}`);
+        renderUsersList(users);
+        
+    } catch (error) {
+        log(`❌ Error loading users: ${error.message}`);
+    }
+}
 
+// Also add a debug function you can run manually
+window.debugUsers = async function() {
+    console.log('=== DEBUG USERS ===');
+    const snapshot = await db.collection('users').get();
+    snapshot.forEach(doc => {
+        console.log('User:', doc.id, doc.data());
+    });
+}
+  
             function renderUsersList(users) {
                 if (users.length === 0) {
                     usersContainer.innerHTML = '<div class="user-item">No other users available</div>';
