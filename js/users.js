@@ -31,6 +31,8 @@ window.loadUsers = async function() {
 };
 
 function renderUsersList(users) {
+    if (!dom.usersContainer) return;
+    
     if (users.length === 0) {
         dom.usersContainer.innerHTML = '<div class="user-item">No other users available</div>';
         return;
