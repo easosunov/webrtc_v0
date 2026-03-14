@@ -1,81 +1,220 @@
-console.log('✅ users.js loaded');
+console.log('✅ auth.js loaded');
 
-// ==================== LOAD USERS ====================
-window.loadUsers = async function() {
-    try {
-        console.log('📋 Loading users from Firestore...');
-        const usersSnapshot = await db.collection('users').get();
-        const users = [];
-        
-        console.log(`📊 Total users in database: ${usersSnapshot.size}`);
-        
-        usersSnapshot.forEach(doc => {
-            console.log(`🔍 Found user: ${doc.id}`);
-            if (doc.id !== CONFIG.myUsername) {
-                const userData = doc.data();
-                console.log(`✅ Adding user ${doc.id} to list`);
-                users.push({
-                    username: doc.id,
-                    displayName: userData.displayName || doc.id,
-                    isAdmin: userData.isAdmin || false
-                });
-            } else {
-                console.log(`⏭️ Skipping self: ${doc.id}`);
-            }
-        });
-        
-        console.log(`📋 Users found (excluding self): ${users.length}`);
-        renderUsersList(users);
-        
-    } catch (error) {
-        console.log(`❌ Error loading users: ${error.message}`);
-    }
-};
+// Flag to ensure we only initialize once
+let authInitialized = false;
 
-function renderUsersList(users) {
-    if (!window.dom || !window.dom.usersContainer) {
-        console.error('usersContainer not found in dom');
-        return;
+// Wait for UI to be ready - use the dom object from ui.js
+window.addEventListener('ui-ready', function() {
+    console.log('UI ready event received in auth.js');
+    if (!authInitialized) {
+        initAuth();
     }
-    
-    if (users.length === 0) {
-        window.dom.usersContainer.innerHTML = '<div class="user-item">No other users available</div>';
-        return;
-    }
-    
-    let html = '';
-    users.forEach(user => {
-        const isCallActive = CONFIG.currentCallId && CONFIG.isInCall;
-        const isThisUserBeingCalled = CONFIG.currentCallId?.includes(user.username);
-        
-        let buttonText = 'Call';
-        let disabled = !CONFIG.localStream || (isCallActive && !isThisUserBeingCalled);
-        
-        if (isThisUserBeingCalled) {
-            buttonText = 'Calling...';
-            disabled = true;
-        }
-        
-        html += `
-            <div class="user-item">
-                <div class="user-info-left">
-                    <span class="user-name">${user.displayName} ${user.isAdmin ? '👑' : ''}</span>
-                </div>
-                <button class="call-user-btn" 
-                        onclick="window.callUser('${user.username}')"
-                        ${disabled ? 'disabled' : ''}>
-                    ${buttonText}
-                </button>
-            </div>
-        `;
-    });
-    window.dom.usersContainer.innerHTML = html;
+});
+
+// ==================== KEYPAD HANDLING ====================
+let currentCode = '';
+
+function updateDisplay() {
+    if (!window.dom || !window.dom.codeDisplay) return;
+    window.dom.codeDisplay.textContent = currentCode || '▪'.repeat(6);
+    if (window.dom.loginBtn) window.dom.loginBtn.disabled = currentCode.length === 0;
 }
 
-window.debugUsers = async function() {
-    console.log('=== DEBUG USERS ===');
-    const snapshot = await db.collection('users').get();
-    snapshot.forEach(doc => {
-        console.log('User:', doc.id, doc.data());
+function initAuth() {
+    // Prevent multiple initializations
+    if (authInitialized) {
+        console.log('Auth already initialized, skipping...');
+        return true;
+    }
+    
+    console.log('Initializing auth with dom:', window.dom);
+    
+    // Check if dom and login button exist
+    if (!window.dom || !window.dom.loginBtn) {
+        console.warn('DOM or login button not ready yet, will retry...');
+        setTimeout(initAuth, 500);
+        return false;
+    }
+
+    console.log('Found login button:', window.dom.loginBtn);
+
+    // Remove any existing event listeners by cloning and replacing buttons
+    const keypadButtons = document.querySelectorAll('.keypad-btn[data-digit]');
+    keypadButtons.forEach(btn => {
+        const newBtn = btn.cloneNode(true);
+        btn.parentNode.replaceChild(newBtn, btn);
+        newBtn.addEventListener('click', (e) => {
+            const digit = e.currentTarget.dataset.digit;
+            handleKeypadInput(digit);
+        });
     });
-};
+
+    // Replace login button to remove old listeners
+    const oldLoginBtn = window.dom.loginBtn;
+    const newLoginBtn = oldLoginBtn.cloneNode(true);
+    oldLoginBtn.parentNode.replaceChild(newLoginBtn, oldLoginBtn);
+    window.dom.loginBtn = newLoginBtn;
+    
+    window.dom.loginBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        console.log('Login button clicked');
+        login();
+    });
+
+    // Replace logout button if it exists
+    if (window.dom.logoutBtn) {
+        const oldLogoutBtn = window.dom.logoutBtn;
+        const newLogoutBtn = oldLogoutBtn.cloneNode(true);
+        oldLogoutBtn.parentNode.replaceChild(newLogoutBtn, oldLogoutBtn);
+        window.dom.logoutBtn = newLogoutBtn;
+        
+        window.dom.logoutBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            logout();
+        });
+    }
+
+    // Remove old keyboard listener and add new one
+    document.removeEventListener('keydown', handleKeyDown);
+    document.addEventListener('keydown', handleKeyDown);
+
+    updateDisplay();
+    authInitialized = true;
+    console.log('✅ Auth initialized successfully');
+    return true;
+}
+
+// Separate keyboard handler function
+function handleKeyDown(event) {
+    if (window.dom && window.dom.callScreen && window.dom.callScreen.style.display === 'block') return;
+    
+    const key = event.key;
+    
+    if (/^[0-9]$/.test(key)) {
+        event.preventDefault();
+        handleKeypadInput(key);
+    }
+    else if (key === 'Backspace' || key === 'Delete') {
+        event.preventDefault();
+        handleKeypadInput('back');
+    }
+    else if (key === 'c' || key === 'C') {
+        event.preventDefault();
+        handleKeypadInput('clear');
+    }
+    else if (key === 'Enter') {
+        event.preventDefault();
+        if (window.dom && window.dom.loginBtn && !window.dom.loginBtn.disabled) {
+            console.log('Enter key pressed, calling login');
+            login();
+        }
+    }
+}
+
+function handleKeypadInput(digit) {
+    if (digit === 'clear') {
+        currentCode = '';
+    } else if (digit === 'back') {
+        currentCode = currentCode.slice(0, -1);
+    } else {
+        if (currentCode.length < 10) {
+            currentCode += digit;
+        }
+    }
+    updateDisplay();
+}
+
+// ==================== AUTHENTICATION ====================
+async function login() {
+    console.log('🚨 Login function called!');
+    const accessCode = currentCode;
+    if (!accessCode) return;
+    
+    console.log(`🔐 Attempting login with code: ${accessCode}`);
+    if (window.dom && window.dom.loginStatus) {
+        window.dom.loginStatus.className = 'status-message info';
+        window.dom.loginStatus.textContent = 'Logging in...';
+    }
+    
+    try {
+        const userRef = db.collection('users').doc(accessCode);
+        const userDoc = await userRef.get();
+        
+        if (!userDoc.exists) {
+            console.log(`❌ User ${accessCode} not found in database`);
+            if (window.dom && window.dom.loginStatus) {
+                window.dom.loginStatus.className = 'status-message error';
+                window.dom.loginStatus.textContent = 'Invalid access code';
+            }
+            
+            setTimeout(() => {
+                currentCode = '';
+                updateDisplay();
+                if (window.dom && window.dom.loginStatus) window.dom.loginStatus.textContent = '';
+            }, 2000);
+            
+            return;
+        }
+        
+        const userData = userDoc.data();
+        
+        CONFIG.myUsername = accessCode;
+        CONFIG.myDisplayName = userData.displayName || accessCode;
+        CONFIG.isAdmin = userData.isAdmin || false;
+        
+        if (window.dom && window.dom.currentUserSpan) {
+            window.dom.currentUserSpan.textContent = CONFIG.myDisplayName;
+        }
+        if (window.dom && window.dom.loginScreen) window.dom.loginScreen.style.display = 'none';
+        if (window.dom && window.dom.callScreen) window.dom.callScreen.style.display = 'block';
+        if (window.dom && window.dom.loginStatus) window.dom.loginStatus.textContent = '';
+        
+        console.log(`✅ Logged in as ${CONFIG.myDisplayName} (${accessCode})`);
+        
+        // Initialize other modules
+        if (window.cleanupStaleCalls) await window.cleanupStaleCalls();
+        if (window.initMedia) await window.initMedia();
+        if (window.loadUsers) await window.loadUsers();
+        if (window.listenForIncomingCalls) window.listenForIncomingCalls();
+        
+    } catch (error) {
+        console.log(`❌ Login error: ${error.message}`);
+        if (window.dom && window.dom.loginStatus) {
+            window.dom.loginStatus.className = 'status-message error';
+            window.dom.loginStatus.textContent = 'Login failed. Please try again.';
+        }
+    }
+}
+
+async function logout() {
+    console.log('Logout function called');
+    try {
+        if (window.hangup) await window.hangup();
+        
+        if (CONFIG.localStream) {
+            CONFIG.localStream.getTracks().forEach(track => track.stop());
+            CONFIG.localStream = null;
+        }
+        
+        CONFIG.myUsername = null;
+        CONFIG.myDisplayName = null;
+        CONFIG.isAdmin = false;
+        
+        if (window.dom && window.dom.callScreen) window.dom.callScreen.style.display = 'none';
+        if (window.dom && window.dom.loginScreen) window.dom.loginScreen.style.display = 'block';
+        currentCode = '';
+        updateDisplay();
+        
+        if (window.dom && window.dom.localVideo) window.dom.localVideo.srcObject = null;
+        if (window.dom && window.dom.remoteVideo) window.dom.remoteVideo.srcObject = null;
+        
+        console.log('👋 Logged out');
+        
+    } catch (error) {
+        console.log(`❌ Logout error: ${error.message}`);
+    }
+}
+
+// Make functions available globally
+window.login = login;
+window.logout = logout;
