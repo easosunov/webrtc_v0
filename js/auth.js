@@ -125,6 +125,7 @@ function handleKeypadInput(digit) {
 }
 
 // ==================== AUTHENTICATION ====================
+
 async function login() {
     console.log('🚨 Login function called!');
     const accessCode = currentCode;
@@ -171,11 +172,42 @@ async function login() {
         
         console.log(`✅ Logged in as ${CONFIG.myDisplayName} (${accessCode})`);
         
-        // Initialize other modules
-        if (window.cleanupStaleCalls) await window.cleanupStaleCalls();
-        if (window.initMedia) await window.initMedia();
-        if (window.loadUsers) await window.loadUsers();
-        if (window.listenForIncomingCalls) window.listenForIncomingCalls();
+        // Initialize other modules with error handling
+        try {
+            if (window.cleanupStaleCalls) {
+                console.log('Calling cleanupStaleCalls...');
+                await window.cleanupStaleCalls();
+            }
+        } catch (e) {
+            console.error('Error in cleanupStaleCalls:', e);
+        }
+        
+        try {
+            if (window.initMedia) {
+                console.log('Calling initMedia...');
+                await window.initMedia();
+            }
+        } catch (e) {
+            console.error('Error in initMedia:', e);
+        }
+        
+        try {
+            if (window.loadUsers) {
+                console.log('Calling loadUsers...');
+                await window.loadUsers();
+            }
+        } catch (e) {
+            console.error('Error in loadUsers:', e);
+        }
+        
+        try {
+            if (window.listenForIncomingCalls) {
+                console.log('Calling listenForIncomingCalls...');
+                window.listenForIncomingCalls();
+            }
+        } catch (e) {
+            console.error('Error in listenForIncomingCalls:', e);
+        }
         
     } catch (error) {
         console.log(`❌ Login error: ${error.message}`);
@@ -185,6 +217,7 @@ async function login() {
         }
     }
 }
+
 
 async function logout() {
     console.log('Logout function called');
