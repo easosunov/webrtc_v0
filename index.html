@@ -28,6 +28,7 @@
             border-radius: 20px;
             box-shadow: 0 20px 60px rgba(0,0,0,0.3);
             overflow: hidden;
+            position: relative;
         }
 
         /* Login Screen */
@@ -404,6 +405,101 @@
             font-family: monospace;
         }
 
+        /* Incoming Call Modal */
+        #incoming-call-modal {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            z-index: 2000;
+            min-width: 300px;
+            text-align: center;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translate(-50%, -60%);
+                opacity: 0;
+            }
+            to {
+                transform: translate(-50%, -50%);
+                opacity: 1;
+            }
+        }
+
+        #incoming-call-modal h3 {
+            color: #333;
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+
+        #incoming-call-modal p {
+            color: #666;
+            font-size: 18px;
+            margin-bottom: 20px;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+        }
+
+        .modal-btn {
+            padding: 12px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            min-width: 100px;
+        }
+
+        .modal-btn.accept {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .modal-btn.accept:hover {
+            background: #45a049;
+            transform: scale(1.05);
+        }
+
+        .modal-btn.reject {
+            background: #f44336;
+            color: white;
+        }
+
+        .modal-btn.reject:hover {
+            background: #da190b;
+            transform: scale(1.05);
+        }
+
+        /* Modal overlay */
+        #modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 1999;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
         @media (max-width: 1024px) {
             .main-content {
                 grid-template-columns: 1fr;
@@ -430,6 +526,11 @@
             
             .keypad-btn::after {
                 font-size: 8px;
+            }
+
+            #incoming-call-modal {
+                min-width: 250px;
+                padding: 20px;
             }
         }
     </style>
@@ -514,6 +615,17 @@
         </div>
     </div>
 
+    <!-- Incoming Call Modal -->
+    <div id="modal-overlay"></div>
+    <div id="incoming-call-modal">
+        <h3>📞 Incoming Call</h3>
+        <p id="caller-name">Loading...</p>
+        <div class="modal-buttons">
+            <button class="modal-btn accept" id="accept-call">Accept</button>
+            <button class="modal-btn reject" id="reject-call">Reject</button>
+        </div>
+    </div>
+
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
@@ -553,10 +665,11 @@
                 ICE_TIMEOUT: 10000,
                 reconnectTimer: null,
                 targetUsername: null,
-                isCaller: false
+                isCaller: false,
+                currentIncomingCall: null
             };
 
-            // DOM Elements - Get them after DOM is loaded
+            // DOM Elements
             const loginScreen = document.getElementById('login-screen');
             const callScreen = document.getElementById('call-screen');
             const codeDisplay = document.getElementById('code-display');
@@ -570,14 +683,61 @@
             const usersContainer = document.getElementById('users-container');
             const debugContent = document.getElementById('debug-content');
             const clearDebugBtn = document.getElementById('clear-debug');
+            
+            // Modal elements
+            const modalOverlay = document.getElementById('modal-overlay');
+            const incomingModal = document.getElementById('incoming-call-modal');
+            const callerNameSpan = document.getElementById('caller-name');
+            const acceptBtn = document.getElementById('accept-call');
+            const rejectBtn = document.getElementById('reject-call');
 
             // Verify all elements exist
             if (!loginScreen || !callScreen || !codeDisplay || !loginBtn || !loginStatus || 
                 !logoutBtn || !currentUserSpan || !hangupBtn || !localVideo || !remoteVideo || 
-                !usersContainer || !debugContent || !clearDebugBtn) {
+                !usersContainer || !debugContent || !clearDebugBtn || !modalOverlay || 
+                !incomingModal || !callerNameSpan || !acceptBtn || !rejectBtn) {
                 console.error('Some DOM elements are missing!');
                 return;
             }
+
+            // ==================== MODAL FUNCTIONS ====================
+            function showIncomingCallModal(callerId, callId, offer) {
+                CONFIG.currentIncomingCall = { callId, callerId, offer };
+                callerNameSpan.textContent = `Call from ${callerId}`;
+                modalOverlay.style.display = 'block';
+                incomingModal.style.display = 'block';
+            }
+
+            function hideIncomingCallModal() {
+                modalOverlay.style.display = 'none';
+                incomingModal.style.display = 'none';
+                CONFIG.currentIncomingCall = null;
+            }
+
+            acceptBtn.addEventListener('click', () => {
+                if (CONFIG.currentIncomingCall) {
+                    const { callId, callerId, offer } = CONFIG.currentIncomingCall;
+                    hideIncomingCallModal();
+                    answerCall(callId, callerId, offer);
+                }
+            });
+
+            rejectBtn.addEventListener('click', () => {
+                if (CONFIG.currentIncomingCall) {
+                    const { callId } = CONFIG.currentIncomingCall;
+                    db.collection('calls').doc(callId).update({
+                        status: 'rejected',
+                        endedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    hideIncomingCallModal();
+                    log('📞 Call rejected');
+                }
+            });
+
+            // Close modal if user clicks overlay
+            modalOverlay.addEventListener('click', () => {
+                hideIncomingCallModal();
+            });
 
             // ==================== DEBUG LOGGING ====================
             function log(message) {
@@ -650,7 +810,6 @@
                 if (!CONFIG.myUsername) return;
                 
                 try {
-                    // Find any calls where I'm the caller and status is 'ringing' that are older than 2 minutes
                     const oldCalls = await db.collection('calls')
                         .where('callerId', '==', CONFIG.myUsername)
                         .where('status', '==', 'ringing')
@@ -715,13 +874,11 @@
                     
                     log(`✅ Logged in as ${CONFIG.myDisplayName} (${accessCode})`);
                     
-                    // Clean up any stale calls from previous sessions
                     await cleanupStaleCalls();
                     
                     await initMedia();
                     await loadUsers();
                     
-                    // Start listening for incoming calls
                     listenForIncomingCalls();
                     
                 } catch (error) {
@@ -794,7 +951,6 @@
                 }
             }
 
-            // Also add a debug function you can run manually
             window.debugUsers = async function() {
                 console.log('=== DEBUG USERS ===');
                 const snapshot = await db.collection('users').get();
@@ -860,14 +1016,12 @@
                 
                 CONFIG.peerConnection = new RTCPeerConnection(config);
                 
-                // Add local stream
                 if (CONFIG.localStream) {
                     CONFIG.localStream.getTracks().forEach(track => {
                         CONFIG.peerConnection.addTrack(track, CONFIG.localStream);
                     });
                 }
                 
-                // Handle remote stream
                 CONFIG.remoteStream = new MediaStream();
                 remoteVideo.srcObject = CONFIG.remoteStream;
                 
@@ -880,7 +1034,6 @@
                     clearTimeout(CONFIG.connectionTimeout);
                 };
                 
-                // Handle ICE candidates
                 CONFIG.peerConnection.onicecandidate = (event) => {
                     if (event.candidate && CONFIG.currentCallId) {
                         log(`🧊 ICE candidate: ${event.candidate.type || 'unknown'}`);
@@ -894,7 +1047,6 @@
                     }
                 };
                 
-                // ===== ROBUST ICE STATE HANDLING =====
                 CONFIG.peerConnection.oniceconnectionstatechange = () => {
                     const state = CONFIG.peerConnection.iceConnectionState;
                     log(`🧊 ICE state: ${state}`);
@@ -932,7 +1084,6 @@
                     }
                 };
                 
-                // ===== ROBUST CONNECTION STATE HANDLING =====
                 CONFIG.peerConnection.onconnectionstatechange = () => {
                     const state = CONFIG.peerConnection.connectionState;
                     log(`🔗 Connection state: ${state}`);
@@ -946,7 +1097,7 @@
                             restartIce();
                         } else {
                             alert('Call failed after multiple attempts');
-                            hangup();
+                            hangup('max_restarts_reached');
                         }
                     }
                 };
@@ -954,7 +1105,6 @@
                 return CONFIG.peerConnection;
             }
 
-            // ===== ICE RESTART FUNCTION =====
             async function restartIce() {
                 if (CONFIG.iceRestartAttempts >= CONFIG.MAX_ICE_RESTART_ATTEMPTS) {
                     log('❌ Max ICE restart attempts reached');
@@ -1002,7 +1152,6 @@
                     CONFIG.isInCall = true;
                     CONFIG.currentCallId = `${CONFIG.myUsername}_${targetUsername}_${Date.now()}`;
                     
-                    // Update button states
                     updateCallButtons(targetUsername);
                     
                     await createPeerConnection(targetUsername, true);
@@ -1053,12 +1202,10 @@
                     log(`❌ Call error: ${error.message}`);
                     CONFIG.isInCall = false;
                     CONFIG.currentCallId = null;
-                    // Reload users to restore buttons
                     loadUsers();
                 }
             };
 
-            // Add this helper function to update button states without clearing the list
             function updateCallButtons(calledUsername) {
                 const buttons = document.querySelectorAll('.call-user-btn');
                 buttons.forEach(button => {
@@ -1112,7 +1259,7 @@
                     
                 } catch (error) {
                     log(`❌ Error answering call: ${error.message}`);
-                    hangup();
+                    hangup('answer_error');
                 }
             };
 
@@ -1122,7 +1269,6 @@
                 
                 log(`👂 Listening for incoming calls as ${CONFIG.myUsername}...`);
                 
-                // Listen for any call where this user is the callee
                 db.collection('calls')
                     .where('calleeId', '==', CONFIG.myUsername)
                     .where('status', '==', 'ringing')
@@ -1132,7 +1278,6 @@
                                 const callData = change.doc.data();
                                 const callId = change.doc.id;
                                 
-                                // IMPORTANT: Don't show calls that we initiated ourselves
                                 if (callData.callerId === CONFIG.myUsername) {
                                     log(`⏭️ Ignoring self-initiated call from ${callData.callerId}`);
                                     return;
@@ -1140,8 +1285,8 @@
                                 
                                 log(`📞 Incoming call from ${callData.callerId}!`);
                                 
-                                // Show incoming call notification
-                                showIncomingCall(callId, callData);
+                                // Show custom modal instead of confirm
+                                showIncomingCallModal(callData.callerId, callId, callData.offer);
                             }
                         });
                     }, (error) => {
@@ -1149,24 +1294,10 @@
                     });
             }
 
-            // Add function to show incoming call UI
-            function showIncomingCall(callId, callData) {
-                // Create a simple notification
-                const answer = confirm(`Incoming call from ${callData.callerId}. Answer?`);
-                
-                if (answer) {
-                    answerCall(callId, callData.callerId, callData.offer);
-                } else {
-                    // Reject the call
-                    db.collection('calls').doc(callId).update({
-                        status: 'rejected',
-                        endedAt: firebase.firestore.FieldValue.serverTimestamp()
-                    });
-                }
-            }
-
             // ==================== HANGUP FUNCTION ====================
-            async function hangup() {
+            async function hangup(reason = 'user_initiated') {
+                log(`📞 Call ended - reason: ${reason}`);
+                
                 if (CONFIG.peerConnection) {
                     CONFIG.peerConnection.close();
                     CONFIG.peerConnection = null;
@@ -1196,13 +1327,14 @@
                 remoteVideo.srcObject = null;
                 hangupBtn.disabled = true;
                 
-                log('📞 Call ended');
+                // Hide modal if it's showing
+                hideIncomingCallModal();
                 
-                // Reload users to re-enable all buttons
+                log('📞 Call ended');
                 loadUsers();
             }
 
-            hangupBtn.addEventListener('click', hangup);
+            hangupBtn.addEventListener('click', () => hangup('user_initiated'));
 
             // ==================== MEDIA INITIALIZATION ====================
             async function initMedia() {
