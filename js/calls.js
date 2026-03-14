@@ -158,6 +158,87 @@ window.answerCall = async function(callId, callerId, offer) {
     }
 };
 
+
+// ==================== SIMPLE VERSION - JUST DELETE ALL BUT LATEST ====================
+window.cleanupAllButLatest = async function() {
+    if (!CONFIG.myUsername) return;
+    
+    try {
+        log('🧹 Cleaning up all but latest call per user...');
+        
+        // Get all calls
+        const allCallsSnapshot = await db.collection('calls').get();
+        
+        if (allCallsSnapshot.empty) {
+            log('📭 No calls to clean up');
+            return;
+        }
+        
+        // Group calls by user pair (caller-callee combination)
+        const callsByPair = {};
+        
+        allCallsSnapshot.forEach(doc => {
+            const callData = doc.data();
+            // Create a unique key for the pair (sorted so A-B and B-A are the same)
+            const users = [callData.callerId, callData.calleeId].sort();
+            const pairKey = `${users[0]}-${users[1]}`;
+            
+            if (!callsByPair[pairKey]) {
+                callsByPair[pairKey] = [];
+            }
+            
+            let timestamp = 0;
+            if (callData.timestamp) {
+                timestamp = callData.timestamp.toMillis?.() || 
+                           callData.timestamp._seconds * 1000 || 
+                           callData.timestamp;
+            }
+            
+            callsByPair[pairKey].push({
+                id: doc.id,
+                timestamp: timestamp,
+                ref: doc.ref,
+                data: callData
+            });
+        });
+        
+        // Keep only the most recent for each pair
+        const batch = db.batch();
+        let deletedCount = 0;
+        let keptCount = 0;
+        
+        Object.keys(callsByPair).forEach(pairKey => {
+            const pairCalls = callsByPair[pairKey];
+            
+            // Sort by timestamp (newest first)
+            pairCalls.sort((a, b) => b.timestamp - a.timestamp);
+            
+            // Keep the most recent
+            pairCalls.forEach((call, index) => {
+                if (index === 0) {
+                    keptCount++;
+                    log(`✅ Keeping latest call for pair ${pairKey}`);
+                } else {
+                    batch.delete(call.ref);
+                    deletedCount++;
+                    log(`🗑️ Deleting old call for pair ${pairKey}`);
+                }
+            });
+        });
+        
+        if (deletedCount > 0) {
+            await batch.commit();
+            log(`🧹 Cleanup complete: kept ${keptCount} calls, deleted ${deletedCount} old calls`);
+        } else {
+            log(`📭 No old calls to delete`);
+        }
+        
+    } catch (error) {
+        log(`❌ Error during cleanup: ${error.message}`);
+    }
+};
+
+
 // ==================== INCOMING CALL LISTENER ====================
 window.listenForIncomingCalls = function() {
     if (!CONFIG.myUsername) return;
@@ -191,6 +272,7 @@ window.listenForIncomingCalls = function() {
 };
 
 // ==================== HANGUP FUNCTION ====================
+// ==================== HANGUP FUNCTION WITH AUTO-CLEANUP ====================
 window.hangup = async function(reason = 'user_initiated') {
     log(`📞 Call ended - reason: ${reason}`);
     
@@ -231,7 +313,103 @@ window.hangup = async function(reason = 'user_initiated') {
     
     log('📞 Call ended');
     window.loadUsers?.();
+    
+    // ===== AUTO-CLEANUP AFTER HANGUP =====
+    // Clean up old calls, keeping only the latest for each user pair
+    setTimeout(async () => {
+        log('🧹 Running post-call cleanup...');
+        await window.cleanupOldCallsKeepLatest();
+    }, 1000); // Small delay to ensure call status is updated first
 };
+
+// ==================== ENHANCED CLEANUP FUNCTION ====================
+window.cleanupOldCallsKeepLatest = async function() {
+    if (!CONFIG.myUsername) return;
+    
+    try {
+        log('🧹 Starting smart cleanup - keeping only latest call per user...');
+        
+        // Get all calls where this user is involved (as caller or callee)
+        const [callerCalls, calleeCalls] = await Promise.all([
+            db.collection('calls').where('callerId', '==', CONFIG.myUsername).get(),
+            db.collection('calls').where('calleeId', '==', CONFIG.myUsername).get()
+        ]);
+        
+        // Combine all calls
+        const allCalls = [...callerCalls.docs, ...calleeCalls.docs];
+        
+        if (allCalls.length === 0) {
+            log('📭 No calls to clean up');
+            return;
+        }
+        
+        log(`📊 Found ${allCalls.length} total calls`);
+        
+        // Group calls by the other user
+        const callsByUser = {};
+        
+        allCalls.forEach(doc => {
+            const callData = doc.data();
+            const otherUser = callData.callerId === CONFIG.myUsername ? 
+                callData.calleeId : callData.callerId;
+            
+            if (!callsByUser[otherUser]) {
+                callsByUser[otherUser] = [];
+            }
+            
+            // Get timestamp (handle different timestamp formats)
+            let timestamp = 0;
+            if (callData.timestamp) {
+                timestamp = callData.timestamp.toMillis?.() || 
+                           callData.timestamp._seconds * 1000 || 
+                           callData.timestamp;
+            }
+            
+            callsByUser[otherUser].push({
+                id: doc.id,
+                timestamp: timestamp,
+                ref: doc.ref,
+                data: callData
+            });
+        });
+        
+        // For each user, keep only the most recent call
+        const batch = db.batch();
+        let deletedCount = 0;
+        let keptCount = 0;
+        
+        Object.keys(callsByUser).forEach(otherUser => {
+            const userCalls = callsByUser[otherUser];
+            
+            // Sort by timestamp (newest first)
+            userCalls.sort((a, b) => b.timestamp - a.timestamp);
+            
+            // Keep the first one (most recent), delete the rest
+            userCalls.forEach((call, index) => {
+                if (index === 0) {
+                    keptCount++;
+                    log(`✅ Keeping latest call with ${otherUser}`);
+                } else {
+                    batch.delete(call.ref);
+                    deletedCount++;
+                    log(`🗑️ Deleting old call with ${otherUser}`);
+                }
+            });
+        });
+        
+        if (deletedCount > 0) {
+            await batch.commit();
+            log(`🧹 Cleanup complete: kept ${keptCount} calls, deleted ${deletedCount} old calls`);
+        } else {
+            log(`📭 No old calls to delete - all calls are already the latest`);
+        }
+        
+    } catch (error) {
+        log(`❌ Error during smart cleanup: ${error.message}`);
+    }
+};
+
+
 
 // ==================== ATTACH HANGUP BUTTON LISTENER ====================
 // This needs to run after DOM is ready
