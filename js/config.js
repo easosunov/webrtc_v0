@@ -24,6 +24,7 @@ const CONFIG = {
     isInCall: false,
     currentCallId: null,
     currentCallPartner: null,
+	callTimeout: null,
 	iceRestartAttempts: 0,
     MAX_ICE_RESTART_ATTEMPTS: 3,
     connectionTimeout: null,
