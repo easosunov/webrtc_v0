@@ -532,79 +532,73 @@
         });
 
         // ==================== AUTHENTICATION ====================
-        async function login() {
-            const accessCode = currentCode;
-            if (!accessCode) return;
+async function login() {
+    const accessCode = currentCode;
+    if (!accessCode) return;
+    
+    log(`🔐 Attempting login with code: ${accessCode}`);
+    loginStatus.className = 'status-message info';
+    loginStatus.textContent = 'Logging in...';
+    
+    try {
+        // Check if user exists in Firestore
+        const userRef = db.collection('users').doc(accessCode);
+        const userDoc = await userRef.get();
+        
+        // ===== FIX: Only allow pre-existing users =====
+        if (!userDoc.exists) {
+            log(`❌ User ${accessCode} not found in database`);
+            loginStatus.className = 'status-message error';
+            loginStatus.textContent = 'Invalid access code';
             
-            log(`🔐 Attempting login with code: ${accessCode}`);
-            loginStatus.className = 'status-message info';
-            loginStatus.textContent = 'Logging in...';
-            
-            try {
-                // Check if user exists in Firestore
-                const userRef = db.collection('users').doc(accessCode);
-                const userDoc = await userRef.get();
-                
-                let userData;
-                let isNewUser = false;
-                
-                if (!userDoc.exists) {
-                    // New user - create profile
-                    log(`📝 Creating new user profile for ${accessCode}`);
-                    userData = {
-                        username: accessCode,
-                        displayName: `User ${accessCode}`,
-                        isAdmin: accessCode === CONFIG.adminUsername,
-                        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                        lastSeen: firebase.firestore.FieldValue.serverTimestamp(),
-                        online: true
-                    };
-                    await userRef.set(userData);
-                    isNewUser = true;
-                } else {
-                    // Existing user - update online status
-                    userData = userDoc.data();
-                    await userRef.update({
-                        lastSeen: firebase.firestore.FieldValue.serverTimestamp(),
-                        online: true
-                    });
-                    log(`✅ Found existing user: ${userData.displayName || accessCode}`);
-                }
-                
-                // Set global state
-                CONFIG.myUsername = accessCode;
-                CONFIG.myUid = accessCode;
-                CONFIG.isAdmin = accessCode === CONFIG.adminUsername;
-                
-                // Update UI
-                currentUserSpan.textContent = userData.displayName || accessCode;
-                loginScreen.style.display = 'none';
-                callScreen.style.display = 'block';
+            // Clear the code display after error
+            setTimeout(() => {
+                currentCode = '';
+                updateDisplay();
                 loginStatus.textContent = '';
-                
-                log(`✅ Logged in as ${userData.displayName || accessCode} (${accessCode})`);
-                log(`👑 ${CONFIG.isAdmin ? 'You are the admin' : 'You are a regular user'}`);
-                
-                // Initialize user presence
-                initializePresence();
-                
-                // Start listening for other users
-                listenForUsers();
-                
-                // Initialize media
-                await initMedia();
-                
-                // If admin, listen for incoming calls
-                if (CONFIG.isAdmin) {
-                    listenForIncomingCalls();
-                }
-                
-            } catch (error) {
-                log(`❌ Login error: ${error.message}`, 'error');
-                loginStatus.className = 'status-message error';
-                loginStatus.textContent = 'Login failed. Please try again.';
-            }
+            }, 2000);
+            
+            return;
         }
+        
+        // User exists - get their data
+        const userData = userDoc.data();
+        
+        // Update online status
+        await userRef.update({
+            lastSeen: firebase.firestore.FieldValue.serverTimestamp(),
+            online: true
+        });
+        
+        // Set global state
+        CONFIG.myUsername = accessCode;
+        CONFIG.myUid = accessCode;
+        CONFIG.isAdmin = userData.isAdmin || false;
+        
+        // Update UI
+        currentUserSpan.textContent = userData.displayName || accessCode;
+        loginScreen.style.display = 'none';
+        callScreen.style.display = 'block';
+        loginStatus.textContent = '';
+        
+        log(`✅ Logged in as ${userData.displayName || accessCode} (${accessCode})`);
+        log(`👑 ${CONFIG.isAdmin ? 'You are the admin' : 'You are a regular user'}`);
+        
+        // Initialize presence, listen for users, etc.
+        initializePresence();
+        listenForUsers();
+        await initMedia();
+        
+        if (CONFIG.isAdmin) {
+            listenForIncomingCalls();
+        }
+        
+    } catch (error) {
+        log(`❌ Login error: ${error.message}`);
+        loginStatus.className = 'status-message error';
+        loginStatus.textContent = 'Login failed. Please try again.';
+    }
+}
 
         async function logout() {
             try {
