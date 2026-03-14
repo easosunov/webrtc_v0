@@ -158,17 +158,19 @@ window.callUser = async function(targetUsername) {
             
             // Check if call was rejected
             if (data.status === 'rejected') {
-                console.log('❌ Call was rejected');
-                stopRingbackTone();
-                if (CONFIG.callTimeout) {
-                    clearTimeout(CONFIG.callTimeout);
-                    CONFIG.callTimeout = null;
-                }
-                alert('Call was rejected');
-                window.hangup('rejected');
-                unsubscribe();
-                return;
-            }
+				console.log('❌ Call was rejected');
+				stopRingbackTone();
+				if (CONFIG.callTimeout) {
+					clearTimeout(CONFIG.callTimeout);
+					CONFIG.callTimeout = null;
+				}
+				if (window.showStatusModal) {
+					window.showStatusModal('📢 Call Rejected', 'The call was rejected by the recipient', true);
+				}
+				window.hangup('rejected');
+				unsubscribe();
+				return;
+			}
             
             if (data.answer && CONFIG.peerConnection && !CONFIG.peerConnection.currentRemoteDescription) {
                 console.log('📥 Received answer');
@@ -206,11 +208,13 @@ window.callUser = async function(targetUsername) {
         // Set timeout for unanswered calls
         CONFIG.callTimeout = setTimeout(() => {
             if (CONFIG.isInCall && !CONFIG.peerConnection?.currentRemoteDescription) {
-                console.log('⏰ Call timeout - no answer received');
-                stopRingbackTone();
-                alert('No answer - call timed out');
-                window.hangup('timeout');
-            }
+				console.log('⏰ Call timeout - no answer received');
+				stopRingbackTone();
+				if (window.showStatusModal) {
+					window.showStatusModal('⏰ Call Timeout', 'No answer - call timed out', true);
+				}
+				window.hangup('timeout');
+			}
         }, 30000);
         
     } catch (error) {
@@ -226,8 +230,6 @@ window.callUser = async function(targetUsername) {
         if (window.loadUsers) window.loadUsers();
     }
 };
-
-
 
 
 // ==================== ANSWER FUNCTION ====================
@@ -260,6 +262,16 @@ window.answerCall = async function(callId, callerId, offer) {
         // Update all buttons - disable all and set the caller to "In call"
         updateAllCallButtons(callerId, 'incall');
         
+        // ===== INSERT THE STATUS MODAL CODE HERE =====
+        // Show success message briefly
+        if (window.showStatusModal) {
+            window.showStatusModal('✅ Call Connected', 'You are now connected', false);
+            setTimeout(() => {
+                window.hideStatusModal();
+            }, 2000);
+        }
+        // ===== END OF INSERTED CODE =====
+        
         db.collection('ice-candidates')
             .where('callId', '==', callId)
             .where('fromUserId', '==', callerId)
@@ -278,6 +290,8 @@ window.answerCall = async function(callId, callerId, offer) {
         if (window.hangup) window.hangup('answer_error');
     }
 };
+
+
 
 // ==================== UPDATE ALL CALL BUTTONS ====================
 function updateAllCallButtons(partnerUsername, state) {
