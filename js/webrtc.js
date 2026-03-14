@@ -10,7 +10,7 @@ window.initMedia = async function() {
             }
         });
         
-        if (dom.localVideo) dom.localVideo.srcObject = CONFIG.localStream;
+        if (window.dom && window.dom.localVideo) window.dom.localVideo.srcObject = CONFIG.localStream;
         console.log('✅ Media access granted');
         
     } catch (error) {
@@ -47,14 +47,14 @@ window.createPeerConnection = async function(targetUsername, isCaller = true) {
     }
     
     CONFIG.remoteStream = new MediaStream();
-    if (dom.remoteVideo) dom.remoteVideo.srcObject = CONFIG.remoteStream;
+    if (window.dom && window.dom.remoteVideo) window.dom.remoteVideo.srcObject = CONFIG.remoteStream;
     
     CONFIG.peerConnection.ontrack = (event) => {
         event.streams[0].getTracks().forEach(track => {
             CONFIG.remoteStream.addTrack(track);
         });
         console.log('✅ Remote stream received');
-        if (dom.hangupBtn) dom.hangupBtn.disabled = false;
+        if (window.dom && window.dom.hangupBtn) window.dom.hangupBtn.disabled = false;
         clearTimeout(CONFIG.connectionTimeout);
     };
     
@@ -121,7 +121,7 @@ window.createPeerConnection = async function(targetUsername, isCaller = true) {
                 restartIce();
             } else {
                 alert('Call failed after multiple attempts');
-                window.hangup?.('max_restarts_reached');
+                if (window.hangup) window.hangup('max_restarts_reached');
             }
         }
     };
