@@ -124,7 +124,8 @@ window.callUser = async function(targetUsername) {
         CONFIG.isInCall = true;
         CONFIG.currentCallId = `${CONFIG.myUsername}_${targetUsername}_${Date.now()}`;
         
-        updateCallButtons(targetUsername);
+        // Update the button for the user being called
+        updateCallButtonsForOutgoingCall(targetUsername);
         
         startRingbackTone();
         
@@ -191,6 +192,20 @@ window.callUser = async function(targetUsername) {
     }
 };
 
+// Update outgoing call button
+function updateCallButtonsForOutgoingCall(calledUsername) {
+    const buttons = document.querySelectorAll('.call-user-btn');
+    buttons.forEach(button => {
+        if (button.getAttribute('onclick')?.includes(calledUsername)) {
+            button.disabled = true;
+            button.textContent = 'Calling...';
+        } else {
+            button.disabled = true;
+        }
+    });
+}
+
+
 function updateCallButtons(calledUsername) {
     const buttons = document.querySelectorAll('.call-user-btn');
     buttons.forEach(button => {
@@ -229,6 +244,9 @@ window.answerCall = async function(callId, callerId, offer) {
         
         console.log('📤 Answer sent');
         
+        // Update the call buttons - disable the caller's button
+        updateCallButtonsForAnsweredCall(callerId);
+        
         db.collection('ice-candidates')
             .where('callId', '==', callId)
             .where('fromUserId', '==', callerId)
@@ -248,7 +266,19 @@ window.answerCall = async function(callId, callerId, offer) {
     }
 };
 
-// ==================== INCOMING CALL LISTENER ====================
+// Add this helper function to update buttons when call is answered
+function updateCallButtonsForAnsweredCall(callerId) {
+    const buttons = document.querySelectorAll('.call-user-btn');
+    buttons.forEach(button => {
+        if (button.getAttribute('onclick')?.includes(callerId)) {
+            button.disabled = true;
+            button.textContent = 'In call';
+        }
+    });
+}
+ 
+ 
+ // ==================== INCOMING CALL LISTENER ====================
 window.listenForIncomingCalls = function() {
     if (!CONFIG.myUsername) return;
     
@@ -476,6 +506,7 @@ window.cleanupIceCandidatesKeepLatest = async function() {
     }
 };
 
+
 // ==================== HANGUP FUNCTION WITH AUTO-CLEANUP ====================
 window.hangup = async function(reason = 'user_initiated') {
     console.log(`📞 Call ended - reason: ${reason}`);
@@ -519,23 +550,24 @@ window.hangup = async function(reason = 'user_initiated') {
     if (window.hideIncomingCallModal) window.hideIncomingCallModal();
     
     console.log('📞 Call ended');
+    
+    // Reload users to reset all buttons
     if (window.loadUsers) window.loadUsers();
     
     // Run cleanups after call ends
     setTimeout(async () => {
         console.log('🧹 Running post-call cleanups...');
         
-        // Clean up old calls first
         if (window.cleanupOldCallsKeepLatest) {
             await window.cleanupOldCallsKeepLatest();
         }
         
-        // Then clean up old ice-candidates
         if (window.cleanupIceCandidatesKeepLatest) {
             await window.cleanupIceCandidatesKeepLatest();
         }
     }, 1000);
 };
+
 
 // ==================== MANUAL CLEANUP FUNCTION ====================
 window.cleanupAll = async function() {
