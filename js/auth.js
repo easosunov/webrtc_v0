@@ -125,7 +125,6 @@ function handleKeypadInput(digit) {
 }
 
 // ==================== AUTHENTICATION ====================
-
 async function login() {
     console.log('🚨 Login function called!');
     const accessCode = currentCode;
@@ -191,10 +190,13 @@ async function login() {
             console.error('Error in initMedia:', e);
         }
         
+        // *** FIX: Add loadUsers call here ***
         try {
             if (window.loadUsers) {
                 console.log('Calling loadUsers...');
                 await window.loadUsers();
+            } else {
+                console.error('loadUsers function not found!');
             }
         } catch (e) {
             console.error('Error in loadUsers:', e);
@@ -217,7 +219,6 @@ async function login() {
         }
     }
 }
-
 
 async function logout() {
     console.log('Logout function called');
