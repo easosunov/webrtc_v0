@@ -10,7 +10,7 @@ window.initMedia = async function() {
             }
         });
         
-        dom.localVideo.srcObject = CONFIG.localStream;
+        if (dom.localVideo) dom.localVideo.srcObject = CONFIG.localStream;
         log('✅ Media access granted');
         
     } catch (error) {
@@ -47,14 +47,14 @@ window.createPeerConnection = async function(targetUsername, isCaller = true) {
     }
     
     CONFIG.remoteStream = new MediaStream();
-    dom.remoteVideo.srcObject = CONFIG.remoteStream;
+    if (dom.remoteVideo) dom.remoteVideo.srcObject = CONFIG.remoteStream;
     
     CONFIG.peerConnection.ontrack = (event) => {
         event.streams[0].getTracks().forEach(track => {
             CONFIG.remoteStream.addTrack(track);
         });
         log('✅ Remote stream received');
-        dom.hangupBtn.disabled = false;
+        if (dom.hangupBtn) dom.hangupBtn.disabled = false;
         clearTimeout(CONFIG.connectionTimeout);
     };
     
@@ -121,7 +121,7 @@ window.createPeerConnection = async function(targetUsername, isCaller = true) {
                 restartIce();
             } else {
                 alert('Call failed after multiple attempts');
-                window.hangup('max_restarts_reached');
+                window.hangup?.('max_restarts_reached');
             }
         }
     };
