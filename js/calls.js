@@ -1,3 +1,5 @@
+console.log('✅ calls.js loaded');
+
 // ==================== CLEANUP STALE CALLS ====================
 window.cleanupStaleCalls = async function() {
     if (!CONFIG.myUsername) return;
@@ -47,7 +49,7 @@ window.callUser = async function(targetUsername) {
         
         updateCallButtons(targetUsername);
         
-        await window.createPeerConnection?.(targetUsername, true);
+        await window.createPeerConnection(targetUsername, true);
         
         const offer = await CONFIG.peerConnection.createOffer();
         await CONFIG.peerConnection.setLocalDescription(offer);
@@ -119,7 +121,7 @@ window.answerCall = async function(callId, callerId, offer) {
         CONFIG.isInCall = true;
         CONFIG.currentCallId = callId;
         
-        await window.createPeerConnection?.(callerId, false);
+        await window.createPeerConnection(callerId, false);
         
         await CONFIG.peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
         
@@ -218,8 +220,12 @@ window.hangup = async function(reason = 'user_initiated') {
     CONFIG.currentCallId = null;
     CONFIG.iceRestartAttempts = 0;
     
-    if (dom.remoteVideo) dom.remoteVideo.srcObject = null;
-    if (dom.hangupBtn) dom.hangupBtn.disabled = true;
+    if (window.dom && window.dom.remoteVideo) {
+        window.dom.remoteVideo.srcObject = null;
+    }
+    if (window.dom && window.dom.hangupBtn) {
+        window.dom.hangupBtn.disabled = true;
+    }
     
     if (window.hideIncomingCallModal) window.hideIncomingCallModal();
     
@@ -227,6 +233,31 @@ window.hangup = async function(reason = 'user_initiated') {
     window.loadUsers?.();
 };
 
-if (dom.hangupBtn) {
-    dom.hangupBtn.addEventListener('click', () => window.hangup('user_initiated'));
+// ==================== ATTACH HANGUP BUTTON LISTENER ====================
+// This needs to run after DOM is ready
+function attachHangupListener() {
+    if (window.dom && window.dom.hangupBtn) {
+        // Remove any existing listeners by cloning
+        const oldBtn = window.dom.hangupBtn;
+        const newBtn = oldBtn.cloneNode(true);
+        oldBtn.parentNode.replaceChild(newBtn, oldBtn);
+        window.dom.hangupBtn = newBtn;
+        
+        window.dom.hangupBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            window.hangup('user_initiated');
+        });
+        
+        console.log('✅ Hangup button listener attached');
+    } else {
+        console.warn('Hangup button not found, will retry...');
+        setTimeout(attachHangupListener, 500);
+    }
+}
+
+// Try to attach when UI is ready
+if (window.dom) {
+    attachHangupListener();
+} else {
+    window.addEventListener('ui-ready', attachHangupListener);
 }
