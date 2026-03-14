@@ -19,6 +19,27 @@ window.initMedia = async function() {
     }
 };
 
+// ==================== LOAD TURN SERVERS FROM TWILIO ====================
+window.loadTurnServers = async function() {
+    try {
+        console.log('🔄 Loading TURN servers from Twilio...');
+        const response = await fetch('https://turn-token.easosunov.workers.dev/ice');
+        if (!response.ok) {
+            throw new Error(`Failed to load TURN servers: ${response.status}`);
+        }
+        const data = await response.json();
+        console.log('✅ TURN servers loaded:', data.iceServers.length);
+        return data.iceServers;
+    } catch (error) {
+        console.log(`❌ Failed to load TURN servers: ${error.message}`);
+        // Fallback to STUN only
+        return [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' }
+        ];
+    }
+};
+
 // ==================== PEER CONNECTION CREATION ====================
 window.createPeerConnection = async function(targetUsername, isCaller = true) {
     console.log(`🔧 Creating peer connection with ${targetUsername} (${isCaller ? 'caller' : 'callee'})`);
@@ -27,11 +48,11 @@ window.createPeerConnection = async function(targetUsername, isCaller = true) {
     CONFIG.isCaller = isCaller;
     CONFIG.iceRestartAttempts = 0;
     
+    // Load TURN servers
+    const turnServers = await window.loadTurnServers();
+    
     const config = {
-        iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' }
-        ],
+        iceServers: turnServers,
         iceCandidatePoolSize: 10,
         iceTransportPolicy: 'all',
         bundlePolicy: 'max-bundle',
@@ -120,7 +141,9 @@ window.createPeerConnection = async function(targetUsername, isCaller = true) {
             if (CONFIG.iceRestartAttempts < CONFIG.MAX_ICE_RESTART_ATTEMPTS) {
                 restartIce();
             } else {
-                alert('Call failed after multiple attempts');
+                if (window.showStatusModal) {
+                    window.showStatusModal('❌ Call Failed', 'Connection failed after multiple attempts', true);
+                }
                 if (window.hangup) window.hangup('max_restarts_reached');
             }
         }
