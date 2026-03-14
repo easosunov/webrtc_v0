@@ -708,8 +708,12 @@
                 log(`✅ Logged in as ${userData.displayName || accessCode} (${accessCode})`);
                 
                 initializePresence();
-                loadUsers();
+                
+                // Initialize media first
                 await initMedia();
+                
+                // Then load users
+                await loadUsers();
                 
             } catch (error) {
                 log(`❌ Login error: ${error.message}`);
@@ -737,10 +741,13 @@
                     CONFIG.localStream = null;
                 }
                 
+                // Clear all state
                 CONFIG.myUsername = null;
                 CONFIG.myUid = null;
                 CONFIG.isAdmin = false;
                 CONFIG.isInCall = false;
+                CONFIG.iceExchangeStatus.clear();
+                CONFIG.activeCallButtons.clear();
                 
                 callScreen.style.display = 'none';
                 loginScreen.style.display = 'block';
@@ -783,22 +790,27 @@
 
         // ==================== LOAD USERS ====================
         async function loadUsers() {
-            const usersSnapshot = await db.collection('users').get();
-            const users = [];
-            
-            usersSnapshot.forEach(doc => {
-                if (doc.id !== CONFIG.myUsername) {
-                    const userData = doc.data();
-                    users.push({
-                        username: doc.id,
-                        displayName: userData.displayName || doc.id,
-                        isAdmin: userData.isAdmin || false
-                    });
-                }
-            });
-            
-            renderUsersList(users);
-            listenForUsers();
+            try {
+                const usersSnapshot = await db.collection('users').get();
+                const users = [];
+                
+                usersSnapshot.forEach(doc => {
+                    if (doc.id !== CONFIG.myUsername) {
+                        const userData = doc.data();
+                        users.push({
+                            username: doc.id,
+                            displayName: userData.displayName || doc.id,
+                            isAdmin: userData.isAdmin || false
+                        });
+                    }
+                });
+                
+                renderUsersList(users);
+                listenForUsers();
+                
+            } catch (error) {
+                log(`❌ Error loading users: ${error.message}`);
+            }
         }
 
         function listenForUsers() {
