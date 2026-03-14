@@ -7,50 +7,637 @@
     
     <!-- Styles -->
     <style>
-        /* All your existing styles here - can be moved to styles.css later */
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
         }
-        /* ... (keep all existing styles) ... */
+
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            width: 100%;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        /* Login Screen */
+        #login-screen {
+            padding: 40px;
+            background: white;
+        }
+
+        .login-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .login-header h1 {
+            color: #333;
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+
+        .login-header p {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .keypad {
+            max-width: 400px;
+            margin: 0 auto;
+        }
+
+        .display {
+            background: #f5f5f5;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 32px;
+            letter-spacing: 4px;
+            color: #333;
+            font-family: monospace;
+            border: 2px solid #e0e0e0;
+        }
+
+        .keypad-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .keypad-btn {
+            background: white;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 20px;
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .keypad-btn:hover {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        .keypad-btn:active {
+            transform: scale(0.95);
+        }
+
+        .keypad-btn.special {
+            background: #f0f0f0;
+            color: #666;
+        }
+
+        .keypad-btn::after {
+            content: attr(data-key);
+            position: absolute;
+            bottom: 5px;
+            right: 8px;
+            font-size: 10px;
+            opacity: 0.5;
+            color: inherit;
+        }
+
+        .keypad-btn:hover::after {
+            opacity: 1;
+        }
+
+        .enter-btn {
+            width: 100%;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            padding: 15px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s ease;
+            margin-top: 10px;
+        }
+
+        .enter-btn:hover {
+            background: #5a67d8;
+        }
+
+        .enter-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .status-message {
+            text-align: center;
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+
+        .status-message.error {
+            background: #fee;
+            color: #c33;
+        }
+
+        .status-message.success {
+            background: #efe;
+            color: #3c3;
+        }
+
+        .status-message.info {
+            background: #eef;
+            color: #33c;
+        }
+
+        /* Call Screen */
+        #call-screen {
+            display: none;
+            padding: 20px;
+        }
+
+        .call-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .user-info {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .user-info span {
+            color: #667eea;
+            margin-left: 5px;
+        }
+
+        .logout-btn {
+            background: #f44336;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            padding: 8px 15px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s ease;
+        }
+
+        .logout-btn:hover {
+            background: #d32f2f;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 300px;
+            gap: 20px;
+        }
+
+        .video-section {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .video-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .video-box {
+            background: #000;
+            border-radius: 10px;
+            overflow: hidden;
+            aspect-ratio: 16/9;
+            position: relative;
+        }
+
+        .video-box video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            background: #1a1a1a;
+        }
+
+        .video-label {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 12px;
+            z-index: 10;
+        }
+
+        .call-controls {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin: 20px 0;
+        }
+
+        .call-btn {
+            padding: 12px 30px;
+            border: none;
+            border-radius: 25px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .call-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .call-btn.call {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .call-btn.hangup {
+            background: #f44336;
+            color: white;
+        }
+
+        /* Users Panel */
+        .users-panel {
+            background: #f9f9f9;
+            border-radius: 10px;
+            padding: 20px;
+            height: fit-content;
+            max-height: calc(100vh - 200px);
+            overflow-y: auto;
+        }
+
+        .users-panel h3 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 18px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #e0e0e0;
+            position: sticky;
+            top: 0;
+            background: #f9f9f9;
+        }
+
+        .user-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            border-bottom: 1px solid #e0e0e0;
+            transition: background 0.2s ease;
+        }
+
+        .user-item:hover {
+            background: #f0f0f0;
+        }
+
+        .user-item:last-child {
+            border-bottom: none;
+        }
+
+        .user-info-left {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .user-name {
+            font-weight: 600;
+            color: #333;
+            font-size: 14px;
+        }
+
+        .call-user-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            padding: 8px 15px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            min-width: 70px;
+        }
+
+        .call-user-btn:hover:not(:disabled) {
+            background: #5a67d8;
+            transform: scale(1.02);
+        }
+
+        .call-user-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .debug-panel {
+            margin-top: 20px;
+            padding: 15px;
+            background: #1e1e1e;
+            border-radius: 10px;
+            color: #0f0;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .debug-panel .header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            color: #fff;
+        }
+
+        .debug-panel button {
+            background: #333;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            padding: 3px 8px;
+            cursor: pointer;
+            font-size: 11px;
+        }
+
+        .debug-content {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .key-hint {
+            text-align: center;
+            margin-top: 10px;
+            font-size: 12px;
+            color: #666;
+        }
+
+        .key-hint span {
+            background: #f0f0f0;
+            padding: 3px 8px;
+            border-radius: 4px;
+            margin: 0 3px;
+            font-family: monospace;
+        }
+
+        /* Incoming Call Modal */
+        #incoming-call-modal {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            z-index: 2000;
+            min-width: 300px;
+            text-align: center;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translate(-50%, -60%);
+                opacity: 0;
+            }
+            to {
+                transform: translate(-50%, -50%);
+                opacity: 1;
+            }
+        }
+
+        #incoming-call-modal h3 {
+            color: #333;
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+
+        #incoming-call-modal p {
+            color: #666;
+            font-size: 18px;
+            margin-bottom: 20px;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+        }
+
+        .modal-btn {
+            padding: 12px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            min-width: 100px;
+        }
+
+        .modal-btn.accept {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .modal-btn.accept:hover {
+            background: #45a049;
+            transform: scale(1.05);
+        }
+
+        .modal-btn.reject {
+            background: #f44336;
+            color: white;
+        }
+
+        .modal-btn.reject:hover {
+            background: #da190b;
+            transform: scale(1.05);
+        }
+
+        /* Modal overlay */
+        #modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 1999;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @media (max-width: 1024px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+            
+            .users-panel {
+                max-height: 300px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .video-container {
+                grid-template-columns: 1fr;
+            }
+            
+            .login-header h1 {
+                font-size: 24px;
+            }
+            
+            .keypad-btn {
+                padding: 15px;
+                font-size: 20px;
+            }
+            
+            .keypad-btn::after {
+                font-size: 8px;
+            }
+
+            #incoming-call-modal {
+                min-width: 250px;
+                padding: 20px;
+            }
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <!-- Login Screen -->
         <div id="login-screen">
-            <!-- ... (keep existing login HTML) ... -->
+            <div class="login-header">
+                <h1>📞 WebRTC Communicator</h1>
+                <p>Enter your access code to start</p>
+            </div>
+            
+            <div class="keypad">
+                <div class="display" id="code-display"></div>
+                
+                <div class="keypad-grid">
+                    <button class="keypad-btn" data-digit="1" data-key="1">1</button>
+                    <button class="keypad-btn" data-digit="2" data-key="2">2</button>
+                    <button class="keypad-btn" data-digit="3" data-key="3">3</button>
+                    <button class="keypad-btn" data-digit="4" data-key="4">4</button>
+                    <button class="keypad-btn" data-digit="5" data-key="5">5</button>
+                    <button class="keypad-btn" data-digit="6" data-key="6">6</button>
+                    <button class="keypad-btn" data-digit="7" data-key="7">7</button>
+                    <button class="keypad-btn" data-digit="8" data-key="8">8</button>
+                    <button class="keypad-btn" data-digit="9" data-key="9">9</button>
+                    <button class="keypad-btn special" data-digit="clear" data-key="C">C</button>
+                    <button class="keypad-btn" data-digit="0" data-key="0">0</button>
+                    <button class="keypad-btn special" data-digit="back" data-key="⌫">⌫</button>
+                </div>
+                
+                <button class="enter-btn" id="login-btn" disabled>Enter</button>
+                
+                <div class="key-hint">
+                    <span>⌫</span> Backspace • <span>C</span> Clear • <span>Enter</span> Login
+                </div>
+                
+                <div id="login-status" class="status-message"></div>
+            </div>
         </div>
         
         <!-- Call Screen -->
         <div id="call-screen">
-            <!-- ... (keep existing call screen HTML) ... -->
+            <div class="call-header">
+                <div class="user-info">
+                    Logged in as: <span id="current-user"></span>
+                </div>
+                <button class="logout-btn" id="logout-btn">Logout</button>
+            </div>
+            
+            <div class="main-content">
+                <div class="video-section">
+                    <div class="video-container">
+                        <div class="video-box">
+                            <video id="local-video" autoplay playsinline muted></video>
+                            <div class="video-label">You</div>
+                        </div>
+                        <div class="video-box">
+                            <video id="remote-video" autoplay playsinline></video>
+                            <div class="video-label">Remote</div>
+                        </div>
+                    </div>
+                    
+                    <div class="call-controls">
+                        <button class="call-btn hangup" id="hangup-btn" disabled>Hang Up</button>
+                    </div>
+                </div>
+                
+                <div class="users-panel">
+                    <h3>Available Users</h3>
+                    <div id="users-container"></div>
+                </div>
+            </div>
+            
+            <div class="debug-panel">
+                <div class="header">
+                    <span>Debug Console</span>
+                    <button id="clear-debug">Clear</button>
+                </div>
+                <div id="debug-content" class="debug-content"></div>
+            </div>
         </div>
     </div>
 
     <!-- Incoming Call Modal -->
     <div id="modal-overlay"></div>
     <div id="incoming-call-modal">
-        <!-- ... (keep existing modal HTML) ... -->
+        <h3>📞 Incoming Call</h3>
+        <p id="caller-name">Loading...</p>
+        <div class="modal-buttons">
+            <button class="modal-btn accept" id="accept-call">Accept</button>
+            <button class="modal-btn reject" id="reject-call">Reject</button>
+        </div>
     </div>
 
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
-    <!-- Our modular JavaScript files -->
-
-<!-- Our modular JavaScript files - in correct order -->
-<script src="js/config.js"></script>  <!-- No DOM dependencies -->
-<script src="js/ui.js"></script>      <!-- Sets up DOM -->
-<script src="js/init.js"></script>    <!-- Signals when ready -->
-<script src="js/auth.js"></script>    <!-- Waits for ui-ready -->
-<script src="js/users.js"></script>   <!-- Waits for ui-ready -->
-<script src="js/webrtc.js"></script>  <!-- Waits for ui-ready -->
-<script src="js/calls.js"></script>   <!-- Waits for ui-ready -->
-
-
+    <!-- Our modular JavaScript files - in correct order -->
+    <script src="js/config.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/init.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/users.js"></script>
+    <script src="js/webrtc.js"></script>
+    <script src="js/calls.js"></script>
 </body>
 </html>
