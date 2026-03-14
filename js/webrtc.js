@@ -1,7 +1,7 @@
 // ==================== MEDIA INITIALIZATION ====================
 window.initMedia = async function() {
     try {
-        log('📹 Requesting camera and microphone access...');
+        console.log('📹 Requesting camera and microphone access...');
         CONFIG.localStream = await navigator.mediaDevices.getUserMedia({
             audio: true,
             video: {
@@ -11,17 +11,17 @@ window.initMedia = async function() {
         });
         
         if (dom.localVideo) dom.localVideo.srcObject = CONFIG.localStream;
-        log('✅ Media access granted');
+        console.log('✅ Media access granted');
         
     } catch (error) {
-        log(`❌ Media access error: ${error.message}`);
+        console.log(`❌ Media access error: ${error.message}`);
         alert('Could not access camera/microphone. Please check permissions.');
     }
 };
 
 // ==================== PEER CONNECTION CREATION ====================
 window.createPeerConnection = async function(targetUsername, isCaller = true) {
-    log(`🔧 Creating peer connection with ${targetUsername} (${isCaller ? 'caller' : 'callee'})`);
+    console.log(`🔧 Creating peer connection with ${targetUsername} (${isCaller ? 'caller' : 'callee'})`);
     
     CONFIG.targetUsername = targetUsername;
     CONFIG.isCaller = isCaller;
@@ -53,33 +53,33 @@ window.createPeerConnection = async function(targetUsername, isCaller = true) {
         event.streams[0].getTracks().forEach(track => {
             CONFIG.remoteStream.addTrack(track);
         });
-        log('✅ Remote stream received');
+        console.log('✅ Remote stream received');
         if (dom.hangupBtn) dom.hangupBtn.disabled = false;
         clearTimeout(CONFIG.connectionTimeout);
     };
     
     CONFIG.peerConnection.onicecandidate = (event) => {
         if (event.candidate && CONFIG.currentCallId) {
-            log(`🧊 ICE candidate: ${event.candidate.type || 'unknown'}`);
+            console.log(`🧊 ICE candidate: ${event.candidate.type || 'unknown'}`);
             db.collection('ice-candidates').add({
                 callId: CONFIG.currentCallId,
                 fromUserId: CONFIG.myUsername,
                 toUserId: targetUsername,
                 candidate: event.candidate.toJSON(),
                 timestamp: firebase.firestore.FieldValue.serverTimestamp()
-            }).catch(err => log(`❌ Error storing ICE candidate: ${err.message}`));
+            }).catch(err => console.log(`❌ Error storing ICE candidate: ${err.message}`));
         }
     };
     
     CONFIG.peerConnection.oniceconnectionstatechange = () => {
         const state = CONFIG.peerConnection.iceConnectionState;
-        log(`🧊 ICE state: ${state}`);
+        console.log(`🧊 ICE state: ${state}`);
         
         switch(state) {
             case 'checking':
                 CONFIG.connectionTimeout = setTimeout(() => {
                     if (CONFIG.peerConnection?.iceConnectionState === 'checking') {
-                        log('⏰ ICE checking timeout - attempting restart');
+                        console.log('⏰ ICE checking timeout - attempting restart');
                         restartIce();
                     }
                 }, CONFIG.ICE_TIMEOUT);
@@ -87,13 +87,13 @@ window.createPeerConnection = async function(targetUsername, isCaller = true) {
                 
             case 'connected':
             case 'completed':
-                log('✅ ICE connection established');
+                console.log('✅ ICE connection established');
                 clearTimeout(CONFIG.connectionTimeout);
                 CONFIG.iceRestartAttempts = 0;
                 break;
                 
             case 'disconnected':
-                log('⚠️ ICE disconnected - attempting recovery');
+                console.log('⚠️ ICE disconnected - attempting recovery');
                 setTimeout(() => {
                     if (CONFIG.peerConnection?.iceConnectionState === 'disconnected') {
                         restartIce();
@@ -102,7 +102,7 @@ window.createPeerConnection = async function(targetUsername, isCaller = true) {
                 break;
                 
             case 'failed':
-                log('❌ ICE failed');
+                console.log('❌ ICE failed');
                 restartIce();
                 break;
         }
@@ -110,13 +110,13 @@ window.createPeerConnection = async function(targetUsername, isCaller = true) {
     
     CONFIG.peerConnection.onconnectionstatechange = () => {
         const state = CONFIG.peerConnection.connectionState;
-        log(`🔗 Connection state: ${state}`);
+        console.log(`🔗 Connection state: ${state}`);
         
         if (state === 'connected') {
             CONFIG.isInCall = true;
             clearTimeout(CONFIG.connectionTimeout);
         } else if (state === 'failed') {
-            log('❌ Connection failed');
+            console.log('❌ Connection failed');
             if (CONFIG.iceRestartAttempts < CONFIG.MAX_ICE_RESTART_ATTEMPTS) {
                 restartIce();
             } else {
@@ -131,12 +131,12 @@ window.createPeerConnection = async function(targetUsername, isCaller = true) {
 
 async function restartIce() {
     if (CONFIG.iceRestartAttempts >= CONFIG.MAX_ICE_RESTART_ATTEMPTS) {
-        log('❌ Max ICE restart attempts reached');
+        console.log('❌ Max ICE restart attempts reached');
         return;
     }
     
     CONFIG.iceRestartAttempts++;
-    log(`🔄 ICE restart attempt ${CONFIG.iceRestartAttempts}/${CONFIG.MAX_ICE_RESTART_ATTEMPTS}`);
+    console.log(`🔄 ICE restart attempt ${CONFIG.iceRestartAttempts}/${CONFIG.MAX_ICE_RESTART_ATTEMPTS}`);
     
     try {
         const offer = await CONFIG.peerConnection.createOffer({ iceRestart: true });
@@ -151,9 +151,9 @@ async function restartIce() {
             timestamp: firebase.firestore.FieldValue.serverTimestamp()
         });
         
-        log('📤 ICE restart offer sent');
+        console.log('📤 ICE restart offer sent');
         
     } catch (error) {
-        log(`❌ ICE restart failed: ${error.message}`);
+        console.log(`❌ ICE restart failed: ${error.message}`);
     }
 }
