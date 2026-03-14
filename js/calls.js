@@ -280,58 +280,7 @@ window.listenForIncomingCalls = function() {
         });
 };
 
-// ==================== HANGUP FUNCTION WITH AUTO-CLEANUP ====================
-window.hangup = async function(reason = 'user_initiated') {
-    console.log(`📞 Call ended - reason: ${reason}`);
-    
-    if (window.stopRingtone) window.stopRingtone();
-    stopRingbackTone();
-    
-    if (CONFIG.peerConnection) {
-        CONFIG.peerConnection.close();
-        CONFIG.peerConnection = null;
-    }
-    
-    if (CONFIG.currentCallId) {
-        try {
-            await db.collection('calls').doc(CONFIG.currentCallId).update({
-                status: 'ended',
-                endedAt: firebase.firestore.FieldValue.serverTimestamp()
-            });
-        } catch (err) {
-            console.log(`Error updating call status: ${err.message}`);
-        }
-    }
-    
-    if (CONFIG.connectionTimeout) {
-        clearTimeout(CONFIG.connectionTimeout);
-        CONFIG.connectionTimeout = null;
-    }
-    
-    CONFIG.remoteStream = null;
-    CONFIG.isInCall = false;
-    CONFIG.currentCallId = null;
-    CONFIG.iceRestartAttempts = 0;
-    
-    if (window.dom && window.dom.remoteVideo) {
-        window.dom.remoteVideo.srcObject = null;
-    }
-    if (window.dom && window.dom.hangupBtn) {
-        window.dom.hangupBtn.disabled = true;
-    }
-    
-    if (window.hideIncomingCallModal) window.hideIncomingCallModal();
-    
-    console.log('📞 Call ended');
-    if (window.loadUsers) window.loadUsers();
-    
-    setTimeout(async () => {
-        console.log('🧹 Running post-call cleanup...');
-        if (window.cleanupOldCallsKeepLatest) await window.cleanupOldCallsKeepLatest();
-    }, 1000);
-};
-
-// ==================== CLEANUP OLD CALLS ====================
+// ==================== CLEANUP OLD CALLS (KEEP ONLY LATEST PER USER) ====================
 window.cleanupOldCallsKeepLatest = async function() {
     if (!CONFIG.myUsername) return;
     
@@ -400,14 +349,207 @@ window.cleanupOldCallsKeepLatest = async function() {
         
         if (deletedCount > 0) {
             await batch.commit();
-            console.log(`🧹 Cleanup complete: kept ${keptCount} calls, deleted ${deletedCount} old calls`);
+            console.log(`🧹 Call cleanup complete: kept ${keptCount} calls, deleted ${deletedCount} old calls`);
         } else {
             console.log(`📭 No old calls to delete`);
         }
         
     } catch (error) {
-        console.log(`❌ Error during smart cleanup: ${error.message}`);
+        console.log(`❌ Error during call cleanup: ${error.message}`);
     }
+};
+
+// ==================== CLEANUP ICE CANDIDATES (KEEP ONLY LATEST CALL'S CANDIDATES) ====================
+window.cleanupIceCandidatesKeepLatest = async function() {
+    if (!CONFIG.myUsername) return;
+    
+    try {
+        console.log('🧹 Starting ice-candidates cleanup - keeping only candidates from latest call per user...');
+        
+        // Get all ice-candidates where this user is the sender
+        const candidatesSnapshot = await db.collection('ice-candidates')
+            .where('fromUserId', '==', CONFIG.myUsername)
+            .get();
+        
+        if (candidatesSnapshot.empty) {
+            console.log('📭 No ice-candidates to clean up');
+            return;
+        }
+        
+        console.log(`📊 Found ${candidatesSnapshot.size} total ice-candidates`);
+        
+        // Group candidates by the other user (toUserId)
+        const candidatesByUser = {};
+        
+        candidatesSnapshot.forEach(doc => {
+            const candidateData = doc.data();
+            const otherUser = candidateData.toUserId;
+            
+            if (!candidatesByUser[otherUser]) {
+                candidatesByUser[otherUser] = [];
+            }
+            
+            // Get timestamp from the candidate document
+            let timestamp = 0;
+            if (candidateData.timestamp) {
+                timestamp = candidateData.timestamp.toMillis?.() || 
+                           candidateData.timestamp._seconds * 1000 || 
+                           candidateData.timestamp;
+            }
+            
+            candidatesByUser[otherUser].push({
+                id: doc.id,
+                timestamp: timestamp,
+                ref: doc.ref,
+                data: candidateData,
+                callId: candidateData.callId
+            });
+        });
+        
+        // For each user, we need to find their most recent call
+        const batch = db.batch();
+        let deletedCount = 0;
+        let keptCount = 0;
+        
+        for (const otherUser of Object.keys(candidatesByUser)) {
+            const userCandidates = candidatesByUser[otherUser];
+            
+            // Get all calls between current user and this other user
+            const callsBetween = await db.collection('calls')
+                .where('callerId', 'in', [CONFIG.myUsername, otherUser])
+                .where('calleeId', 'in', [CONFIG.myUsername, otherUser])
+                .get();
+            
+            if (callsBetween.empty) {
+                // If no calls found, delete all candidates for this user
+                userCandidates.forEach(candidate => {
+                    batch.delete(candidate.ref);
+                    deletedCount++;
+                });
+                console.log(`🗑️ No calls found for user ${otherUser}, deleting ${userCandidates.length} candidates`);
+                continue;
+            }
+            
+            // Find the most recent call
+            let latestCallId = null;
+            let latestTimestamp = 0;
+            
+            callsBetween.forEach(doc => {
+                const callData = doc.data();
+                let callTime = 0;
+                if (callData.timestamp) {
+                    callTime = callData.timestamp.toMillis?.() || 
+                               callData.timestamp._seconds * 1000 || 
+                               callData.timestamp;
+                }
+                
+                if (callTime > latestTimestamp) {
+                    latestTimestamp = callTime;
+                    latestCallId = doc.id;
+                }
+            });
+            
+            console.log(`✅ Most recent call with ${otherUser}: ${latestCallId}`);
+            
+            // Keep candidates from the most recent call, delete others
+            userCandidates.forEach(candidate => {
+                if (candidate.callId === latestCallId) {
+                    keptCount++;
+                    console.log(`✅ Keeping ice-candidate from latest call with ${otherUser}`);
+                } else {
+                    batch.delete(candidate.ref);
+                    deletedCount++;
+                    console.log(`🗑️ Deleting old ice-candidate from call with ${otherUser}`);
+                }
+            });
+        }
+        
+        if (deletedCount > 0) {
+            await batch.commit();
+            console.log(`🧹 Ice-candidates cleanup complete: kept ${keptCount}, deleted ${deletedCount}`);
+        } else {
+            console.log(`📭 No old ice-candidates to delete`);
+        }
+        
+    } catch (error) {
+        console.log(`❌ Error during ice-candidates cleanup: ${error.message}`);
+    }
+};
+
+// ==================== HANGUP FUNCTION WITH AUTO-CLEANUP ====================
+window.hangup = async function(reason = 'user_initiated') {
+    console.log(`📞 Call ended - reason: ${reason}`);
+    
+    if (window.stopRingtone) window.stopRingtone();
+    stopRingbackTone();
+    
+    if (CONFIG.peerConnection) {
+        CONFIG.peerConnection.close();
+        CONFIG.peerConnection = null;
+    }
+    
+    if (CONFIG.currentCallId) {
+        try {
+            await db.collection('calls').doc(CONFIG.currentCallId).update({
+                status: 'ended',
+                endedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        } catch (err) {
+            console.log(`Error updating call status: ${err.message}`);
+        }
+    }
+    
+    if (CONFIG.connectionTimeout) {
+        clearTimeout(CONFIG.connectionTimeout);
+        CONFIG.connectionTimeout = null;
+    }
+    
+    CONFIG.remoteStream = null;
+    CONFIG.isInCall = false;
+    CONFIG.currentCallId = null;
+    CONFIG.iceRestartAttempts = 0;
+    
+    if (window.dom && window.dom.remoteVideo) {
+        window.dom.remoteVideo.srcObject = null;
+    }
+    if (window.dom && window.dom.hangupBtn) {
+        window.dom.hangupBtn.disabled = true;
+    }
+    
+    if (window.hideIncomingCallModal) window.hideIncomingCallModal();
+    
+    console.log('📞 Call ended');
+    if (window.loadUsers) window.loadUsers();
+    
+    // Run cleanups after call ends
+    setTimeout(async () => {
+        console.log('🧹 Running post-call cleanups...');
+        
+        // Clean up old calls first
+        if (window.cleanupOldCallsKeepLatest) {
+            await window.cleanupOldCallsKeepLatest();
+        }
+        
+        // Then clean up old ice-candidates
+        if (window.cleanupIceCandidatesKeepLatest) {
+            await window.cleanupIceCandidatesKeepLatest();
+        }
+    }, 1000);
+};
+
+// ==================== MANUAL CLEANUP FUNCTION ====================
+window.cleanupAll = async function() {
+    console.log('🧹 Running full manual cleanup...');
+    
+    if (window.cleanupOldCallsKeepLatest) {
+        await window.cleanupOldCallsKeepLatest();
+    }
+    
+    if (window.cleanupIceCandidatesKeepLatest) {
+        await window.cleanupIceCandidatesKeepLatest();
+    }
+    
+    console.log('✅ Full manual cleanup complete');
 };
 
 // ==================== ATTACH HANGUP BUTTON LISTENER ====================
