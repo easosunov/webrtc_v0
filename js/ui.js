@@ -101,6 +101,11 @@ function initDOM() {
     dom.callerNameSpan = document.getElementById('caller-name');
     dom.acceptBtn = document.getElementById('accept-call');
     dom.rejectBtn = document.getElementById('reject-call');
+	dom.statusModalOverlay = document.getElementById('status-modal-overlay');
+	dom.statusModal = document.getElementById('status-modal');
+	dom.statusModalTitle = document.getElementById('status-modal-title');
+	dom.statusModalMessage = document.getElementById('status-modal-message');
+	dom.statusModalOk = document.getElementById('status-modal-ok');
 
     console.log('DOM Elements Found:', {
         loginScreen: !!dom.loginScreen,
@@ -150,6 +155,35 @@ window.hideIncomingCallModal = function() {
     stopRingtone();
 };
 
+// ==================== STATUS MODAL FUNCTIONS ====================
+window.showStatusModal = function(title, message, isError = false) {
+    if (!dom.statusModal || !dom.statusModalOverlay || !dom.statusModalTitle || !dom.statusModalMessage) {
+        console.error('Status modal elements not found');
+        return;
+    }
+    
+    dom.statusModalTitle.textContent = title;
+    dom.statusModalMessage.textContent = message;
+    
+    // Change color for error messages
+    if (isError) {
+        dom.statusModalTitle.style.color = '#f44336';
+    } else {
+        dom.statusModalTitle.style.color = '#333';
+    }
+    
+    dom.statusModalOverlay.style.display = 'block';
+    dom.statusModal.style.display = 'block';
+};
+
+window.hideStatusModal = function() {
+    if (!dom.statusModal || !dom.statusModalOverlay) return;
+    
+    dom.statusModalOverlay.style.display = 'none';
+    dom.statusModal.style.display = 'none';
+};
+
+
 // Initialize everything when DOM is ready
 document.addEventListener('DOMContentLoaded', function() {
     console.log('DOM Content Loaded');
@@ -187,6 +221,27 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             });
         }
+
+		// In the event listeners section, add:
+		if (dom.statusModalOk) {
+			const newOkBtn = dom.statusModalOk.cloneNode(true);
+			dom.statusModalOk.parentNode.replaceChild(newOkBtn, dom.statusModalOk);
+			dom.statusModalOk = newOkBtn;
+			
+			dom.statusModalOk.addEventListener('click', () => {
+				hideStatusModal();
+			});
+		}
+
+		if (dom.statusModalOverlay) {
+			const newOverlay = dom.statusModalOverlay.cloneNode(true);
+			dom.statusModalOverlay.parentNode.replaceChild(newOverlay, dom.statusModalOverlay);
+			dom.statusModalOverlay = newOverlay;
+			
+			dom.statusModalOverlay.addEventListener('click', () => {
+				hideStatusModal();
+			});
+		}
 
         if (dom.modalOverlay) {
             const newOverlay = dom.modalOverlay.cloneNode(true);
