@@ -1,0 +1,159 @@
+// ==================== MEDIA INITIALIZATION ====================
+window.initMedia = async function() {
+    try {
+        log('📹 Requesting camera and microphone access...');
+        CONFIG.localStream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+            video: {
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
+            }
+        });
+        
+        dom.localVideo.srcObject = CONFIG.localStream;
+        log('✅ Media access granted');
+        
+    } catch (error) {
+        log(`❌ Media access error: ${error.message}`);
+        alert('Could not access camera/microphone. Please check permissions.');
+    }
+};
+
+// ==================== ROBUST PEER CONNECTION CREATION ====================
+window.createPeerConnection = async function(targetUsername, isCaller = true) {
+    log(`🔧 Creating peer connection with ${targetUsername} (${isCaller ? 'caller' : 'callee'})`);
+    
+    CONFIG.targetUsername = targetUsername;
+    CONFIG.isCaller = isCaller;
+    CONFIG.iceRestartAttempts = 0;
+    
+    const config = {
+        iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' }
+        ],
+        iceCandidatePoolSize: 10,
+        iceTransportPolicy: 'all',
+        bundlePolicy: 'max-bundle',
+        rtcpMuxPolicy: 'require'
+    };
+    
+    CONFIG.peerConnection = new RTCPeerConnection(config);
+    
+    if (CONFIG.localStream) {
+        CONFIG.localStream.getTracks().forEach(track => {
+            CONFIG.peerConnection.addTrack(track, CONFIG.localStream);
+        });
+    }
+    
+    CONFIG.remoteStream = new MediaStream();
+    dom.remoteVideo.srcObject = CONFIG.remoteStream;
+    
+    CONFIG.peerConnection.ontrack = (event) => {
+        event.streams[0].getTracks().forEach(track => {
+            CONFIG.remoteStream.addTrack(track);
+        });
+        log('✅ Remote stream received');
+        dom.hangupBtn.disabled = false;
+        clearTimeout(CONFIG.connectionTimeout);
+    };
+    
+    CONFIG.peerConnection.onicecandidate = (event) => {
+        if (event.candidate && CONFIG.currentCallId) {
+            log(`🧊 ICE candidate: ${event.candidate.type || 'unknown'}`);
+            db.collection('ice-candidates').add({
+                callId: CONFIG.currentCallId,
+                fromUserId: CONFIG.myUsername,
+                toUserId: targetUsername,
+                candidate: event.candidate.toJSON(),
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            }).catch(err => log(`❌ Error storing ICE candidate: ${err.message}`));
+        }
+    };
+    
+    CONFIG.peerConnection.oniceconnectionstatechange = () => {
+        const state = CONFIG.peerConnection.iceConnectionState;
+        log(`🧊 ICE state: ${state}`);
+        
+        switch(state) {
+            case 'checking':
+                CONFIG.connectionTimeout = setTimeout(() => {
+                    if (CONFIG.peerConnection?.iceConnectionState === 'checking') {
+                        log('⏰ ICE checking timeout - attempting restart');
+                        restartIce();
+                    }
+                }, CONFIG.ICE_TIMEOUT);
+                break;
+                
+            case 'connected':
+            case 'completed':
+                log('✅ ICE connection established');
+                clearTimeout(CONFIG.connectionTimeout);
+                CONFIG.iceRestartAttempts = 0;
+                break;
+                
+            case 'disconnected':
+                log('⚠️ ICE disconnected - attempting recovery');
+                setTimeout(() => {
+                    if (CONFIG.peerConnection?.iceConnectionState === 'disconnected') {
+                        restartIce();
+                    }
+                }, 2000);
+                break;
+                
+            case 'failed':
+                log('❌ ICE failed');
+                restartIce();
+                break;
+        }
+    };
+    
+    CONFIG.peerConnection.onconnectionstatechange = () => {
+        const state = CONFIG.peerConnection.connectionState;
+        log(`🔗 Connection state: ${state}`);
+        
+        if (state === 'connected') {
+            CONFIG.isInCall = true;
+            clearTimeout(CONFIG.connectionTimeout);
+        } else if (state === 'failed') {
+            log('❌ Connection failed');
+            if (CONFIG.iceRestartAttempts < CONFIG.MAX_ICE_RESTART_ATTEMPTS) {
+                restartIce();
+            } else {
+                alert('Call failed after multiple attempts');
+                window.hangup('max_restarts_reached');
+            }
+        }
+    };
+    
+    return CONFIG.peerConnection;
+};
+
+async function restartIce() {
+    if (CONFIG.iceRestartAttempts >= CONFIG.MAX_ICE_RESTART_ATTEMPTS) {
+        log('❌ Max ICE restart attempts reached');
+        return;
+    }
+    
+    CONFIG.iceRestartAttempts++;
+    log(`🔄 ICE restart attempt ${CONFIG.iceRestartAttempts}/${CONFIG.MAX_ICE_RESTART_ATTEMPTS}`);
+    
+    try {
+        const offer = await CONFIG.peerConnection.createOffer({ iceRestart: true });
+        await CONFIG.peerConnection.setLocalDescription(offer);
+        
+        await db.collection('calls').doc(CONFIG.currentCallId).update({
+            offer: {
+                type: offer.type,
+                sdp: offer.sdp
+            },
+            restartAttempt: CONFIG.iceRestartAttempts,
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        
+        log('📤 ICE restart offer sent');
+        
+    } catch (error) {
+        log(`❌ ICE restart failed: ${error.message}`);
+    }
+}
