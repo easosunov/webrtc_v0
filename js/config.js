@@ -35,6 +35,8 @@ const CONFIG = {
     currentIncomingCall: null
 };
 
+const TURN_SERVER_URL = 'https://turn-token.easosunov.workers.dev/ice';
+
 // Make CONFIG and db globally available
 window.CONFIG = CONFIG;
 window.db = db;
