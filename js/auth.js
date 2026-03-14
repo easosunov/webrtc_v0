@@ -170,7 +170,15 @@ async function login() {
         // Initialize other modules
         if (window.cleanupStaleCalls) await window.cleanupStaleCalls();
         if (window.initMedia) await window.initMedia();
-        if (window.loadUsers) await window.loadUsers();
+        
+        // IMPORTANT: Load users after media is initialized
+        if (window.loadUsers) {
+            log('📋 Calling loadUsers...');
+            await window.loadUsers();
+        } else {
+            log('❌ loadUsers function not found!');
+        }
+        
         if (window.listenForIncomingCalls) window.listenForIncomingCalls();
         
     } catch (error) {
@@ -181,6 +189,8 @@ async function login() {
         }
     }
 }
+
+
 
 async function logout() {
     try {
