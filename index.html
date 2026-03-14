@@ -283,6 +283,49 @@
             background: #f44336;
             color: white;
         }
+		
+		
+		/* Call Status Modal */
+		#status-modal {
+			display: none;
+			position: fixed;
+			top: 50%;
+			left: 50%;
+			transform: translate(-50%, -50%);
+			background: white;
+			padding: 30px;
+			border-radius: 15px;
+			box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+			z-index: 2100;
+			min-width: 300px;
+			text-align: center;
+			animation: slideIn 0.3s ease;
+		}
+
+		#status-modal h3 {
+			color: #333;
+			font-size: 24px;
+			margin-bottom: 10px;
+		}
+
+		#status-modal p {
+			color: #666;
+			font-size: 18px;
+			margin-bottom: 20px;
+		}
+
+		#status-modal-overlay {
+			display: none;
+			position: fixed;
+			top: 0;
+			left: 0;
+			right: 0;
+			bottom: 0;
+			background: rgba(0,0,0,0.5);
+			z-index: 2099;
+			animation: fadeIn 0.3s ease;
+		}
+		
 
         /* Users Panel */
         .users-panel {
@@ -584,6 +627,16 @@
             <button class="modal-btn reject" id="reject-call">Reject</button>
         </div>
     </div>
+	
+	<!-- Call Status Modal -->
+	<div id="status-modal-overlay"></div>
+	<div id="status-modal">
+		<h3 id="status-modal-title">📢 Call Status</h3>
+		<p id="status-modal-message">Loading...</p>
+		<div class="modal-buttons">
+			<button class="modal-btn accept" id="status-modal-ok">OK</button>
+		</div>
+	</div>
 
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
