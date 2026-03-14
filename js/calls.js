@@ -57,7 +57,7 @@ function startRingbackTone() {
             }
         }, 2000); // 2 seconds on, 2 seconds off (alternating)
         
-        log('🔊 Ringback tone started');
+        console.log('🔊 Ringback tone started');
     } catch (error) {
         console.error('❌ Failed to start ringback tone:', error);
     }
@@ -84,7 +84,7 @@ function stopRingbackTone() {
         ringbackGain = null;
     }
     
-    log('🔇 Ringback tone stopped');
+    console.log('🔇 Ringback tone stopped');
 }
 
 // ==================== CLEANUP STALE CALLS ====================
@@ -104,7 +104,7 @@ window.cleanupStaleCalls = async function() {
             const callTime = callData.timestamp?.toMillis?.() || 0;
             
             if (callTime < twoMinutesAgo) {
-                log(`🧹 Cleaning up stale call: ${doc.id}`);
+                console.log(`🧹 Cleaning up stale call: ${doc.id}`);
                 doc.ref.update({
                     status: 'ended',
                     endedAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -112,7 +112,7 @@ window.cleanupStaleCalls = async function() {
             }
         });
     } catch (error) {
-        log(`Error cleaning up stale calls: ${error.message}`);
+        console.log(`Error cleaning up stale calls: ${error.message}`);
     }
 };
 
@@ -156,7 +156,7 @@ window.callUser = async function(targetUsername) {
             restartAttempt: 0
         });
         
-        log('📤 Offer sent, waiting for answer...');
+        console.log('📤 Offer sent, waiting for answer...');
         
         // Listen for answer
         const unsubscribe = db.collection('calls').doc(CONFIG.currentCallId).onSnapshot((snapshot) => {
@@ -164,11 +164,11 @@ window.callUser = async function(targetUsername) {
             
             const data = snapshot.data();
             if (data.answer && CONFIG.peerConnection && !CONFIG.peerConnection.currentRemoteDescription) {
-                log('📥 Received answer');
+                console.log('📥 Received answer');
                 // Stop ringback tone when answer received
                 stopRingbackTone();
                 CONFIG.peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer))
-                    .catch(err => log(`❌ Error setting remote description: ${err.message}`));
+                    .catch(err => console.log(`❌ Error setting remote description: ${err.message}`));
                 unsubscribe(); // Stop listening after answer
             }
         });
@@ -181,8 +181,8 @@ window.callUser = async function(targetUsername) {
                     if (change.type === 'added' && CONFIG.peerConnection) {
                         const data = change.doc.data();
                         CONFIG.peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate))
-                            .catch(err => log(`❌ Error adding ICE candidate: ${err.message}`));
-                        log('🧊 Added remote ICE candidate');
+                            .catch(err => console.log(`❌ Error adding ICE candidate: ${err.message}`));
+                        console.log('🧊 Added remote ICE candidate');
                     }
                 });
             });
@@ -190,14 +190,14 @@ window.callUser = async function(targetUsername) {
         // Auto-stop ringback after 30 seconds (timeout)
         setTimeout(() => {
             if (CONFIG.isInCall && !CONFIG.peerConnection?.currentRemoteDescription) {
-                log('⏰ Call timeout - no answer received');
+                console.log('⏰ Call timeout - no answer received');
                 stopRingbackTone();
                 window.hangup('timeout');
             }
         }, 30000);
         
     } catch (error) {
-        log(`❌ Call error: ${error.message}`);
+        console.log(`❌ Call error: ${error.message}`);
         stopRingbackTone();
         CONFIG.isInCall = false;
         CONFIG.currentCallId = null;
@@ -219,7 +219,7 @@ function updateCallButtons(calledUsername) {
 
 // ==================== ANSWER FUNCTION ====================
 window.answerCall = async function(callId, callerId, offer) {
-    log(`✅ Answering call from ${callerId}`);
+    console.log(`✅ Answering call from ${callerId}`);
     
     try {
         CONFIG.isInCall = true;
@@ -241,7 +241,7 @@ window.answerCall = async function(callId, callerId, offer) {
             answeredAt: firebase.firestore.FieldValue.serverTimestamp()
         });
         
-        log('📤 Answer sent');
+        console.log('📤 Answer sent');
         
         db.collection('ice-candidates')
             .where('callId', '==', callId)
@@ -251,13 +251,13 @@ window.answerCall = async function(callId, callerId, offer) {
                     if (change.type === 'added' && CONFIG.peerConnection) {
                         const data = change.doc.data();
                         CONFIG.peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate))
-                            .catch(err => log(`❌ Error adding ICE candidate: ${err.message}`));
+                            .catch(err => console.log(`❌ Error adding ICE candidate: ${err.message}`));
                     }
                 });
             });
         
     } catch (error) {
-        log(`❌ Error answering call: ${error.message}`);
+        console.log(`❌ Error answering call: ${error.message}`);
         window.hangup?.('answer_error');
     }
 };
@@ -266,7 +266,7 @@ window.answerCall = async function(callId, callerId, offer) {
 window.listenForIncomingCalls = function() {
     if (!CONFIG.myUsername) return;
     
-    log(`👂 Listening for incoming calls as ${CONFIG.myUsername}...`);
+    console.log(`👂 Listening for incoming calls as ${CONFIG.myUsername}...`);
     
     db.collection('calls')
         .where('calleeId', '==', CONFIG.myUsername)
@@ -278,11 +278,11 @@ window.listenForIncomingCalls = function() {
                     const callId = change.doc.id;
                     
                     if (callData.callerId === CONFIG.myUsername) {
-                        log(`⏭️ Ignoring self-initiated call from ${callData.callerId}`);
+                        console.log(`⏭️ Ignoring self-initiated call from ${callData.callerId}`);
                         return;
                     }
                     
-                    log(`📞 Incoming call from ${callData.callerId}!`);
+                    console.log(`📞 Incoming call from ${callData.callerId}!`);
                     
                     if (window.showIncomingCallModal) {
                         window.showIncomingCallModal(callData.callerId, callId, callData.offer);
@@ -290,13 +290,13 @@ window.listenForIncomingCalls = function() {
                 }
             });
         }, (error) => {
-            log(`❌ Error listening for calls: ${error.message}`);
+            console.log(`❌ Error listening for calls: ${error.message}`);
         });
 };
 
 // ==================== HANGUP FUNCTION WITH AUTO-CLEANUP ====================
 window.hangup = async function(reason = 'user_initiated') {
-    log(`📞 Call ended - reason: ${reason}`);
+    console.log(`📞 Call ended - reason: ${reason}`);
     
     // Stop both ringtone and ringback
     if (window.stopRingtone) window.stopRingtone();
@@ -314,7 +314,7 @@ window.hangup = async function(reason = 'user_initiated') {
                 endedAt: firebase.firestore.FieldValue.serverTimestamp()
             });
         } catch (err) {
-            log(`Error updating call status: ${err.message}`);
+            console.log(`Error updating call status: ${err.message}`);
         }
     }
     
@@ -337,12 +337,12 @@ window.hangup = async function(reason = 'user_initiated') {
     
     if (window.hideIncomingCallModal) window.hideIncomingCallModal();
     
-    log('📞 Call ended');
+    console.log('📞 Call ended');
     window.loadUsers?.();
     
     // Auto-cleanup after hangup
     setTimeout(async () => {
-        log('🧹 Running post-call cleanup...');
+        console.log('🧹 Running post-call cleanup...');
         await window.cleanupOldCallsKeepLatest();
     }, 1000);
 };
@@ -352,7 +352,7 @@ window.cleanupOldCallsKeepLatest = async function() {
     if (!CONFIG.myUsername) return;
     
     try {
-        log('🧹 Starting smart cleanup - keeping only latest call per user...');
+        console.log('🧹 Starting smart cleanup - keeping only latest call per user...');
         
         const [callerCalls, calleeCalls] = await Promise.all([
             db.collection('calls').where('callerId', '==', CONFIG.myUsername).get(),
@@ -362,11 +362,11 @@ window.cleanupOldCallsKeepLatest = async function() {
         const allCalls = [...callerCalls.docs, ...calleeCalls.docs];
         
         if (allCalls.length === 0) {
-            log('📭 No calls to clean up');
+            console.log('📭 No calls to clean up');
             return;
         }
         
-        log(`📊 Found ${allCalls.length} total calls`);
+        console.log(`📊 Found ${allCalls.length} total calls`);
         
         const callsByUser = {};
         
@@ -405,24 +405,24 @@ window.cleanupOldCallsKeepLatest = async function() {
             userCalls.forEach((call, index) => {
                 if (index === 0) {
                     keptCount++;
-                    log(`✅ Keeping latest call with ${otherUser}`);
+                    console.log(`✅ Keeping latest call with ${otherUser}`);
                 } else {
                     batch.delete(call.ref);
                     deletedCount++;
-                    log(`🗑️ Deleting old call with ${otherUser}`);
+                    console.log(`🗑️ Deleting old call with ${otherUser}`);
                 }
             });
         });
         
         if (deletedCount > 0) {
             await batch.commit();
-            log(`🧹 Cleanup complete: kept ${keptCount} calls, deleted ${deletedCount} old calls`);
+            console.log(`🧹 Cleanup complete: kept ${keptCount} calls, deleted ${deletedCount} old calls`);
         } else {
-            log(`📭 No old calls to delete`);
+            console.log(`📭 No old calls to delete`);
         }
         
     } catch (error) {
-        log(`❌ Error during smart cleanup: ${error.message}`);
+        console.log(`❌ Error during smart cleanup: ${error.message}`);
     }
 };
 
