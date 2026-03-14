@@ -21,41 +21,33 @@ function initRingbackContext() {
 
 function startRingbackTone() {
     try {
-        // Stop any existing ringback
         stopRingbackTone();
         
         const ctx = initRingbackContext();
         if (!ctx) return;
         
-        // Resume audio context if suspended
         if (ctx.state === 'suspended') {
             ctx.resume();
         }
         
-        // Create gain node for volume control
         ringbackGain = ctx.createGain();
-        ringbackGain.gain.value = 0.2; // 20% volume (softer than incoming ring)
+        ringbackGain.gain.value = 0.2;
         ringbackGain.connect(ctx.destination);
         
-        // Create oscillator for the ringback tone
         ringbackOscillator = ctx.createOscillator();
         ringbackOscillator.type = 'sine';
-        ringbackOscillator.frequency.value = 440; // A4 note
+        ringbackOscillator.frequency.value = 440;
         
-        // Connect oscillator to gain
         ringbackOscillator.connect(ringbackGain);
-        
-        // Start the oscillator
         ringbackOscillator.start();
         
-        // Different pattern for ringback (2 seconds on, 4 seconds off - like US ringback)
         let isOn = true;
         ringbackInterval = setInterval(() => {
             if (ringbackGain) {
                 ringbackGain.gain.value = isOn ? 0.2 : 0;
                 isOn = !isOn;
             }
-        }, 2000); // 2 seconds on, 2 seconds off (alternating)
+        }, 2000);
         
         console.log('🔊 Ringback tone started');
     } catch (error) {
@@ -73,9 +65,7 @@ function stopRingbackTone() {
         try {
             ringbackOscillator.stop();
             ringbackOscillator.disconnect();
-        } catch (error) {
-            // Ignore errors if already stopped
-        }
+        } catch (error) {}
         ringbackOscillator = null;
     }
     
@@ -136,7 +126,6 @@ window.callUser = async function(targetUsername) {
         
         updateCallButtons(targetUsername);
         
-        // Start ringback tone for caller
         startRingbackTone();
         
         await window.createPeerConnection(targetUsername, true);
@@ -158,18 +147,16 @@ window.callUser = async function(targetUsername) {
         
         console.log('📤 Offer sent, waiting for answer...');
         
-        // Listen for answer
         const unsubscribe = db.collection('calls').doc(CONFIG.currentCallId).onSnapshot((snapshot) => {
             if (!snapshot.exists) return;
             
             const data = snapshot.data();
             if (data.answer && CONFIG.peerConnection && !CONFIG.peerConnection.currentRemoteDescription) {
                 console.log('📥 Received answer');
-                // Stop ringback tone when answer received
                 stopRingbackTone();
                 CONFIG.peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer))
                     .catch(err => console.log(`❌ Error setting remote description: ${err.message}`));
-                unsubscribe(); // Stop listening after answer
+                unsubscribe();
             }
         });
         
@@ -187,7 +174,6 @@ window.callUser = async function(targetUsername) {
                 });
             });
         
-        // Auto-stop ringback after 30 seconds (timeout)
         setTimeout(() => {
             if (CONFIG.isInCall && !CONFIG.peerConnection?.currentRemoteDescription) {
                 console.log('⏰ Call timeout - no answer received');
@@ -201,7 +187,7 @@ window.callUser = async function(targetUsername) {
         stopRingbackTone();
         CONFIG.isInCall = false;
         CONFIG.currentCallId = null;
-        window.loadUsers?.();
+        if (window.loadUsers) window.loadUsers();
     }
 };
 
@@ -258,7 +244,7 @@ window.answerCall = async function(callId, callerId, offer) {
         
     } catch (error) {
         console.log(`❌ Error answering call: ${error.message}`);
-        window.hangup?.('answer_error');
+        if (window.hangup) window.hangup('answer_error');
     }
 };
 
@@ -298,7 +284,6 @@ window.listenForIncomingCalls = function() {
 window.hangup = async function(reason = 'user_initiated') {
     console.log(`📞 Call ended - reason: ${reason}`);
     
-    // Stop both ringtone and ringback
     if (window.stopRingtone) window.stopRingtone();
     stopRingbackTone();
     
@@ -338,12 +323,11 @@ window.hangup = async function(reason = 'user_initiated') {
     if (window.hideIncomingCallModal) window.hideIncomingCallModal();
     
     console.log('📞 Call ended');
-    window.loadUsers?.();
+    if (window.loadUsers) window.loadUsers();
     
-    // Auto-cleanup after hangup
     setTimeout(async () => {
         console.log('🧹 Running post-call cleanup...');
-        await window.cleanupOldCallsKeepLatest();
+        if (window.cleanupOldCallsKeepLatest) await window.cleanupOldCallsKeepLatest();
     }, 1000);
 };
 
@@ -446,14 +430,12 @@ function attachHangupListener() {
     }
 }
 
-// Try to attach when UI is ready
 if (window.dom) {
     attachHangupListener();
 } else {
     window.addEventListener('ui-ready', attachHangupListener);
 }
 
-// Ensure audio context is resumed on user interaction
 document.addEventListener('click', () => {
     if (ringbackContext && ringbackContext.state === 'suspended') {
         ringbackContext.resume();
