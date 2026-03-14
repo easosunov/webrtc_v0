@@ -1,146 +1,215 @@
-// Global DOM object
-window.dom = {};
+// Flag to ensure we only initialize once
+let authInitialized = false;
 
-// Flag to track UI initialization
-let uiInitialized = false;
+// Wait for UI to be ready - use the dom object from ui.js
+window.addEventListener('ui-ready', function() {
+    console.log('UI ready event received in auth.js');
+    if (!authInitialized) {
+        initAuth();
+    }
+});
 
-// Initialize DOM elements when document is ready
-function initDOM() {
-    console.log('Initializing DOM elements...');
-    
-    dom.loginScreen = document.getElementById('login-screen');
-    dom.callScreen = document.getElementById('call-screen');
-    dom.codeDisplay = document.getElementById('code-display');
-    dom.loginBtn = document.getElementById('login-btn') || 
-                   document.querySelector('.enter-btn');
-    dom.loginStatus = document.getElementById('login-status');
-    dom.logoutBtn = document.getElementById('logout-btn') ||
-                    document.querySelector('.logout-btn');
-    dom.currentUserSpan = document.getElementById('current-user');
-    dom.hangupBtn = document.getElementById('hangup-btn') ||
-                    document.querySelector('.hangup-btn');
-    dom.localVideo = document.getElementById('local-video');
-    dom.remoteVideo = document.getElementById('remote-video');
-    dom.usersContainer = document.getElementById('users-container');
-    dom.debugContent = document.getElementById('debug-content');
-    dom.clearDebugBtn = document.getElementById('clear-debug');
-    dom.modalOverlay = document.getElementById('modal-overlay');
-    dom.incomingModal = document.getElementById('incoming-call-modal');
-    dom.callerNameSpan = document.getElementById('caller-name');
-    dom.acceptBtn = document.getElementById('accept-call');
-    dom.rejectBtn = document.getElementById('reject-call');
+// ==================== KEYPAD HANDLING ====================
+let currentCode = '';
 
-    console.log('DOM Elements Found:', {
-        loginScreen: !!dom.loginScreen,
-        callScreen: !!dom.callScreen,
-        loginBtn: !!dom.loginBtn,
-        hangupBtn: !!dom.hangupBtn,
-        modalOverlay: !!dom.modalOverlay
-    });
+function updateDisplay() {
+    if (!window.dom || !window.dom.codeDisplay) return;
+    window.dom.codeDisplay.textContent = currentCode || '▪'.repeat(6);
+    if (window.dom.loginBtn) window.dom.loginBtn.disabled = currentCode.length === 0;
+}
 
-    if (!dom.loginScreen || !dom.callScreen) {
-        console.error('Critical screen elements are missing!');
-        return false;
+function initAuth() {
+    // Prevent multiple initializations
+    if (authInitialized) {
+        console.log('Auth already initialized, skipping...');
+        return true;
     }
     
+    console.log('Initializing auth with dom:', window.dom);
+    
+    // Check if dom and login button exist
+    if (!window.dom || !window.dom.loginBtn) {
+        console.warn('DOM or login button not ready yet, will retry...');
+        setTimeout(initAuth, 500);
+        return false;
+    }
+
+    console.log('Found login button:', window.dom.loginBtn);
+
+    // Remove any existing event listeners by cloning and replacing buttons
+    const keypadButtons = document.querySelectorAll('.keypad-btn[data-digit]');
+    keypadButtons.forEach(btn => {
+        // Remove old listeners by cloning
+        const newBtn = btn.cloneNode(true);
+        btn.parentNode.replaceChild(newBtn, btn);
+        newBtn.addEventListener('click', (e) => {
+            const digit = e.currentTarget.dataset.digit;
+            handleKeypadInput(digit);
+        });
+    });
+
+    // Replace login button to remove old listeners
+    const oldLoginBtn = window.dom.loginBtn;
+    const newLoginBtn = oldLoginBtn.cloneNode(true);
+    oldLoginBtn.parentNode.replaceChild(newLoginBtn, oldLoginBtn);
+    window.dom.loginBtn = newLoginBtn;
+    
+    window.dom.loginBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        login();
+    });
+
+    // Replace logout button if it exists
+    if (window.dom.logoutBtn) {
+        const oldLogoutBtn = window.dom.logoutBtn;
+        const newLogoutBtn = oldLogoutBtn.cloneNode(true);
+        oldLogoutBtn.parentNode.replaceChild(newLogoutBtn, oldLogoutBtn);
+        window.dom.logoutBtn = newLogoutBtn;
+        
+        window.dom.logoutBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            logout();
+        });
+    }
+
+    // Remove old keyboard listener and add new one
+    document.removeEventListener('keydown', handleKeyDown);
+    document.addEventListener('keydown', handleKeyDown);
+
+    updateDisplay();
+    authInitialized = true;
+    console.log('✅ Auth initialized successfully');
     return true;
 }
 
-// ==================== DEBUG LOGGING ====================
-window.log = function(message) {
-    const timestamp = new Date().toLocaleTimeString();
-    const line = `[${timestamp}] ${message}`;
+// Separate keyboard handler function
+function handleKeyDown(event) {
+    if (window.dom && window.dom.callScreen && window.dom.callScreen.style.display === 'block') return;
     
-    if (dom.debugContent) {
-        dom.debugContent.innerHTML += line + '\n';
-        dom.debugContent.scrollTop = dom.debugContent.scrollHeight;
+    const key = event.key;
+    
+    if (/^[0-9]$/.test(key)) {
+        event.preventDefault();
+        handleKeypadInput(key);
     }
-    console.log(message);
-};
+    else if (key === 'Backspace' || key === 'Delete') {
+        event.preventDefault();
+        handleKeypadInput('back');
+    }
+    else if (key === 'c' || key === 'C') {
+        event.preventDefault();
+        handleKeypadInput('clear');
+    }
+    else if (key === 'Enter') {
+        event.preventDefault();
+        if (window.dom && window.dom.loginBtn && !window.dom.loginBtn.disabled) {
+            login();
+        }
+    }
+}
 
-// ==================== MODAL FUNCTIONS ====================
-window.showIncomingCallModal = function(callerId, callId, offer) {
-    if (!dom.modalOverlay || !dom.incomingModal || !dom.callerNameSpan) {
-        console.error('Modal elements not found');
-        return;
+function handleKeypadInput(digit) {
+    if (digit === 'clear') {
+        currentCode = '';
+    } else if (digit === 'back') {
+        currentCode = currentCode.slice(0, -1);
+    } else {
+        if (currentCode.length < 10) {
+            currentCode += digit;
+        }
+    }
+    updateDisplay();
+}
+
+// ==================== AUTHENTICATION ====================
+async function login() {
+    const accessCode = currentCode;
+    if (!accessCode) return;
+    
+    log(`🔐 Attempting login with code: ${accessCode}`);
+    if (window.dom && window.dom.loginStatus) {
+        window.dom.loginStatus.className = 'status-message info';
+        window.dom.loginStatus.textContent = 'Logging in...';
     }
     
-    CONFIG.currentIncomingCall = { callId, callerId, offer };
-    dom.callerNameSpan.textContent = `Call from ${callerId}`;
-    dom.modalOverlay.style.display = 'block';
-    dom.incomingModal.style.display = 'block';
-};
-
-window.hideIncomingCallModal = function() {
-    if (!dom.modalOverlay || !dom.incomingModal) return;
-    
-    dom.modalOverlay.style.display = 'none';
-    dom.incomingModal.style.display = 'none';
-    CONFIG.currentIncomingCall = null;
-};
-
-// Initialize everything when DOM is ready
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('DOM Content Loaded');
-    
-    if (initDOM() && !uiInitialized) {
-        // Clone and replace buttons to ensure clean event listeners
-        if (dom.clearDebugBtn) {
-            const newClearBtn = dom.clearDebugBtn.cloneNode(true);
-            dom.clearDebugBtn.parentNode.replaceChild(newClearBtn, dom.clearDebugBtn);
-            dom.clearDebugBtn = newClearBtn;
-            
-            dom.clearDebugBtn.addEventListener('click', () => {
-                if (dom.debugContent) dom.debugContent.innerHTML = '';
-            });
-        }
-
-        if (dom.acceptBtn) {
-            const newAcceptBtn = dom.acceptBtn.cloneNode(true);
-            dom.acceptBtn.parentNode.replaceChild(newAcceptBtn, dom.acceptBtn);
-            dom.acceptBtn = newAcceptBtn;
-            
-            dom.acceptBtn.addEventListener('click', () => {
-                if (CONFIG.currentIncomingCall) {
-                    const { callId, callerId, offer } = CONFIG.currentIncomingCall;
-                    hideIncomingCallModal();
-                    if (window.answerCall) window.answerCall(callId, callerId, offer);
-                }
-            });
-        }
-
-        if (dom.rejectBtn) {
-            const newRejectBtn = dom.rejectBtn.cloneNode(true);
-            dom.rejectBtn.parentNode.replaceChild(newRejectBtn, dom.rejectBtn);
-            dom.rejectBtn = newRejectBtn;
-            
-            dom.rejectBtn.addEventListener('click', () => {
-                if (CONFIG.currentIncomingCall) {
-                    const { callId } = CONFIG.currentIncomingCall;
-                    db.collection('calls').doc(callId).update({
-                        status: 'rejected',
-                        endedAt: firebase.firestore.FieldValue.serverTimestamp()
-                    }).catch(err => console.error('Error rejecting call:', err));
-                    hideIncomingCallModal();
-                    log('📞 Call rejected');
-                }
-            });
-        }
-
-        if (dom.modalOverlay) {
-            const newOverlay = dom.modalOverlay.cloneNode(true);
-            dom.modalOverlay.parentNode.replaceChild(newOverlay, dom.modalOverlay);
-            dom.modalOverlay = newOverlay;
-            
-            dom.modalOverlay.addEventListener('click', () => {
-                hideIncomingCallModal();
-            });
-        }
-
-        uiInitialized = true;
-        log('🚀 UI loaded');
+    try {
+        const userRef = db.collection('users').doc(accessCode);
+        const userDoc = await userRef.get();
         
-        // Signal that UI is ready
-        window.dispatchEvent(new Event('ui-ready'));
+        if (!userDoc.exists) {
+            log(`❌ User ${accessCode} not found in database`);
+            if (window.dom && window.dom.loginStatus) {
+                window.dom.loginStatus.className = 'status-message error';
+                window.dom.loginStatus.textContent = 'Invalid access code';
+            }
+            
+            setTimeout(() => {
+                currentCode = '';
+                updateDisplay();
+                if (window.dom && window.dom.loginStatus) window.dom.loginStatus.textContent = '';
+            }, 2000);
+            
+            return;
+        }
+        
+        const userData = userDoc.data();
+        
+        CONFIG.myUsername = accessCode;
+        CONFIG.myDisplayName = userData.displayName || accessCode;
+        CONFIG.isAdmin = userData.isAdmin || false;
+        
+        if (window.dom && window.dom.currentUserSpan) {
+            window.dom.currentUserSpan.textContent = CONFIG.myDisplayName;
+        }
+        if (window.dom && window.dom.loginScreen) window.dom.loginScreen.style.display = 'none';
+        if (window.dom && window.dom.callScreen) window.dom.callScreen.style.display = 'block';
+        if (window.dom && window.dom.loginStatus) window.dom.loginStatus.textContent = '';
+        
+        log(`✅ Logged in as ${CONFIG.myDisplayName} (${accessCode})`);
+        
+        // Initialize other modules
+        if (window.cleanupStaleCalls) await window.cleanupStaleCalls();
+        if (window.initMedia) await window.initMedia();
+        if (window.loadUsers) await window.loadUsers();
+        if (window.listenForIncomingCalls) window.listenForIncomingCalls();
+        
+    } catch (error) {
+        log(`❌ Login error: ${error.message}`);
+        if (window.dom && window.dom.loginStatus) {
+            window.dom.loginStatus.className = 'status-message error';
+            window.dom.loginStatus.textContent = 'Login failed. Please try again.';
+        }
     }
-});
+}
+
+async function logout() {
+    try {
+        if (window.hangup) await window.hangup();
+        
+        if (CONFIG.localStream) {
+            CONFIG.localStream.getTracks().forEach(track => track.stop());
+            CONFIG.localStream = null;
+        }
+        
+        CONFIG.myUsername = null;
+        CONFIG.myDisplayName = null;
+        CONFIG.isAdmin = false;
+        
+        if (window.dom && window.dom.callScreen) window.dom.callScreen.style.display = 'none';
+        if (window.dom && window.dom.loginScreen) window.dom.loginScreen.style.display = 'block';
+        currentCode = '';
+        updateDisplay();
+        
+        if (window.dom && window.dom.localVideo) window.dom.localVideo.srcObject = null;
+        if (window.dom && window.dom.remoteVideo) window.dom.remoteVideo.srcObject = null;
+        
+        log('👋 Logged out');
+        
+    } catch (error) {
+        log(`❌ Logout error: ${error.message}`);
+    }
+}
+
+// Make functions available globally
+window.login = login;
+window.logout = logout;
