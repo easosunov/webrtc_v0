@@ -272,64 +272,6 @@
             color: white;
         }
 
-        .users-list {
-            background: #f9f9f9;
-            border-radius: 10px;
-            padding: 20px;
-            margin-top: 20px;
-        }
-
-        .users-list h3 {
-            color: #333;
-            margin-bottom: 15px;
-            font-size: 16px;
-        }
-
-        .user-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 10px;
-            border-bottom: 1px solid #eee;
-        }
-
-        .user-item:last-child {
-            border-bottom: none;
-        }
-
-        .user-name {
-            font-weight: 500;
-            color: #333;
-        }
-
-        .user-status {
-            font-size: 12px;
-            padding: 3px 8px;
-            border-radius: 12px;
-            background: #e8f5e9;
-            color: #4CAF50;
-        }
-
-        .call-user-btn {
-            background: #667eea;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            padding: 5px 15px;
-            cursor: pointer;
-            font-size: 12px;
-            transition: background 0.3s ease;
-        }
-
-        .call-user-btn:hover {
-            background: #5a67d8;
-        }
-
-        .call-user-btn:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-        }
-
         .debug-panel {
             margin-top: 20px;
             padding: 15px;
@@ -461,11 +403,6 @@
                 <button class="call-btn hangup" id="hangup-btn" disabled>Hang Up</button>
             </div>
             
-            <div class="users-list">
-                <h3>Online Users</h3>
-                <div id="users-container"></div>
-            </div>
-            
             <div class="debug-panel">
                 <div class="header">
                     <span>Debug Console</span>
@@ -479,7 +416,6 @@
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
 
     <script>
         // ==================== FIREBASE CONFIG ====================
@@ -526,7 +462,6 @@
         const hangupBtn = document.getElementById('hangup-btn');
         const localVideo = document.getElementById('local-video');
         const remoteVideo = document.getElementById('remote-video');
-        const usersContainer = document.getElementById('users-container');
         const debugContent = document.getElementById('debug-content');
         const clearDebugBtn = document.getElementById('clear-debug');
 
@@ -663,9 +598,6 @@
                 // Initialize user presence
                 initializePresence();
                 
-                // Start listening for other users
-                listenForUsers();
-                
                 // Initialize media
                 await initMedia();
                 
@@ -750,53 +682,6 @@
                     });
                 }
             });
-        }
-
-        function listenForUsers() {
-            db.collection('users').onSnapshot(snapshot => {
-                const users = [];
-                snapshot.forEach(doc => {
-                    if (doc.id !== CONFIG.myUsername) {
-                        const userData = doc.data();
-                        // Only show users seen in last 2 minutes
-                        const lastSeen = userData.lastSeen?.toMillis?.() || 0;
-                        const isOnline = userData.online && (Date.now() - lastSeen < 120000);
-                        
-                        if (isOnline) {
-                            users.push({
-                                username: doc.id,
-                                displayName: userData.displayName || doc.id,
-                                isAdmin: userData.isAdmin || false
-                            });
-                        }
-                    }
-                });
-                
-                renderUsersList(users);
-                log(`📋 Found ${users.length} online users`);
-            });
-        }
-
-        function renderUsersList(users) {
-            if (users.length === 0) {
-                usersContainer.innerHTML = '<div class="user-item">No other users online</div>';
-                return;
-            }
-            
-            let html = '';
-            users.forEach(user => {
-                html += `
-                    <div class="user-item">
-                        <span class="user-name">${user.displayName} ${user.isAdmin ? '👑' : ''}</span>
-                        <span class="user-status">Online</span>
-                        ${!CONFIG.isAdmin && user.isAdmin ? 
-                            `<button class="call-user-btn" onclick="callUser('${user.username}')">Call</button>` : 
-                            CONFIG.isAdmin ? 
-                            `<button class="call-user-btn" onclick="callUser('${user.username}')">Call</button>` : ''}
-                    </div>
-                `;
-            });
-            usersContainer.innerHTML = html;
         }
 
         // ==================== MEDIA INITIALIZATION ====================
