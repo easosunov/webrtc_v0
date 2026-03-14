@@ -128,7 +128,7 @@ window.callUser = async function(targetUsername) {
         return;
     }
     
-    log(`📞 Calling ${targetUsername}...`);
+    console.log(`📞 Calling ${targetUsername}...`);
     
     try {
         CONFIG.isInCall = true;
