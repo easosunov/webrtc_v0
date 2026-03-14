@@ -123,9 +123,10 @@ window.callUser = async function(targetUsername) {
     try {
         CONFIG.isInCall = true;
         CONFIG.currentCallId = `${CONFIG.myUsername}_${targetUsername}_${Date.now()}`;
+        CONFIG.currentCallPartner = targetUsername;
         
-        // Update the button for the user being called
-        updateCallButtonsForOutgoingCall(targetUsername);
+        // Update all buttons - disable all and set the called user to "Calling..."
+        updateAllCallButtons(targetUsername, 'calling');
         
         startRingbackTone();
         
@@ -155,6 +156,10 @@ window.callUser = async function(targetUsername) {
             if (data.answer && CONFIG.peerConnection && !CONFIG.peerConnection.currentRemoteDescription) {
                 console.log('📥 Received answer');
                 stopRingbackTone();
+                
+                // When call is answered, update buttons to "In call"
+                updateAllCallButtons(targetUsername, 'incall');
+                
                 CONFIG.peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer))
                     .catch(err => console.log(`❌ Error setting remote description: ${err.message}`));
                 unsubscribe();
@@ -188,35 +193,10 @@ window.callUser = async function(targetUsername) {
         stopRingbackTone();
         CONFIG.isInCall = false;
         CONFIG.currentCallId = null;
+        CONFIG.currentCallPartner = null;
         if (window.loadUsers) window.loadUsers();
     }
 };
-
-// Update outgoing call button
-function updateCallButtonsForOutgoingCall(calledUsername) {
-    const buttons = document.querySelectorAll('.call-user-btn');
-    buttons.forEach(button => {
-        if (button.getAttribute('onclick')?.includes(calledUsername)) {
-            button.disabled = true;
-            button.textContent = 'Calling...';
-        } else {
-            button.disabled = true;
-        }
-    });
-}
-
-
-function updateCallButtons(calledUsername) {
-    const buttons = document.querySelectorAll('.call-user-btn');
-    buttons.forEach(button => {
-        if (button.getAttribute('onclick')?.includes(calledUsername)) {
-            button.disabled = true;
-            button.textContent = 'Calling...';
-        } else {
-            button.disabled = true;
-        }
-    });
-}
 
 // ==================== ANSWER FUNCTION ====================
 window.answerCall = async function(callId, callerId, offer) {
@@ -225,6 +205,7 @@ window.answerCall = async function(callId, callerId, offer) {
     try {
         CONFIG.isInCall = true;
         CONFIG.currentCallId = callId;
+        CONFIG.currentCallPartner = callerId;
         
         await window.createPeerConnection(callerId, false);
         
@@ -244,8 +225,8 @@ window.answerCall = async function(callId, callerId, offer) {
         
         console.log('📤 Answer sent');
         
-        // Update the call buttons - disable the caller's button
-        updateCallButtonsForAnsweredCall(callerId);
+        // Update all buttons - disable all and set the caller to "In call"
+        updateAllCallButtons(callerId, 'incall');
         
         db.collection('ice-candidates')
             .where('callId', '==', callId)
@@ -266,19 +247,37 @@ window.answerCall = async function(callId, callerId, offer) {
     }
 };
 
-// Add this helper function to update buttons when call is answered
-function updateCallButtonsForAnsweredCall(callerId) {
+// ==================== UPDATE ALL CALL BUTTONS ====================
+function updateAllCallButtons(partnerUsername, state) {
     const buttons = document.querySelectorAll('.call-user-btn');
+    
     buttons.forEach(button => {
-        if (button.getAttribute('onclick')?.includes(callerId)) {
+        // Extract username from the onclick attribute
+        const onclickAttr = button.getAttribute('onclick');
+        if (!onclickAttr) return;
+        
+        const match = onclickAttr.match(/'([^']+)'/);
+        if (!match) return;
+        
+        const buttonUsername = match[1];
+        
+        if (buttonUsername === partnerUsername) {
+            // This is the call partner
             button.disabled = true;
-            button.textContent = 'In call';
+            if (state === 'calling') {
+                button.textContent = 'Calling...';
+            } else if (state === 'incall') {
+                button.textContent = 'In call';
+            }
+        } else {
+            // Other users - disabled but with no special text
+            button.disabled = true;
+            // Keep original text or set to empty? We'll keep "Call" but disabled
         }
     });
 }
- 
- 
- // ==================== INCOMING CALL LISTENER ====================
+
+// ==================== INCOMING CALL LISTENER ====================
 window.listenForIncomingCalls = function() {
     if (!CONFIG.myUsername) return;
     
@@ -396,7 +395,6 @@ window.cleanupIceCandidatesKeepLatest = async function() {
     try {
         console.log('🧹 Starting ice-candidates cleanup - keeping only candidates from latest call per user...');
         
-        // Get all ice-candidates where this user is the sender
         const candidatesSnapshot = await db.collection('ice-candidates')
             .where('fromUserId', '==', CONFIG.myUsername)
             .get();
@@ -408,7 +406,6 @@ window.cleanupIceCandidatesKeepLatest = async function() {
         
         console.log(`📊 Found ${candidatesSnapshot.size} total ice-candidates`);
         
-        // Group candidates by the other user (toUserId)
         const candidatesByUser = {};
         
         candidatesSnapshot.forEach(doc => {
@@ -419,7 +416,6 @@ window.cleanupIceCandidatesKeepLatest = async function() {
                 candidatesByUser[otherUser] = [];
             }
             
-            // Get timestamp from the candidate document
             let timestamp = 0;
             if (candidateData.timestamp) {
                 timestamp = candidateData.timestamp.toMillis?.() || 
@@ -436,7 +432,6 @@ window.cleanupIceCandidatesKeepLatest = async function() {
             });
         });
         
-        // For each user, we need to find their most recent call
         const batch = db.batch();
         let deletedCount = 0;
         let keptCount = 0;
@@ -444,14 +439,12 @@ window.cleanupIceCandidatesKeepLatest = async function() {
         for (const otherUser of Object.keys(candidatesByUser)) {
             const userCandidates = candidatesByUser[otherUser];
             
-            // Get all calls between current user and this other user
             const callsBetween = await db.collection('calls')
                 .where('callerId', 'in', [CONFIG.myUsername, otherUser])
                 .where('calleeId', 'in', [CONFIG.myUsername, otherUser])
                 .get();
             
             if (callsBetween.empty) {
-                // If no calls found, delete all candidates for this user
                 userCandidates.forEach(candidate => {
                     batch.delete(candidate.ref);
                     deletedCount++;
@@ -460,7 +453,6 @@ window.cleanupIceCandidatesKeepLatest = async function() {
                 continue;
             }
             
-            // Find the most recent call
             let latestCallId = null;
             let latestTimestamp = 0;
             
@@ -481,7 +473,6 @@ window.cleanupIceCandidatesKeepLatest = async function() {
             
             console.log(`✅ Most recent call with ${otherUser}: ${latestCallId}`);
             
-            // Keep candidates from the most recent call, delete others
             userCandidates.forEach(candidate => {
                 if (candidate.callId === latestCallId) {
                     keptCount++;
@@ -505,7 +496,6 @@ window.cleanupIceCandidatesKeepLatest = async function() {
         console.log(`❌ Error during ice-candidates cleanup: ${error.message}`);
     }
 };
-
 
 // ==================== HANGUP FUNCTION WITH AUTO-CLEANUP ====================
 window.hangup = async function(reason = 'user_initiated') {
@@ -538,6 +528,7 @@ window.hangup = async function(reason = 'user_initiated') {
     CONFIG.remoteStream = null;
     CONFIG.isInCall = false;
     CONFIG.currentCallId = null;
+    CONFIG.currentCallPartner = null;
     CONFIG.iceRestartAttempts = 0;
     
     if (window.dom && window.dom.remoteVideo) {
@@ -551,10 +542,8 @@ window.hangup = async function(reason = 'user_initiated') {
     
     console.log('📞 Call ended');
     
-    // Reload users to reset all buttons
     if (window.loadUsers) window.loadUsers();
     
-    // Run cleanups after call ends
     setTimeout(async () => {
         console.log('🧹 Running post-call cleanups...');
         
@@ -567,7 +556,6 @@ window.hangup = async function(reason = 'user_initiated') {
         }
     }, 1000);
 };
-
 
 // ==================== MANUAL CLEANUP FUNCTION ====================
 window.cleanupAll = async function() {
