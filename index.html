@@ -5,19 +5,512 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WebRTC Communicator</title>
     <style>
-        /* ... (keep all existing styles) ... */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            width: 100%;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        /* Login Screen */
+        #login-screen {
+            padding: 40px;
+            background: white;
+        }
+
+        .login-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .login-header h1 {
+            color: #333;
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+
+        .login-header p {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .keypad {
+            max-width: 400px;
+            margin: 0 auto;
+        }
+
+        .display {
+            background: #f5f5f5;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 32px;
+            letter-spacing: 4px;
+            color: #333;
+            font-family: monospace;
+            border: 2px solid #e0e0e0;
+        }
+
+        .keypad-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .keypad-btn {
+            background: white;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 20px;
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .keypad-btn:hover {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        .keypad-btn:active {
+            transform: scale(0.95);
+        }
+
+        .keypad-btn.special {
+            background: #f0f0f0;
+            color: #666;
+        }
+
+        .keypad-btn::after {
+            content: attr(data-key);
+            position: absolute;
+            bottom: 5px;
+            right: 8px;
+            font-size: 10px;
+            opacity: 0.5;
+            color: inherit;
+        }
+
+        .keypad-btn:hover::after {
+            opacity: 1;
+        }
+
+        .enter-btn {
+            width: 100%;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            padding: 15px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s ease;
+            margin-top: 10px;
+        }
+
+        .enter-btn:hover {
+            background: #5a67d8;
+        }
+
+        .enter-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .status-message {
+            text-align: center;
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+
+        .status-message.error {
+            background: #fee;
+            color: #c33;
+        }
+
+        .status-message.success {
+            background: #efe;
+            color: #3c3;
+        }
+
+        .status-message.info {
+            background: #eef;
+            color: #33c;
+        }
+
+        /* Call Screen */
+        #call-screen {
+            display: none;
+            padding: 20px;
+        }
+
+        .call-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .user-info {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .user-info span {
+            color: #667eea;
+            margin-left: 5px;
+        }
+
+        .logout-btn {
+            background: #f44336;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            padding: 8px 15px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s ease;
+        }
+
+        .logout-btn:hover {
+            background: #d32f2f;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 300px;
+            gap: 20px;
+        }
+
+        .video-section {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .video-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .video-box {
+            background: #000;
+            border-radius: 10px;
+            overflow: hidden;
+            aspect-ratio: 16/9;
+            position: relative;
+        }
+
+        .video-box video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            background: #1a1a1a;
+        }
+
+        .video-label {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 12px;
+            z-index: 10;
+        }
+
+        .call-controls {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin: 20px 0;
+        }
+
+        .call-btn {
+            padding: 12px 30px;
+            border: none;
+            border-radius: 25px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .call-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .call-btn.call {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .call-btn.hangup {
+            background: #f44336;
+            color: white;
+        }
+
+        /* Users Panel */
+        .users-panel {
+            background: #f9f9f9;
+            border-radius: 10px;
+            padding: 20px;
+            height: fit-content;
+            max-height: calc(100vh - 200px);
+            overflow-y: auto;
+        }
+
+        .users-panel h3 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 18px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #e0e0e0;
+            position: sticky;
+            top: 0;
+            background: #f9f9f9;
+        }
+
+        .user-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            border-bottom: 1px solid #e0e0e0;
+            transition: background 0.2s ease;
+        }
+
+        .user-item:hover {
+            background: #f0f0f0;
+        }
+
+        .user-item:last-child {
+            border-bottom: none;
+        }
+
+        .user-info-left {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .user-name {
+            font-weight: 600;
+            color: #333;
+            font-size: 14px;
+        }
+
+        .call-user-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            padding: 8px 15px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            min-width: 70px;
+        }
+
+        .call-user-btn:hover:not(:disabled) {
+            background: #5a67d8;
+            transform: scale(1.02);
+        }
+
+        .call-user-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .debug-panel {
+            margin-top: 20px;
+            padding: 15px;
+            background: #1e1e1e;
+            border-radius: 10px;
+            color: #0f0;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .debug-panel .header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            color: #fff;
+        }
+
+        .debug-panel button {
+            background: #333;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            padding: 3px 8px;
+            cursor: pointer;
+            font-size: 11px;
+        }
+
+        .debug-content {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .key-hint {
+            text-align: center;
+            margin-top: 10px;
+            font-size: 12px;
+            color: #666;
+        }
+
+        .key-hint span {
+            background: #f0f0f0;
+            padding: 3px 8px;
+            border-radius: 4px;
+            margin: 0 3px;
+            font-family: monospace;
+        }
+
+        @media (max-width: 1024px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+            
+            .users-panel {
+                max-height: 300px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .video-container {
+                grid-template-columns: 1fr;
+            }
+            
+            .login-header h1 {
+                font-size: 24px;
+            }
+            
+            .keypad-btn {
+                padding: 15px;
+                font-size: 20px;
+            }
+            
+            .keypad-btn::after {
+                font-size: 8px;
+            }
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <!-- Login Screen -->
         <div id="login-screen">
-            <!-- ... (keep existing login HTML) ... -->
+            <div class="login-header">
+                <h1>📞 WebRTC Communicator</h1>
+                <p>Enter your access code to start</p>
+            </div>
+            
+            <div class="keypad">
+                <div class="display" id="code-display"></div>
+                
+                <div class="keypad-grid">
+                    <button class="keypad-btn" data-digit="1" data-key="1">1</button>
+                    <button class="keypad-btn" data-digit="2" data-key="2">2</button>
+                    <button class="keypad-btn" data-digit="3" data-key="3">3</button>
+                    <button class="keypad-btn" data-digit="4" data-key="4">4</button>
+                    <button class="keypad-btn" data-digit="5" data-key="5">5</button>
+                    <button class="keypad-btn" data-digit="6" data-key="6">6</button>
+                    <button class="keypad-btn" data-digit="7" data-key="7">7</button>
+                    <button class="keypad-btn" data-digit="8" data-key="8">8</button>
+                    <button class="keypad-btn" data-digit="9" data-key="9">9</button>
+                    <button class="keypad-btn special" data-digit="clear" data-key="C">C</button>
+                    <button class="keypad-btn" data-digit="0" data-key="0">0</button>
+                    <button class="keypad-btn special" data-digit="back" data-key="⌫">⌫</button>
+                </div>
+                
+                <button class="enter-btn" id="login-btn" disabled>Enter</button>
+                
+                <div class="key-hint">
+                    <span>⌫</span> Backspace • <span>C</span> Clear • <span>Enter</span> Login
+                </div>
+                
+                <div id="login-status" class="status-message"></div>
+            </div>
         </div>
         
         <!-- Call Screen -->
         <div id="call-screen">
-            <!-- ... (keep existing call screen HTML) ... -->
+            <div class="call-header">
+                <div class="user-info">
+                    Logged in as: <span id="current-user"></span>
+                </div>
+                <button class="logout-btn" id="logout-btn">Logout</button>
+            </div>
+            
+            <div class="main-content">
+                <div class="video-section">
+                    <div class="video-container">
+                        <div class="video-box">
+                            <video id="local-video" autoplay playsinline muted></video>
+                            <div class="video-label">You</div>
+                        </div>
+                        <div class="video-box">
+                            <video id="remote-video" autoplay playsinline></video>
+                            <div class="video-label">Remote</div>
+                        </div>
+                    </div>
+                    
+                    <div class="call-controls">
+                        <button class="call-btn hangup" id="hangup-btn" disabled>Hang Up</button>
+                    </div>
+                </div>
+                
+                <div class="users-panel">
+                    <h3>Available Users</h3>
+                    <div id="users-container"></div>
+                </div>
+            </div>
+            
+            <div class="debug-panel">
+                <div class="header">
+                    <span>Debug Console</span>
+                    <button id="clear-debug">Clear</button>
+                </div>
+                <div id="debug-content" class="debug-content"></div>
+            </div>
         </div>
     </div>
 
@@ -26,591 +519,586 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
     <script>
-        // ==================== FIREBASE CONFIG ====================
-        const firebaseConfig = {
-            apiKey: "AIzaSyChU1sW6u5T0Ho0y0yIPgI1dHFYx-6Q_X8",
-            authDomain: "webrtc-v0.firebaseapp.com",
-            projectId: "webrtc-v0",
-            storageBucket: "webrtc-v0.firebasestorage.app",
-            messagingSenderId: "647705075894",
-            appId: "1:647705075894:web:d23544a3f8e509f69e8617",
-            measurementId: "G-5ZSTJSD2N3"
-        };
+        // Wait for DOM to be fully loaded
+        document.addEventListener('DOMContentLoaded', function() {
+            
+            // ==================== FIREBASE CONFIG ====================
+            const firebaseConfig = {
+                apiKey: "AIzaSyChU1sW6u5T0Ho0y0yIPgI1dHFYx-6Q_X8",
+                authDomain: "webrtc-v0.firebaseapp.com",
+                projectId: "webrtc-v0",
+                storageBucket: "webrtc-v0.firebasestorage.app",
+                messagingSenderId: "647705075894",
+                appId: "1:647705075894:web:d23544a3f8e509f69e8617",
+                measurementId: "G-5ZSTJSD2N3"
+            };
 
-        // Initialize Firebase
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.firestore();
-        
-        // ==================== GLOBAL STATE ====================
-        const CONFIG = {
-            myUsername: null,
-            myDisplayName: null,
-            isAdmin: false,
-            peerConnection: null,
-            localStream: null,
-            remoteStream: null,
-            isInCall: false,
-            currentCallId: null,
-            // Robust connection settings
-            iceRestartAttempts: 0,
-            MAX_ICE_RESTART_ATTEMPTS: 3,
-            connectionTimeout: null,
-            ICE_TIMEOUT: 10000, // 10 seconds
-            reconnectTimer: null,
-            targetUsername: null,
-            isCaller: false
-        };
+            // Initialize Firebase
+            firebase.initializeApp(firebaseConfig);
+            const db = firebase.firestore();
+            
+            // ==================== GLOBAL STATE ====================
+            const CONFIG = {
+                myUsername: null,
+                myDisplayName: null,
+                isAdmin: false,
+                peerConnection: null,
+                localStream: null,
+                remoteStream: null,
+                isInCall: false,
+                currentCallId: null,
+                iceRestartAttempts: 0,
+                MAX_ICE_RESTART_ATTEMPTS: 3,
+                connectionTimeout: null,
+                ICE_TIMEOUT: 10000,
+                reconnectTimer: null,
+                targetUsername: null,
+                isCaller: false
+            };
 
-        // DOM Elements
-        const loginScreen = document.getElementById('login-screen');
-        const callScreen = document.getElementById('call-screen');
-        const codeDisplay = document.getElementById('code-display');
-        const loginBtn = document.getElementById('login-btn');
-        const loginStatus = document.getElementById('login-status');
-        const logoutBtn = document.getElementById('logout-btn');
-        const currentUserSpan = document.getElementById('current-user');
-        const hangupBtn = document.getElementById('hangup-btn');
-        const localVideo = document.getElementById('local-video');
-        const remoteVideo = document.getElementById('remote-video');
-        const usersContainer = document.getElementById('users-container');
-        const debugContent = document.getElementById('debug-content');
-        const clearDebugBtn = document.getElementById('clear-debug');
+            // DOM Elements - Get them after DOM is loaded
+            const loginScreen = document.getElementById('login-screen');
+            const callScreen = document.getElementById('call-screen');
+            const codeDisplay = document.getElementById('code-display');
+            const loginBtn = document.getElementById('login-btn');
+            const loginStatus = document.getElementById('login-status');
+            const logoutBtn = document.getElementById('logout-btn');
+            const currentUserSpan = document.getElementById('current-user');
+            const hangupBtn = document.getElementById('hangup-btn');
+            const localVideo = document.getElementById('local-video');
+            const remoteVideo = document.getElementById('remote-video');
+            const usersContainer = document.getElementById('users-container');
+            const debugContent = document.getElementById('debug-content');
+            const clearDebugBtn = document.getElementById('clear-debug');
 
-        // ==================== DEBUG LOGGING ====================
-        function log(message) {
-            const timestamp = new Date().toLocaleTimeString();
-            const line = `[${timestamp}] ${message}`;
-            debugContent.innerHTML += line + '\n';
-            debugContent.scrollTop = debugContent.scrollHeight;
-            console.log(message);
-        }
+            // Verify all elements exist
+            if (!loginScreen || !callScreen || !codeDisplay || !loginBtn || !loginStatus || 
+                !logoutBtn || !currentUserSpan || !hangupBtn || !localVideo || !remoteVideo || 
+                !usersContainer || !debugContent || !clearDebugBtn) {
+                console.error('Some DOM elements are missing!');
+                return;
+            }
 
-        clearDebugBtn.addEventListener('click', () => {
-            debugContent.innerHTML = '';
-        });
+            // ==================== DEBUG LOGGING ====================
+            function log(message) {
+                const timestamp = new Date().toLocaleTimeString();
+                const line = `[${timestamp}] ${message}`;
+                debugContent.innerHTML += line + '\n';
+                debugContent.scrollTop = debugContent.scrollHeight;
+                console.log(message);
+            }
 
-        // ==================== KEYPAD HANDLING ====================
-        let currentCode = '';
-
-        function updateDisplay() {
-            codeDisplay.textContent = currentCode || '▪'.repeat(6);
-            loginBtn.disabled = currentCode.length === 0;
-        }
-
-        document.querySelectorAll('.keypad-btn[data-digit]').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const digit = btn.dataset.digit;
-                handleKeypadInput(digit);
+            clearDebugBtn.addEventListener('click', () => {
+                debugContent.innerHTML = '';
             });
-        });
 
-        document.addEventListener('keydown', (event) => {
-            if (callScreen.style.display === 'block') return;
-            
-            const key = event.key;
-            
-            if (/^[0-9]$/.test(key)) {
-                event.preventDefault();
-                handleKeypadInput(key);
-            }
-            else if (key === 'Backspace' || key === 'Delete') {
-                event.preventDefault();
-                handleKeypadInput('back');
-            }
-            else if (key === 'c' || key === 'C') {
-                event.preventDefault();
-                handleKeypadInput('clear');
-            }
-            else if (key === 'Enter') {
-                event.preventDefault();
-                if (!loginBtn.disabled) {
-                    login();
-                }
-            }
-        });
+            // ==================== KEYPAD HANDLING ====================
+            let currentCode = '';
 
-        function handleKeypadInput(digit) {
-            if (digit === 'clear') {
-                currentCode = '';
-            } else if (digit === 'back') {
-                currentCode = currentCode.slice(0, -1);
-            } else {
-                if (currentCode.length < 10) {
-                    currentCode += digit;
-                }
+            function updateDisplay() {
+                codeDisplay.textContent = currentCode || '▪'.repeat(6);
+                loginBtn.disabled = currentCode.length === 0;
             }
-            updateDisplay();
-        }
 
-        // ==================== AUTHENTICATION ====================
-        async function login() {
-            const accessCode = currentCode;
-            if (!accessCode) return;
-            
-            log(`🔐 Attempting login with code: ${accessCode}`);
-            loginStatus.className = 'status-message info';
-            loginStatus.textContent = 'Logging in...';
-            
-            try {
-                const userRef = db.collection('users').doc(accessCode);
-                const userDoc = await userRef.get();
+            document.querySelectorAll('.keypad-btn[data-digit]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const digit = btn.dataset.digit;
+                    handleKeypadInput(digit);
+                });
+            });
+
+            document.addEventListener('keydown', (event) => {
+                if (callScreen.style.display === 'block') return;
                 
-                if (!userDoc.exists) {
-                    log(`❌ User ${accessCode} not found in database`);
+                const key = event.key;
+                
+                if (/^[0-9]$/.test(key)) {
+                    event.preventDefault();
+                    handleKeypadInput(key);
+                }
+                else if (key === 'Backspace' || key === 'Delete') {
+                    event.preventDefault();
+                    handleKeypadInput('back');
+                }
+                else if (key === 'c' || key === 'C') {
+                    event.preventDefault();
+                    handleKeypadInput('clear');
+                }
+                else if (key === 'Enter') {
+                    event.preventDefault();
+                    if (!loginBtn.disabled) {
+                        login();
+                    }
+                }
+            });
+
+            function handleKeypadInput(digit) {
+                if (digit === 'clear') {
+                    currentCode = '';
+                } else if (digit === 'back') {
+                    currentCode = currentCode.slice(0, -1);
+                } else {
+                    if (currentCode.length < 10) {
+                        currentCode += digit;
+                    }
+                }
+                updateDisplay();
+            }
+
+            // ==================== AUTHENTICATION ====================
+            async function login() {
+                const accessCode = currentCode;
+                if (!accessCode) return;
+                
+                log(`🔐 Attempting login with code: ${accessCode}`);
+                loginStatus.className = 'status-message info';
+                loginStatus.textContent = 'Logging in...';
+                
+                try {
+                    const userRef = db.collection('users').doc(accessCode);
+                    const userDoc = await userRef.get();
+                    
+                    if (!userDoc.exists) {
+                        log(`❌ User ${accessCode} not found in database`);
+                        loginStatus.className = 'status-message error';
+                        loginStatus.textContent = 'Invalid access code';
+                        
+                        setTimeout(() => {
+                            currentCode = '';
+                            updateDisplay();
+                            loginStatus.textContent = '';
+                        }, 2000);
+                        
+                        return;
+                    }
+                    
+                    const userData = userDoc.data();
+                    
+                    CONFIG.myUsername = accessCode;
+                    CONFIG.myDisplayName = userData.displayName || accessCode;
+                    CONFIG.isAdmin = userData.isAdmin || false;
+                    
+                    currentUserSpan.textContent = CONFIG.myDisplayName;
+                    loginScreen.style.display = 'none';
+                    callScreen.style.display = 'block';
+                    loginStatus.textContent = '';
+                    
+                    log(`✅ Logged in as ${CONFIG.myDisplayName} (${accessCode})`);
+                    
+                    await initMedia();
+                    await loadUsers();
+                    
+                } catch (error) {
+                    log(`❌ Login error: ${error.message}`);
                     loginStatus.className = 'status-message error';
-                    loginStatus.textContent = 'Invalid access code';
+                    loginStatus.textContent = 'Login failed. Please try again.';
+                }
+            }
+
+            async function logout() {
+                try {
+                    await hangup();
                     
-                    setTimeout(() => {
-                        currentCode = '';
-                        updateDisplay();
-                        loginStatus.textContent = '';
-                    }, 2000);
+                    if (CONFIG.localStream) {
+                        CONFIG.localStream.getTracks().forEach(track => track.stop());
+                        CONFIG.localStream = null;
+                    }
                     
+                    CONFIG.myUsername = null;
+                    CONFIG.myDisplayName = null;
+                    CONFIG.isAdmin = false;
+                    
+                    callScreen.style.display = 'none';
+                    loginScreen.style.display = 'block';
+                    currentCode = '';
+                    updateDisplay();
+                    
+                    localVideo.srcObject = null;
+                    remoteVideo.srcObject = null;
+                    
+                    log('👋 Logged out');
+                    
+                } catch (error) {
+                    log(`❌ Logout error: ${error.message}`);
+                }
+            }
+
+            loginBtn.addEventListener('click', login);
+            logoutBtn.addEventListener('click', logout);
+
+            // ==================== LOAD USERS ====================
+            async function loadUsers() {
+                try {
+                    const usersSnapshot = await db.collection('users').get();
+                    const users = [];
+                    
+                    usersSnapshot.forEach(doc => {
+                        if (doc.id !== CONFIG.myUsername) {
+                            const userData = doc.data();
+                            users.push({
+                                username: doc.id,
+                                displayName: userData.displayName || doc.id,
+                                isAdmin: userData.isAdmin || false
+                            });
+                        }
+                    });
+                    
+                    renderUsersList(users);
+                    
+                } catch (error) {
+                    log(`❌ Error loading users: ${error.message}`);
+                }
+            }
+
+            function renderUsersList(users) {
+                if (users.length === 0) {
+                    usersContainer.innerHTML = '<div class="user-item">No other users available</div>';
                     return;
                 }
                 
-                const userData = userDoc.data();
-                
-                CONFIG.myUsername = accessCode;
-                CONFIG.myDisplayName = userData.displayName || accessCode;
-                CONFIG.isAdmin = userData.isAdmin || false;
-                
-                currentUserSpan.textContent = CONFIG.myDisplayName;
-                loginScreen.style.display = 'none';
-                callScreen.style.display = 'block';
-                loginStatus.textContent = '';
-                
-                log(`✅ Logged in as ${CONFIG.myDisplayName} (${accessCode})`);
-                
-                await initMedia();
-                await loadUsers();
-                
-            } catch (error) {
-                log(`❌ Login error: ${error.message}`);
-                loginStatus.className = 'status-message error';
-                loginStatus.textContent = 'Login failed. Please try again.';
-            }
-        }
-
-        async function logout() {
-            try {
-                await hangup();
-                
-                if (CONFIG.localStream) {
-                    CONFIG.localStream.getTracks().forEach(track => track.stop());
-                    CONFIG.localStream = null;
-                }
-                
-                CONFIG.myUsername = null;
-                CONFIG.myDisplayName = null;
-                CONFIG.isAdmin = false;
-                
-                callScreen.style.display = 'none';
-                loginScreen.style.display = 'block';
-                currentCode = '';
-                updateDisplay();
-                
-                localVideo.srcObject = null;
-                remoteVideo.srcObject = null;
-                
-                log('👋 Logged out');
-                
-            } catch (error) {
-                log(`❌ Logout error: ${error.message}`);
-            }
-        }
-
-        loginBtn.addEventListener('click', login);
-        logoutBtn.addEventListener('click', logout);
-
-        // ==================== LOAD USERS ====================
-        async function loadUsers() {
-            try {
-                const usersSnapshot = await db.collection('users').get();
-                const users = [];
-                
-                usersSnapshot.forEach(doc => {
-                    if (doc.id !== CONFIG.myUsername) {
-                        const userData = doc.data();
-                        users.push({
-                            username: doc.id,
-                            displayName: userData.displayName || doc.id,
-                            isAdmin: userData.isAdmin || false
-                        });
-                    }
-                });
-                
-                renderUsersList(users);
-                
-            } catch (error) {
-                log(`❌ Error loading users: ${error.message}`);
-            }
-        }
-
-        function renderUsersList(users) {
-            if (users.length === 0) {
-                usersContainer.innerHTML = '<div class="user-item">No other users available</div>';
-                return;
-            }
-            
-            let html = '';
-            users.forEach(user => {
-                const isCallActive = CONFIG.currentCallId && CONFIG.isInCall;
-                html += `
-                    <div class="user-item">
-                        <div class="user-info-left">
-                            <span class="user-name">${user.displayName} ${user.isAdmin ? '👑' : ''}</span>
+                let html = '';
+                users.forEach(user => {
+                    const isCallActive = CONFIG.currentCallId && CONFIG.isInCall;
+                    html += `
+                        <div class="user-item">
+                            <div class="user-info-left">
+                                <span class="user-name">${user.displayName} ${user.isAdmin ? '👑' : ''}</span>
+                            </div>
+                            <button class="call-user-btn" 
+                                    onclick="window.callUser('${user.username}')"
+                                    ${!CONFIG.localStream || isCallActive ? 'disabled' : ''}>
+                                Call
+                            </button>
                         </div>
-                        <button class="call-user-btn" 
-                                onclick="callUser('${user.username}')"
-                                ${!CONFIG.localStream || isCallActive ? 'disabled' : ''}>
-                            Call
-                        </button>
-                    </div>
-                `;
-            });
-            usersContainer.innerHTML = html;
-        }
+                    `;
+                });
+                usersContainer.innerHTML = html;
+            }
 
-        // ==================== ROBUST PEER CONNECTION CREATION ====================
-        async function createPeerConnection(targetUsername, isCaller = true) {
-            log(`🔧 Creating peer connection with ${targetUsername} (${isCaller ? 'caller' : 'callee'})`);
-            
-            CONFIG.targetUsername = targetUsername;
-            CONFIG.isCaller = isCaller;
-            CONFIG.iceRestartAttempts = 0;
-            
-            const config = {
-                iceServers: [
-                    { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:stun1.l.google.com:19302' }
-                ],
-                iceCandidatePoolSize: 10,
-                iceTransportPolicy: 'all',
-                bundlePolicy: 'max-bundle',
-                rtcpMuxPolicy: 'require'
-            };
-            
-            CONFIG.peerConnection = new RTCPeerConnection(config);
-            
-            // Add local stream
-            if (CONFIG.localStream) {
-                CONFIG.localStream.getTracks().forEach(track => {
-                    CONFIG.peerConnection.addTrack(track, CONFIG.localStream);
-                });
-            }
-            
-            // Handle remote stream
-            CONFIG.remoteStream = new MediaStream();
-            remoteVideo.srcObject = CONFIG.remoteStream;
-            
-            CONFIG.peerConnection.ontrack = (event) => {
-                event.streams[0].getTracks().forEach(track => {
-                    CONFIG.remoteStream.addTrack(track);
-                });
-                log('✅ Remote stream received');
-                hangupBtn.disabled = false;
-                clearTimeout(CONFIG.connectionTimeout);
-            };
-            
-            // Handle ICE candidates
-            CONFIG.peerConnection.onicecandidate = (event) => {
-                if (event.candidate && CONFIG.currentCallId) {
-                    log(`🧊 ICE candidate: ${event.candidate.type || 'unknown'}`);
-                    db.collection('ice-candidates').add({
-                        callId: CONFIG.currentCallId,
-                        fromUserId: CONFIG.myUsername,
-                        toUserId: targetUsername,
-                        candidate: event.candidate.toJSON(),
-                        timestamp: firebase.firestore.FieldValue.serverTimestamp()
-                    }).catch(err => log(`❌ Error storing ICE candidate: ${err.message}`));
-                }
-            };
-            
-            // ===== ROBUST ICE STATE HANDLING =====
-            CONFIG.peerConnection.oniceconnectionstatechange = () => {
-                const state = CONFIG.peerConnection.iceConnectionState;
-                log(`🧊 ICE state: ${state}`);
+            // ==================== ROBUST PEER CONNECTION CREATION ====================
+            async function createPeerConnection(targetUsername, isCaller = true) {
+                log(`🔧 Creating peer connection with ${targetUsername} (${isCaller ? 'caller' : 'callee'})`);
                 
-                switch(state) {
-                    case 'checking':
-                        // Start timeout timer
-                        CONFIG.connectionTimeout = setTimeout(() => {
-                            if (CONFIG.peerConnection?.iceConnectionState === 'checking') {
-                                log('⏰ ICE checking timeout - attempting restart');
-                                restartIce();
-                            }
-                        }, CONFIG.ICE_TIMEOUT);
-                        break;
-                        
-                    case 'connected':
-                    case 'completed':
-                        log('✅ ICE connection established');
-                        clearTimeout(CONFIG.connectionTimeout);
-                        CONFIG.iceRestartAttempts = 0;
-                        break;
-                        
-                    case 'disconnected':
-                        log('⚠️ ICE disconnected - attempting recovery');
-                        // Wait a bit before attempting restart
-                        setTimeout(() => {
-                            if (CONFIG.peerConnection?.iceConnectionState === 'disconnected') {
-                                restartIce();
-                            }
-                        }, 2000);
-                        break;
-                        
-                    case 'failed':
-                        log('❌ ICE failed');
-                        restartIce();
-                        break;
-                }
-            };
-            
-            // ===== ROBUST CONNECTION STATE HANDLING =====
-            CONFIG.peerConnection.onconnectionstatechange = () => {
-                const state = CONFIG.peerConnection.connectionState;
-                log(`🔗 Connection state: ${state}`);
+                CONFIG.targetUsername = targetUsername;
+                CONFIG.isCaller = isCaller;
+                CONFIG.iceRestartAttempts = 0;
                 
-                if (state === 'connected') {
-                    CONFIG.isInCall = true;
-                    clearTimeout(CONFIG.connectionTimeout);
-                } else if (state === 'failed') {
-                    log('❌ Connection failed');
-                    if (CONFIG.iceRestartAttempts < CONFIG.MAX_ICE_RESTART_ATTEMPTS) {
-                        restartIce();
-                    } else {
-                        alert('Call failed after multiple attempts');
-                        hangup();
-                    }
-                }
-            };
-            
-            return CONFIG.peerConnection;
-        }
-
-        // ===== ICE RESTART FUNCTION =====
-        async function restartIce() {
-            if (CONFIG.iceRestartAttempts >= CONFIG.MAX_ICE_RESTART_ATTEMPTS) {
-                log('❌ Max ICE restart attempts reached');
-                return;
-            }
-            
-            CONFIG.iceRestartAttempts++;
-            log(`🔄 ICE restart attempt ${CONFIG.iceRestartAttempts}/${CONFIG.MAX_ICE_RESTART_ATTEMPTS}`);
-            
-            try {
-                // Create new offer with iceRestart flag
-                const offer = await CONFIG.peerConnection.createOffer({ iceRestart: true });
-                await CONFIG.peerConnection.setLocalDescription(offer);
+                const config = {
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' }
+                    ],
+                    iceCandidatePoolSize: 10,
+                    iceTransportPolicy: 'all',
+                    bundlePolicy: 'max-bundle',
+                    rtcpMuxPolicy: 'require'
+                };
                 
-                // Update offer in Firestore
-                await db.collection('calls').doc(CONFIG.currentCallId).update({
-                    offer: {
-                        type: offer.type,
-                        sdp: offer.sdp
-                    },
-                    restartAttempt: CONFIG.iceRestartAttempts,
-                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
-                });
+                CONFIG.peerConnection = new RTCPeerConnection(config);
                 
-                log('📤 ICE restart offer sent');
-                
-            } catch (error) {
-                log(`❌ ICE restart failed: ${error.message}`);
-            }
-        }
-
-        // ==================== CALL FUNCTIONS ====================
-        async function callUser(targetUsername) {
-            if (!CONFIG.localStream) {
-                alert('Please wait for camera access');
-                return;
-            }
-            
-            if (CONFIG.isInCall) {
-                alert('Already in a call');
-                return;
-            }
-            
-            log(`📞 Calling ${targetUsername}...`);
-            
-            try {
-                CONFIG.isInCall = true;
-                CONFIG.currentCallId = `${CONFIG.myUsername}_${targetUsername}_${Date.now()}`;
-                
-                // Update UI to disable call buttons
-                renderUsersList([]);
-                
-                // Create peer connection with robust handling
-                await createPeerConnection(targetUsername, true);
-                
-                // Create and send offer
-                const offer = await CONFIG.peerConnection.createOffer();
-                await CONFIG.peerConnection.setLocalDescription(offer);
-                
-                await db.collection('calls').doc(CONFIG.currentCallId).set({
-                    callerId: CONFIG.myUsername,
-                    calleeId: targetUsername,
-                    offer: {
-                        type: offer.type,
-                        sdp: offer.sdp
-                    },
-                    status: 'ringing',
-                    timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-                    restartAttempt: 0
-                });
-                
-                log('📤 Offer sent, waiting for answer...');
-                
-                // Listen for answer
-                db.collection('calls').doc(CONFIG.currentCallId).onSnapshot((snapshot) => {
-                    if (!snapshot.exists) return;
-                    
-                    const data = snapshot.data();
-                    if (data.answer && CONFIG.peerConnection && !CONFIG.peerConnection.currentRemoteDescription) {
-                        log('📥 Received answer');
-                        CONFIG.peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer))
-                            .catch(err => log(`❌ Error setting remote description: ${err.message}`));
-                    }
-                });
-                
-                // Listen for ICE candidates
-                db.collection('ice-candidates')
-                    .where('callId', '==', CONFIG.currentCallId)
-                    .where('fromUserId', '==', targetUsername)
-                    .onSnapshot((snapshot) => {
-                        snapshot.docChanges().forEach(change => {
-                            if (change.type === 'added' && CONFIG.peerConnection) {
-                                const data = change.doc.data();
-                                CONFIG.peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate))
-                                    .catch(err => log(`❌ Error adding ICE candidate: ${err.message}`));
-                                log('🧊 Added remote ICE candidate');
-                            }
-                        });
+                // Add local stream
+                if (CONFIG.localStream) {
+                    CONFIG.localStream.getTracks().forEach(track => {
+                        CONFIG.peerConnection.addTrack(track, CONFIG.localStream);
                     });
+                }
                 
-            } catch (error) {
-                log(`❌ Call error: ${error.message}`);
+                // Handle remote stream
+                CONFIG.remoteStream = new MediaStream();
+                remoteVideo.srcObject = CONFIG.remoteStream;
+                
+                CONFIG.peerConnection.ontrack = (event) => {
+                    event.streams[0].getTracks().forEach(track => {
+                        CONFIG.remoteStream.addTrack(track);
+                    });
+                    log('✅ Remote stream received');
+                    hangupBtn.disabled = false;
+                    clearTimeout(CONFIG.connectionTimeout);
+                };
+                
+                // Handle ICE candidates
+                CONFIG.peerConnection.onicecandidate = (event) => {
+                    if (event.candidate && CONFIG.currentCallId) {
+                        log(`🧊 ICE candidate: ${event.candidate.type || 'unknown'}`);
+                        db.collection('ice-candidates').add({
+                            callId: CONFIG.currentCallId,
+                            fromUserId: CONFIG.myUsername,
+                            toUserId: targetUsername,
+                            candidate: event.candidate.toJSON(),
+                            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                        }).catch(err => log(`❌ Error storing ICE candidate: ${err.message}`));
+                    }
+                };
+                
+                // ===== ROBUST ICE STATE HANDLING =====
+                CONFIG.peerConnection.oniceconnectionstatechange = () => {
+                    const state = CONFIG.peerConnection.iceConnectionState;
+                    log(`🧊 ICE state: ${state}`);
+                    
+                    switch(state) {
+                        case 'checking':
+                            CONFIG.connectionTimeout = setTimeout(() => {
+                                if (CONFIG.peerConnection?.iceConnectionState === 'checking') {
+                                    log('⏰ ICE checking timeout - attempting restart');
+                                    restartIce();
+                                }
+                            }, CONFIG.ICE_TIMEOUT);
+                            break;
+                            
+                        case 'connected':
+                        case 'completed':
+                            log('✅ ICE connection established');
+                            clearTimeout(CONFIG.connectionTimeout);
+                            CONFIG.iceRestartAttempts = 0;
+                            break;
+                            
+                        case 'disconnected':
+                            log('⚠️ ICE disconnected - attempting recovery');
+                            setTimeout(() => {
+                                if (CONFIG.peerConnection?.iceConnectionState === 'disconnected') {
+                                    restartIce();
+                                }
+                            }, 2000);
+                            break;
+                            
+                        case 'failed':
+                            log('❌ ICE failed');
+                            restartIce();
+                            break;
+                    }
+                };
+                
+                // ===== ROBUST CONNECTION STATE HANDLING =====
+                CONFIG.peerConnection.onconnectionstatechange = () => {
+                    const state = CONFIG.peerConnection.connectionState;
+                    log(`🔗 Connection state: ${state}`);
+                    
+                    if (state === 'connected') {
+                        CONFIG.isInCall = true;
+                        clearTimeout(CONFIG.connectionTimeout);
+                    } else if (state === 'failed') {
+                        log('❌ Connection failed');
+                        if (CONFIG.iceRestartAttempts < CONFIG.MAX_ICE_RESTART_ATTEMPTS) {
+                            restartIce();
+                        } else {
+                            alert('Call failed after multiple attempts');
+                            hangup();
+                        }
+                    }
+                };
+                
+                return CONFIG.peerConnection;
+            }
+
+            // ===== ICE RESTART FUNCTION =====
+            async function restartIce() {
+                if (CONFIG.iceRestartAttempts >= CONFIG.MAX_ICE_RESTART_ATTEMPTS) {
+                    log('❌ Max ICE restart attempts reached');
+                    return;
+                }
+                
+                CONFIG.iceRestartAttempts++;
+                log(`🔄 ICE restart attempt ${CONFIG.iceRestartAttempts}/${CONFIG.MAX_ICE_RESTART_ATTEMPTS}`);
+                
+                try {
+                    const offer = await CONFIG.peerConnection.createOffer({ iceRestart: true });
+                    await CONFIG.peerConnection.setLocalDescription(offer);
+                    
+                    await db.collection('calls').doc(CONFIG.currentCallId).update({
+                        offer: {
+                            type: offer.type,
+                            sdp: offer.sdp
+                        },
+                        restartAttempt: CONFIG.iceRestartAttempts,
+                        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    
+                    log('📤 ICE restart offer sent');
+                    
+                } catch (error) {
+                    log(`❌ ICE restart failed: ${error.message}`);
+                }
+            }
+
+            // ==================== CALL FUNCTIONS ====================
+            window.callUser = async function(targetUsername) {
+                if (!CONFIG.localStream) {
+                    alert('Please wait for camera access');
+                    return;
+                }
+                
+                if (CONFIG.isInCall) {
+                    alert('Already in a call');
+                    return;
+                }
+                
+                log(`📞 Calling ${targetUsername}...`);
+                
+                try {
+                    CONFIG.isInCall = true;
+                    CONFIG.currentCallId = `${CONFIG.myUsername}_${targetUsername}_${Date.now()}`;
+                    
+                    renderUsersList([]);
+                    
+                    await createPeerConnection(targetUsername, true);
+                    
+                    const offer = await CONFIG.peerConnection.createOffer();
+                    await CONFIG.peerConnection.setLocalDescription(offer);
+                    
+                    await db.collection('calls').doc(CONFIG.currentCallId).set({
+                        callerId: CONFIG.myUsername,
+                        calleeId: targetUsername,
+                        offer: {
+                            type: offer.type,
+                            sdp: offer.sdp
+                        },
+                        status: 'ringing',
+                        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                        restartAttempt: 0
+                    });
+                    
+                    log('📤 Offer sent, waiting for answer...');
+                    
+                    db.collection('calls').doc(CONFIG.currentCallId).onSnapshot((snapshot) => {
+                        if (!snapshot.exists) return;
+                        
+                        const data = snapshot.data();
+                        if (data.answer && CONFIG.peerConnection && !CONFIG.peerConnection.currentRemoteDescription) {
+                            log('📥 Received answer');
+                            CONFIG.peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer))
+                                .catch(err => log(`❌ Error setting remote description: ${err.message}`));
+                        }
+                    });
+                    
+                    db.collection('ice-candidates')
+                        .where('callId', '==', CONFIG.currentCallId)
+                        .where('fromUserId', '==', targetUsername)
+                        .onSnapshot((snapshot) => {
+                            snapshot.docChanges().forEach(change => {
+                                if (change.type === 'added' && CONFIG.peerConnection) {
+                                    const data = change.doc.data();
+                                    CONFIG.peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate))
+                                        .catch(err => log(`❌ Error adding ICE candidate: ${err.message}`));
+                                    log('🧊 Added remote ICE candidate');
+                                }
+                            });
+                        });
+                    
+                } catch (error) {
+                    log(`❌ Call error: ${error.message}`);
+                    CONFIG.isInCall = false;
+                    CONFIG.currentCallId = null;
+                    renderUsersList([]);
+                }
+            };
+
+            // ==================== ANSWER FUNCTION ====================
+            window.answerCall = async function(callId, callerId, offer) {
+                log(`✅ Answering call from ${callerId}`);
+                
+                try {
+                    CONFIG.isInCall = true;
+                    CONFIG.currentCallId = callId;
+                    
+                    await createPeerConnection(callerId, false);
+                    
+                    await CONFIG.peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+                    
+                    const answer = await CONFIG.peerConnection.createAnswer();
+                    await CONFIG.peerConnection.setLocalDescription(answer);
+                    
+                    await db.collection('calls').doc(callId).update({
+                        answer: {
+                            type: answer.type,
+                            sdp: answer.sdp
+                        },
+                        status: 'answered',
+                        answeredAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    
+                    log('📤 Answer sent');
+                    
+                    db.collection('ice-candidates')
+                        .where('callId', '==', callId)
+                        .where('fromUserId', '==', callerId)
+                        .onSnapshot((snapshot) => {
+                            snapshot.docChanges().forEach(change => {
+                                if (change.type === 'added' && CONFIG.peerConnection) {
+                                    const data = change.doc.data();
+                                    CONFIG.peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate))
+                                        .catch(err => log(`❌ Error adding ICE candidate: ${err.message}`));
+                                }
+                            });
+                        });
+                    
+                } catch (error) {
+                    log(`❌ Error answering call: ${error.message}`);
+                    hangup();
+                }
+            };
+
+            // ==================== HANGUP FUNCTION ====================
+            async function hangup() {
+                if (CONFIG.peerConnection) {
+                    CONFIG.peerConnection.close();
+                    CONFIG.peerConnection = null;
+                }
+                
+                if (CONFIG.currentCallId) {
+                    try {
+                        await db.collection('calls').doc(CONFIG.currentCallId).update({
+                            status: 'ended',
+                            endedAt: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                    } catch (err) {
+                        log(`Error updating call status: ${err.message}`);
+                    }
+                }
+                
+                if (CONFIG.connectionTimeout) {
+                    clearTimeout(CONFIG.connectionTimeout);
+                    CONFIG.connectionTimeout = null;
+                }
+                
+                CONFIG.remoteStream = null;
                 CONFIG.isInCall = false;
                 CONFIG.currentCallId = null;
+                CONFIG.iceRestartAttempts = 0;
+                
+                remoteVideo.srcObject = null;
+                hangupBtn.disabled = true;
+                
+                log('📞 Call ended');
                 renderUsersList([]);
             }
-        }
 
-        window.callUser = callUser;
+            hangupBtn.addEventListener('click', hangup);
 
-        // ==================== ANSWER FUNCTION (for callee) ====================
-        async function answerCall(callId, callerId, offer) {
-            log(`✅ Answering call from ${callerId}`);
-            
-            try {
-                CONFIG.isInCall = true;
-                CONFIG.currentCallId = callId;
-                
-                await createPeerConnection(callerId, false);
-                
-                // Set remote description
-                await CONFIG.peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-                
-                // Create answer
-                const answer = await CONFIG.peerConnection.createAnswer();
-                await CONFIG.peerConnection.setLocalDescription(answer);
-                
-                // Update call document with answer
-                await db.collection('calls').doc(callId).update({
-                    answer: {
-                        type: answer.type,
-                        sdp: answer.sdp
-                    },
-                    status: 'answered',
-                    answeredAt: firebase.firestore.FieldValue.serverTimestamp()
-                });
-                
-                log('📤 Answer sent');
-                
-                // Listen for ICE candidates from caller
-                db.collection('ice-candidates')
-                    .where('callId', '==', callId)
-                    .where('fromUserId', '==', callerId)
-                    .onSnapshot((snapshot) => {
-                        snapshot.docChanges().forEach(change => {
-                            if (change.type === 'added' && CONFIG.peerConnection) {
-                                const data = change.doc.data();
-                                CONFIG.peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate))
-                                    .catch(err => log(`❌ Error adding ICE candidate: ${err.message}`));
-                            }
-                        });
-                    });
-                
-            } catch (error) {
-                log(`❌ Error answering call: ${error.message}`);
-                hangup();
-            }
-        }
-
-        // ==================== HANGUP FUNCTION ====================
-        async function hangup() {
-            if (CONFIG.peerConnection) {
-                CONFIG.peerConnection.close();
-                CONFIG.peerConnection = null;
-            }
-            
-            if (CONFIG.currentCallId) {
+            // ==================== MEDIA INITIALIZATION ====================
+            async function initMedia() {
                 try {
-                    await db.collection('calls').doc(CONFIG.currentCallId).update({
-                        status: 'ended',
-                        endedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    log('📹 Requesting camera and microphone access...');
+                    CONFIG.localStream = await navigator.mediaDevices.getUserMedia({
+                        audio: true,
+                        video: {
+                            width: { ideal: 1280 },
+                            height: { ideal: 720 }
+                        }
                     });
-                } catch (err) {
-                    log(`Error updating call status: ${err.message}`);
+                    
+                    localVideo.srcObject = CONFIG.localStream;
+                    log('✅ Media access granted');
+                    
+                } catch (error) {
+                    log(`❌ Media access error: ${error.message}`);
+                    alert('Could not access camera/microphone. Please check permissions.');
                 }
             }
-            
-            // Clear all timeouts
-            if (CONFIG.connectionTimeout) {
-                clearTimeout(CONFIG.connectionTimeout);
-                CONFIG.connectionTimeout = null;
-            }
-            
-            CONFIG.remoteStream = null;
-            CONFIG.isInCall = false;
-            CONFIG.currentCallId = null;
-            CONFIG.iceRestartAttempts = 0;
-            
-            remoteVideo.srcObject = null;
-            hangupBtn.disabled = true;
-            
-            log('📞 Call ended');
-            renderUsersList([]);
-        }
 
-        hangupBtn.addEventListener('click', hangup);
-
-        // ==================== MEDIA INITIALIZATION ====================
-        async function initMedia() {
-            try {
-                log('📹 Requesting camera and microphone access...');
-                CONFIG.localStream = await navigator.mediaDevices.getUserMedia({
-                    audio: true,
-                    video: {
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 }
-                    }
-                });
-                
-                localVideo.srcObject = CONFIG.localStream;
-                log('✅ Media access granted');
-                
-            } catch (error) {
-                log(`❌ Media access error: ${error.message}`);
-                alert('Could not access camera/microphone. Please check permissions.');
-            }
-        }
-
-        // Initialize
-        updateDisplay();
-        log('🚀 Application loaded');
+            // Initialize
+            updateDisplay();
+            log('🚀 Application loaded');
+        });
     </script>
 </body>
 </html>
