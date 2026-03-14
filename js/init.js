@@ -1,9 +1,14 @@
-// This file just waits for DOM and UI
 console.log('Init.js loaded');
 
-// If DOM is already loaded, trigger ui-ready
+// Wait for DOM to be ready
 if (document.readyState === 'complete' || document.readyState === 'interactive') {
     setTimeout(() => {
         window.dispatchEvent(new Event('ui-ready'));
     }, 100);
+} else {
+    document.addEventListener('DOMContentLoaded', () => {
+        setTimeout(() => {
+            window.dispatchEvent(new Event('ui-ready'));
+        }, 100);
+    });
 }
