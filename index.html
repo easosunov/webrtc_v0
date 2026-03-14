@@ -332,34 +332,6 @@
             font-size: 14px;
         }
 
-        .user-status-badge {
-            font-size: 11px;
-            padding: 2px 6px;
-            border-radius: 10px;
-            background: #e8f5e9;
-            color: #4CAF50;
-            width: fit-content;
-        }
-
-        .ice-status {
-            font-size: 11px;
-            padding: 2px 6px;
-            border-radius: 10px;
-            background: #fff3e0;
-            color: #ff9800;
-            width: fit-content;
-        }
-
-        .ice-status.success {
-            background: #e8f5e9;
-            color: #4CAF50;
-        }
-
-        .ice-status.failed {
-            background: #ffebee;
-            color: #f44336;
-        }
-
         .call-user-btn {
             background: #667eea;
             color: white;
@@ -565,20 +537,12 @@
         // ==================== GLOBAL STATE ====================
         const CONFIG = {
             myUsername: null,
-            myUid: null,
+            myDisplayName: null,
             isAdmin: false,
             peerConnection: null,
             localStream: null,
             remoteStream: null,
-            iceCandidatesQueue: [],
-            iceRestartAttempts: 0,
-            MAX_ICE_RESTART_ATTEMPTS: 3,
-            targetUserId: null,
-            isInitiator: false,
-            isInCall: false,
-            activeCallId: null,
-            iceExchangeStatus: new Map(), // Track ICE status per user
-            activeCallButtons: new Set() // Track which users are in call
+            isInCall: false
         };
 
         // DOM Elements
@@ -597,7 +561,7 @@
         const clearDebugBtn = document.getElementById('clear-debug');
 
         // ==================== DEBUG LOGGING ====================
-        function log(message, type = 'info') {
+        function log(message) {
             const timestamp = new Date().toLocaleTimeString();
             const line = `[${timestamp}] ${message}`;
             debugContent.innerHTML += line + '\n';
@@ -672,6 +636,7 @@
             loginStatus.textContent = 'Logging in...';
             
             try {
+                // Check if user exists in Firestore
                 const userRef = db.collection('users').doc(accessCode);
                 const userDoc = await userRef.get();
                 
@@ -691,28 +656,23 @@
                 
                 const userData = userDoc.data();
                 
-                await userRef.update({
-                    lastSeen: firebase.firestore.FieldValue.serverTimestamp(),
-                    online: true
-                });
-                
+                // Set user data
                 CONFIG.myUsername = accessCode;
-                CONFIG.myUid = accessCode;
+                CONFIG.myDisplayName = userData.displayName || accessCode;
                 CONFIG.isAdmin = userData.isAdmin || false;
                 
-                currentUserSpan.textContent = userData.displayName || accessCode;
+                // Update UI
+                currentUserSpan.textContent = CONFIG.myDisplayName;
                 loginScreen.style.display = 'none';
                 callScreen.style.display = 'block';
                 loginStatus.textContent = '';
                 
-                log(`✅ Logged in as ${userData.displayName || accessCode} (${accessCode})`);
+                log(`✅ Logged in as ${CONFIG.myDisplayName} (${accessCode})`);
                 
-                initializePresence();
-                
-                // Initialize media first
+                // Initialize media
                 await initMedia();
                 
-                // Then load users
+                // Load users
                 await loadUsers();
                 
             } catch (error) {
@@ -724,13 +684,6 @@
 
         async function logout() {
             try {
-                if (CONFIG.myUsername) {
-                    await db.collection('users').doc(CONFIG.myUsername).update({
-                        online: false,
-                        lastSeen: firebase.firestore.FieldValue.serverTimestamp()
-                    });
-                }
-                
                 if (CONFIG.peerConnection) {
                     CONFIG.peerConnection.close();
                     CONFIG.peerConnection = null;
@@ -741,14 +694,13 @@
                     CONFIG.localStream = null;
                 }
                 
-                // Clear all state
+                // Reset state
                 CONFIG.myUsername = null;
-                CONFIG.myUid = null;
+                CONFIG.myDisplayName = null;
                 CONFIG.isAdmin = false;
                 CONFIG.isInCall = false;
-                CONFIG.iceExchangeStatus.clear();
-                CONFIG.activeCallButtons.clear();
                 
+                // Update UI
                 callScreen.style.display = 'none';
                 loginScreen.style.display = 'block';
                 currentCode = '';
@@ -766,27 +718,6 @@
 
         loginBtn.addEventListener('click', login);
         logoutBtn.addEventListener('click', logout);
-
-        // ==================== USER PRESENCE ====================
-        function initializePresence() {
-            setInterval(async () => {
-                if (CONFIG.myUsername) {
-                    await db.collection('users').doc(CONFIG.myUsername).update({
-                        lastSeen: firebase.firestore.FieldValue.serverTimestamp(),
-                        online: true
-                    });
-                }
-            }, 30000);
-            
-            window.addEventListener('beforeunload', () => {
-                if (CONFIG.myUsername) {
-                    db.collection('users').doc(CONFIG.myUsername).update({
-                        online: false,
-                        lastSeen: firebase.firestore.FieldValue.serverTimestamp()
-                    });
-                }
-            });
-        }
 
         // ==================== LOAD USERS ====================
         async function loadUsers() {
@@ -806,28 +737,10 @@
                 });
                 
                 renderUsersList(users);
-                listenForUsers();
                 
             } catch (error) {
                 log(`❌ Error loading users: ${error.message}`);
             }
-        }
-
-        function listenForUsers() {
-            db.collection('users').onSnapshot(snapshot => {
-                const users = [];
-                snapshot.forEach(doc => {
-                    if (doc.id !== CONFIG.myUsername) {
-                        const userData = doc.data();
-                        users.push({
-                            username: doc.id,
-                            displayName: userData.displayName || doc.id,
-                            isAdmin: userData.isAdmin || false
-                        });
-                    }
-                });
-                renderUsersList(users);
-            });
         }
 
         function renderUsersList(users) {
@@ -838,32 +751,14 @@
             
             let html = '';
             users.forEach(user => {
-                const iceStatus = CONFIG.iceExchangeStatus.get(user.username);
-                let statusClass = '';
-                let statusText = '';
-                
-                if (iceStatus === 'success') {
-                    statusClass = 'success';
-                    statusText = 'ICE exchanged';
-                } else if (iceStatus === 'failed') {
-                    statusClass = 'failed';
-                    statusText = 'No ICE';
-                }
-                
-                const isButtonDisabled = CONFIG.activeCallButtons.has(user.username) || 
-                                        CONFIG.isInCall || 
-                                        !CONFIG.localStream;
-                
                 html += `
                     <div class="user-item">
                         <div class="user-info-left">
                             <span class="user-name">${user.displayName} ${user.isAdmin ? '👑' : ''}</span>
-                            <span class="user-status-badge">Online</span>
-                            ${statusText ? `<span class="ice-status ${statusClass}">${statusText}</span>` : ''}
                         </div>
                         <button class="call-user-btn" 
-                                onclick="initiateICEExchange('${user.username}')"
-                                ${isButtonDisabled ? 'disabled' : ''}>
+                                onclick="callUser('${user.username}')"
+                                ${!CONFIG.localStream ? 'disabled' : ''}>
                             Call
                         </button>
                     </div>
@@ -872,187 +767,20 @@
             usersContainer.innerHTML = html;
         }
 
-        // ==================== ICE EXCHANGE ====================
-        async function initiateICEExchange(targetUsername) {
+        // ==================== CALL FUNCTIONS ====================
+        async function callUser(targetUsername) {
             if (!CONFIG.localStream) {
                 alert('Please wait for camera access');
                 return;
             }
             
-            log(`🔄 Initiating ICE exchange with ${targetUsername}...`);
+            log(`📞 Calling ${targetUsername}...`);
             
-            // Disable the call button for this user
-            CONFIG.activeCallButtons.add(targetUsername);
-            renderUsersList([]); // Trigger re-render
-            
-            // Reset ICE status for this user
-            CONFIG.iceExchangeStatus.delete(targetUsername);
-            
-            const callId = `${CONFIG.myUsername}_${targetUsername}_${Date.now()}`;
-            CONFIG.activeCallId = callId;
-            
-            try {
-                // Create peer connection
-                await createPeerConnection(targetUsername, true, callId);
-                
-                // Create and send offer
-                const offer = await CONFIG.peerConnection.createOffer();
-                await CONFIG.peerConnection.setLocalDescription(offer);
-                
-                // Store offer in Firestore
-                await db.collection('calls').doc(callId).set({
-                    callerId: CONFIG.myUsername,
-                    calleeId: targetUsername,
-                    offer: {
-                        type: offer.type,
-                        sdp: offer.sdp
-                    },
-                    status: 'ringing',
-                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
-                });
-                
-                log('📤 Offer sent to Firestore');
-                
-                // Listen for answer
-                db.collection('calls').doc(callId).onSnapshot(async (snapshot) => {
-                    if (!snapshot.exists) return;
-                    
-                    const data = snapshot.data();
-                    if (data.answer && CONFIG.peerConnection && !CONFIG.peerConnection.currentRemoteDescription) {
-                        log('📥 Received answer');
-                        try {
-                            const answer = new RTCSessionDescription(data.answer);
-                            await CONFIG.peerConnection.setRemoteDescription(answer);
-                            
-                            // Process queued candidates
-                            processIceCandidateQueue();
-                            
-                            // Mark ICE exchange as successful
-                            CONFIG.iceExchangeStatus.set(targetUsername, 'success');
-                            CONFIG.activeCallButtons.delete(targetUsername);
-                            renderUsersList([]);
-                            
-                        } catch (err) {
-                            log(`❌ Error setting remote description: ${err.message}`);
-                            CONFIG.iceExchangeStatus.set(targetUsername, 'failed');
-                            CONFIG.activeCallButtons.delete(targetUsername);
-                            renderUsersList([]);
-                        }
-                    }
-                });
-                
-                // Set timeout for ICE exchange (30 seconds)
-                setTimeout(() => {
-                    if (!CONFIG.iceExchangeStatus.has(targetUsername)) {
-                        log(`⏰ ICE exchange timeout for ${targetUsername}`);
-                        CONFIG.iceExchangeStatus.set(targetUsername, 'failed');
-                        CONFIG.activeCallButtons.delete(targetUsername);
-                        renderUsersList([]);
-                        
-                        if (CONFIG.peerConnection) {
-                            CONFIG.peerConnection.close();
-                            CONFIG.peerConnection = null;
-                        }
-                    }
-                }, 30000);
-                
-            } catch (error) {
-                log(`❌ ICE exchange error: ${error.message}`);
-                CONFIG.iceExchangeStatus.set(targetUsername, 'failed');
-                CONFIG.activeCallButtons.delete(targetUsername);
-                renderUsersList([]);
-            }
+            // TODO: Implement WebRTC call logic
+            alert(`Call initiated to ${targetUsername}`);
         }
 
-        window.initiateICEExchange = initiateICEExchange;
-
-        async function createPeerConnection(targetUserId, isInitiator = false, callId) {
-            log(`🔧 Creating peer connection with ${targetUserId}`);
-            
-            CONFIG.targetUserId = targetUserId;
-            CONFIG.isInitiator = isInitiator;
-            CONFIG.iceRestartAttempts = 0;
-            
-            const config = {
-                iceServers: [
-                    { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:stun1.l.google.com:19302' },
-                    { urls: 'stun:stun2.l.google.com:19302' }
-                ],
-                iceCandidatePoolSize: 10
-            };
-            
-            CONFIG.peerConnection = new RTCPeerConnection(config);
-            
-            if (CONFIG.localStream) {
-                CONFIG.localStream.getTracks().forEach(track => {
-                    CONFIG.peerConnection.addTrack(track, CONFIG.localStream);
-                });
-            }
-            
-            CONFIG.remoteStream = new MediaStream();
-            remoteVideo.srcObject = CONFIG.remoteStream;
-            
-            CONFIG.peerConnection.ontrack = (event) => {
-                log(`📥 Received remote ${event.track.kind} track`);
-                event.streams[0].getTracks().forEach(track => {
-                    CONFIG.remoteStream.addTrack(track);
-                });
-            };
-            
-            CONFIG.peerConnection.onicecandidate = (event) => {
-                if (event.candidate) {
-                    log(`🧊 Generated ICE candidate`);
-                    
-                    // Store candidate in Firestore
-                    db.collection('ice-candidates').add({
-                        fromUserId: CONFIG.myUsername,
-                        toUserId: targetUserId,
-                        callId: callId,
-                        candidate: event.candidate.toJSON(),
-                        timestamp: firebase.firestore.FieldValue.serverTimestamp()
-                    });
-                }
-            };
-            
-            CONFIG.peerConnection.oniceconnectionstatechange = () => {
-                log(`🧊 ICE state: ${CONFIG.peerConnection.iceConnectionState}`);
-                
-                if (CONFIG.peerConnection.iceConnectionState === 'connected') {
-                    CONFIG.iceExchangeStatus.set(targetUserId, 'success');
-                    CONFIG.activeCallButtons.delete(targetUserId);
-                    renderUsersList([]);
-                }
-            };
-            
-            // Listen for ICE candidates from the other user
-            db.collection('ice-candidates')
-                .where('toUserId', '==', CONFIG.myUsername)
-                .where('fromUserId', '==', targetUserId)
-                .where('callId', '==', callId)
-                .onSnapshot(snapshot => {
-                    snapshot.docChanges().forEach(change => {
-                        if (change.type === 'added') {
-                            const data = change.doc.data();
-                            if (CONFIG.peerConnection) {
-                                CONFIG.peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-                            }
-                        }
-                    });
-                });
-            
-            return CONFIG.peerConnection;
-        }
-
-        function processIceCandidateQueue() {
-            if (!CONFIG.peerConnection || CONFIG.iceCandidatesQueue.length === 0) return;
-            
-            log(`🔄 Processing ${CONFIG.iceCandidatesQueue.length} queued candidates`);
-            CONFIG.iceCandidatesQueue.forEach(candidate => {
-                CONFIG.peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-            });
-            CONFIG.iceCandidatesQueue = [];
-        }
+        window.callUser = callUser;
 
         // ==================== MEDIA INITIALIZATION ====================
         async function initMedia() {
@@ -1074,31 +802,6 @@
                 alert('Could not access camera/microphone. Please check permissions.');
             }
         }
-
-        // ==================== CALL CLEANUP ====================
-        function cleanupCall() {
-            log('🧹 Cleaning up call');
-            
-            if (CONFIG.peerConnection) {
-                CONFIG.peerConnection.close();
-                CONFIG.peerConnection = null;
-            }
-            
-            CONFIG.isInCall = false;
-            CONFIG.targetUserId = null;
-            CONFIG.iceCandidatesQueue = [];
-            CONFIG.iceRestartAttempts = 0;
-            CONFIG.activeCallId = null;
-            
-            hangupBtn.disabled = true;
-            remoteVideo.srcObject = null;
-            
-            // Re-enable all call buttons
-            CONFIG.activeCallButtons.clear();
-            renderUsersList([]);
-        }
-
-        hangupBtn.addEventListener('click', cleanupCall);
 
         // Initialize
         updateDisplay();
