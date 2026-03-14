@@ -22,7 +22,7 @@
         }
 
         .container {
-            max-width: 1200px;
+            max-width: 1400px;
             width: 100%;
             background: white;
             border-radius: 20px;
@@ -105,7 +105,6 @@
             color: #666;
         }
 
-        /* Add keyboard shortcut hint */
         .keypad-btn::after {
             content: attr(data-key);
             position: absolute;
@@ -206,6 +205,17 @@
             background: #d32f2f;
         }
 
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 300px;
+            gap: 20px;
+        }
+
+        .video-section {
+            display: flex;
+            flex-direction: column;
+        }
+
         .video-container {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -272,6 +282,107 @@
             color: white;
         }
 
+        /* Users Panel */
+        .users-panel {
+            background: #f9f9f9;
+            border-radius: 10px;
+            padding: 20px;
+            height: fit-content;
+            max-height: calc(100vh - 200px);
+            overflow-y: auto;
+        }
+
+        .users-panel h3 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 18px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #e0e0e0;
+            position: sticky;
+            top: 0;
+            background: #f9f9f9;
+        }
+
+        .user-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            border-bottom: 1px solid #e0e0e0;
+            transition: background 0.2s ease;
+        }
+
+        .user-item:hover {
+            background: #f0f0f0;
+        }
+
+        .user-item:last-child {
+            border-bottom: none;
+        }
+
+        .user-info-left {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .user-name {
+            font-weight: 600;
+            color: #333;
+            font-size: 14px;
+        }
+
+        .user-status-badge {
+            font-size: 11px;
+            padding: 2px 6px;
+            border-radius: 10px;
+            background: #e8f5e9;
+            color: #4CAF50;
+            width: fit-content;
+        }
+
+        .ice-status {
+            font-size: 11px;
+            padding: 2px 6px;
+            border-radius: 10px;
+            background: #fff3e0;
+            color: #ff9800;
+            width: fit-content;
+        }
+
+        .ice-status.success {
+            background: #e8f5e9;
+            color: #4CAF50;
+        }
+
+        .ice-status.failed {
+            background: #ffebee;
+            color: #f44336;
+        }
+
+        .call-user-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            padding: 8px 15px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            min-width: 70px;
+        }
+
+        .call-user-btn:hover:not(:disabled) {
+            background: #5a67d8;
+            transform: scale(1.02);
+        }
+
+        .call-user-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
         .debug-panel {
             margin-top: 20px;
             padding: 15px;
@@ -319,6 +430,16 @@
             border-radius: 4px;
             margin: 0 3px;
             font-family: monospace;
+        }
+
+        @media (max-width: 1024px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+            
+            .users-panel {
+                max-height: 300px;
+            }
         }
 
         @media (max-width: 768px) {
@@ -387,20 +508,28 @@
                 <button class="logout-btn" id="logout-btn">Logout</button>
             </div>
             
-            <div class="video-container">
-                <div class="video-box">
-                    <video id="local-video" autoplay playsinline muted></video>
-                    <div class="video-label">You</div>
+            <div class="main-content">
+                <div class="video-section">
+                    <div class="video-container">
+                        <div class="video-box">
+                            <video id="local-video" autoplay playsinline muted></video>
+                            <div class="video-label">You</div>
+                        </div>
+                        <div class="video-box">
+                            <video id="remote-video" autoplay playsinline></video>
+                            <div class="video-label">Remote</div>
+                        </div>
+                    </div>
+                    
+                    <div class="call-controls">
+                        <button class="call-btn hangup" id="hangup-btn" disabled>Hang Up</button>
+                    </div>
                 </div>
-                <div class="video-box">
-                    <video id="remote-video" autoplay playsinline></video>
-                    <div class="video-label">Remote</div>
+                
+                <div class="users-panel">
+                    <h3>Available Users</h3>
+                    <div id="users-container"></div>
                 </div>
-            </div>
-            
-            <div class="call-controls">
-                <button class="call-btn call" id="call-admin-btn" disabled>Call Admin</button>
-                <button class="call-btn hangup" id="hangup-btn" disabled>Hang Up</button>
             </div>
             
             <div class="debug-panel">
@@ -438,7 +567,6 @@
             myUsername: null,
             myUid: null,
             isAdmin: false,
-            adminUsername: '111', // Default admin code
             peerConnection: null,
             localStream: null,
             remoteStream: null,
@@ -447,7 +575,10 @@
             MAX_ICE_RESTART_ATTEMPTS: 3,
             targetUserId: null,
             isInitiator: false,
-            isInCall: false
+            isInCall: false,
+            activeCallId: null,
+            iceExchangeStatus: new Map(), // Track ICE status per user
+            activeCallButtons: new Set() // Track which users are in call
         };
 
         // DOM Elements
@@ -458,10 +589,10 @@
         const loginStatus = document.getElementById('login-status');
         const logoutBtn = document.getElementById('logout-btn');
         const currentUserSpan = document.getElementById('current-user');
-        const callAdminBtn = document.getElementById('call-admin-btn');
         const hangupBtn = document.getElementById('hangup-btn');
         const localVideo = document.getElementById('local-video');
         const remoteVideo = document.getElementById('remote-video');
+        const usersContainer = document.getElementById('users-container');
         const debugContent = document.getElementById('debug-content');
         const clearDebugBtn = document.getElementById('clear-debug');
 
@@ -486,7 +617,6 @@
             loginBtn.disabled = currentCode.length === 0;
         }
 
-        // Handle button clicks
         document.querySelectorAll('.keypad-btn[data-digit]').forEach(btn => {
             btn.addEventListener('click', () => {
                 const digit = btn.dataset.digit;
@@ -494,32 +624,23 @@
             });
         });
 
-        // Handle keyboard input
         document.addEventListener('keydown', (event) => {
-            // Ignore if we're in call screen
             if (callScreen.style.display === 'block') return;
             
             const key = event.key;
             
-            // Number keys (0-9)
             if (/^[0-9]$/.test(key)) {
                 event.preventDefault();
                 handleKeypadInput(key);
             }
-            
-            // Backspace/Delete
             else if (key === 'Backspace' || key === 'Delete') {
                 event.preventDefault();
                 handleKeypadInput('back');
             }
-            
-            // Clear (C key)
             else if (key === 'c' || key === 'C') {
                 event.preventDefault();
                 handleKeypadInput('clear');
             }
-            
-            // Enter key
             else if (key === 'Enter') {
                 event.preventDefault();
                 if (!loginBtn.disabled) {
@@ -534,11 +655,10 @@
             } else if (digit === 'back') {
                 currentCode = currentCode.slice(0, -1);
             } else {
-                if (currentCode.length < 10) { // Max 10 digits
+                if (currentCode.length < 10) {
                     currentCode += digit;
                 }
             }
-            
             updateDisplay();
         }
 
@@ -552,17 +672,14 @@
             loginStatus.textContent = 'Logging in...';
             
             try {
-                // Check if user exists in Firestore
                 const userRef = db.collection('users').doc(accessCode);
                 const userDoc = await userRef.get();
                 
-                // Only allow pre-existing users
                 if (!userDoc.exists) {
                     log(`❌ User ${accessCode} not found in database`);
                     loginStatus.className = 'status-message error';
                     loginStatus.textContent = 'Invalid access code';
                     
-                    // Clear the code display after error
                     setTimeout(() => {
                         currentCode = '';
                         updateDisplay();
@@ -572,39 +689,27 @@
                     return;
                 }
                 
-                // User exists - get their data
                 const userData = userDoc.data();
                 
-                // Update online status
                 await userRef.update({
                     lastSeen: firebase.firestore.FieldValue.serverTimestamp(),
                     online: true
                 });
                 
-                // Set global state
                 CONFIG.myUsername = accessCode;
                 CONFIG.myUid = accessCode;
                 CONFIG.isAdmin = userData.isAdmin || false;
                 
-                // Update UI
                 currentUserSpan.textContent = userData.displayName || accessCode;
                 loginScreen.style.display = 'none';
                 callScreen.style.display = 'block';
                 loginStatus.textContent = '';
                 
                 log(`✅ Logged in as ${userData.displayName || accessCode} (${accessCode})`);
-                log(`👑 ${CONFIG.isAdmin ? 'You are the admin' : 'You are a regular user'}`);
                 
-                // Initialize user presence
                 initializePresence();
-                
-                // Initialize media
+                loadUsers();
                 await initMedia();
-                
-                // If admin, listen for incoming calls
-                if (CONFIG.isAdmin) {
-                    listenForIncomingCalls();
-                }
                 
             } catch (error) {
                 log(`❌ Login error: ${error.message}`);
@@ -615,7 +720,6 @@
 
         async function logout() {
             try {
-                // Update online status
                 if (CONFIG.myUsername) {
                     await db.collection('users').doc(CONFIG.myUsername).update({
                         online: false,
@@ -623,31 +727,26 @@
                     });
                 }
                 
-                // Close peer connection
                 if (CONFIG.peerConnection) {
                     CONFIG.peerConnection.close();
                     CONFIG.peerConnection = null;
                 }
                 
-                // Stop local stream
                 if (CONFIG.localStream) {
                     CONFIG.localStream.getTracks().forEach(track => track.stop());
                     CONFIG.localStream = null;
                 }
                 
-                // Reset state
                 CONFIG.myUsername = null;
                 CONFIG.myUid = null;
                 CONFIG.isAdmin = false;
                 CONFIG.isInCall = false;
                 
-                // Update UI
                 callScreen.style.display = 'none';
                 loginScreen.style.display = 'block';
                 currentCode = '';
                 updateDisplay();
                 
-                // Clear video elements
                 localVideo.srcObject = null;
                 remoteVideo.srcObject = null;
                 
@@ -663,7 +762,6 @@
 
         // ==================== USER PRESENCE ====================
         function initializePresence() {
-            // Update online status every 30 seconds
             setInterval(async () => {
                 if (CONFIG.myUsername) {
                     await db.collection('users').doc(CONFIG.myUsername).update({
@@ -673,7 +771,6 @@
                 }
             }, 30000);
             
-            // Set offline on page close
             window.addEventListener('beforeunload', () => {
                 if (CONFIG.myUsername) {
                     db.collection('users').doc(CONFIG.myUsername).update({
@@ -682,6 +779,267 @@
                     });
                 }
             });
+        }
+
+        // ==================== LOAD USERS ====================
+        async function loadUsers() {
+            const usersSnapshot = await db.collection('users').get();
+            const users = [];
+            
+            usersSnapshot.forEach(doc => {
+                if (doc.id !== CONFIG.myUsername) {
+                    const userData = doc.data();
+                    users.push({
+                        username: doc.id,
+                        displayName: userData.displayName || doc.id,
+                        isAdmin: userData.isAdmin || false
+                    });
+                }
+            });
+            
+            renderUsersList(users);
+            listenForUsers();
+        }
+
+        function listenForUsers() {
+            db.collection('users').onSnapshot(snapshot => {
+                const users = [];
+                snapshot.forEach(doc => {
+                    if (doc.id !== CONFIG.myUsername) {
+                        const userData = doc.data();
+                        users.push({
+                            username: doc.id,
+                            displayName: userData.displayName || doc.id,
+                            isAdmin: userData.isAdmin || false
+                        });
+                    }
+                });
+                renderUsersList(users);
+            });
+        }
+
+        function renderUsersList(users) {
+            if (users.length === 0) {
+                usersContainer.innerHTML = '<div class="user-item">No other users available</div>';
+                return;
+            }
+            
+            let html = '';
+            users.forEach(user => {
+                const iceStatus = CONFIG.iceExchangeStatus.get(user.username);
+                let statusClass = '';
+                let statusText = '';
+                
+                if (iceStatus === 'success') {
+                    statusClass = 'success';
+                    statusText = 'ICE exchanged';
+                } else if (iceStatus === 'failed') {
+                    statusClass = 'failed';
+                    statusText = 'No ICE';
+                }
+                
+                const isButtonDisabled = CONFIG.activeCallButtons.has(user.username) || 
+                                        CONFIG.isInCall || 
+                                        !CONFIG.localStream;
+                
+                html += `
+                    <div class="user-item">
+                        <div class="user-info-left">
+                            <span class="user-name">${user.displayName} ${user.isAdmin ? '👑' : ''}</span>
+                            <span class="user-status-badge">Online</span>
+                            ${statusText ? `<span class="ice-status ${statusClass}">${statusText}</span>` : ''}
+                        </div>
+                        <button class="call-user-btn" 
+                                onclick="initiateICEExchange('${user.username}')"
+                                ${isButtonDisabled ? 'disabled' : ''}>
+                            Call
+                        </button>
+                    </div>
+                `;
+            });
+            usersContainer.innerHTML = html;
+        }
+
+        // ==================== ICE EXCHANGE ====================
+        async function initiateICEExchange(targetUsername) {
+            if (!CONFIG.localStream) {
+                alert('Please wait for camera access');
+                return;
+            }
+            
+            log(`🔄 Initiating ICE exchange with ${targetUsername}...`);
+            
+            // Disable the call button for this user
+            CONFIG.activeCallButtons.add(targetUsername);
+            renderUsersList([]); // Trigger re-render
+            
+            // Reset ICE status for this user
+            CONFIG.iceExchangeStatus.delete(targetUsername);
+            
+            const callId = `${CONFIG.myUsername}_${targetUsername}_${Date.now()}`;
+            CONFIG.activeCallId = callId;
+            
+            try {
+                // Create peer connection
+                await createPeerConnection(targetUsername, true, callId);
+                
+                // Create and send offer
+                const offer = await CONFIG.peerConnection.createOffer();
+                await CONFIG.peerConnection.setLocalDescription(offer);
+                
+                // Store offer in Firestore
+                await db.collection('calls').doc(callId).set({
+                    callerId: CONFIG.myUsername,
+                    calleeId: targetUsername,
+                    offer: {
+                        type: offer.type,
+                        sdp: offer.sdp
+                    },
+                    status: 'ringing',
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                
+                log('📤 Offer sent to Firestore');
+                
+                // Listen for answer
+                db.collection('calls').doc(callId).onSnapshot(async (snapshot) => {
+                    if (!snapshot.exists) return;
+                    
+                    const data = snapshot.data();
+                    if (data.answer && CONFIG.peerConnection && !CONFIG.peerConnection.currentRemoteDescription) {
+                        log('📥 Received answer');
+                        try {
+                            const answer = new RTCSessionDescription(data.answer);
+                            await CONFIG.peerConnection.setRemoteDescription(answer);
+                            
+                            // Process queued candidates
+                            processIceCandidateQueue();
+                            
+                            // Mark ICE exchange as successful
+                            CONFIG.iceExchangeStatus.set(targetUsername, 'success');
+                            CONFIG.activeCallButtons.delete(targetUsername);
+                            renderUsersList([]);
+                            
+                        } catch (err) {
+                            log(`❌ Error setting remote description: ${err.message}`);
+                            CONFIG.iceExchangeStatus.set(targetUsername, 'failed');
+                            CONFIG.activeCallButtons.delete(targetUsername);
+                            renderUsersList([]);
+                        }
+                    }
+                });
+                
+                // Set timeout for ICE exchange (30 seconds)
+                setTimeout(() => {
+                    if (!CONFIG.iceExchangeStatus.has(targetUsername)) {
+                        log(`⏰ ICE exchange timeout for ${targetUsername}`);
+                        CONFIG.iceExchangeStatus.set(targetUsername, 'failed');
+                        CONFIG.activeCallButtons.delete(targetUsername);
+                        renderUsersList([]);
+                        
+                        if (CONFIG.peerConnection) {
+                            CONFIG.peerConnection.close();
+                            CONFIG.peerConnection = null;
+                        }
+                    }
+                }, 30000);
+                
+            } catch (error) {
+                log(`❌ ICE exchange error: ${error.message}`);
+                CONFIG.iceExchangeStatus.set(targetUsername, 'failed');
+                CONFIG.activeCallButtons.delete(targetUsername);
+                renderUsersList([]);
+            }
+        }
+
+        window.initiateICEExchange = initiateICEExchange;
+
+        async function createPeerConnection(targetUserId, isInitiator = false, callId) {
+            log(`🔧 Creating peer connection with ${targetUserId}`);
+            
+            CONFIG.targetUserId = targetUserId;
+            CONFIG.isInitiator = isInitiator;
+            CONFIG.iceRestartAttempts = 0;
+            
+            const config = {
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun1.l.google.com:19302' },
+                    { urls: 'stun:stun2.l.google.com:19302' }
+                ],
+                iceCandidatePoolSize: 10
+            };
+            
+            CONFIG.peerConnection = new RTCPeerConnection(config);
+            
+            if (CONFIG.localStream) {
+                CONFIG.localStream.getTracks().forEach(track => {
+                    CONFIG.peerConnection.addTrack(track, CONFIG.localStream);
+                });
+            }
+            
+            CONFIG.remoteStream = new MediaStream();
+            remoteVideo.srcObject = CONFIG.remoteStream;
+            
+            CONFIG.peerConnection.ontrack = (event) => {
+                log(`📥 Received remote ${event.track.kind} track`);
+                event.streams[0].getTracks().forEach(track => {
+                    CONFIG.remoteStream.addTrack(track);
+                });
+            };
+            
+            CONFIG.peerConnection.onicecandidate = (event) => {
+                if (event.candidate) {
+                    log(`🧊 Generated ICE candidate`);
+                    
+                    // Store candidate in Firestore
+                    db.collection('ice-candidates').add({
+                        fromUserId: CONFIG.myUsername,
+                        toUserId: targetUserId,
+                        callId: callId,
+                        candidate: event.candidate.toJSON(),
+                        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                }
+            };
+            
+            CONFIG.peerConnection.oniceconnectionstatechange = () => {
+                log(`🧊 ICE state: ${CONFIG.peerConnection.iceConnectionState}`);
+                
+                if (CONFIG.peerConnection.iceConnectionState === 'connected') {
+                    CONFIG.iceExchangeStatus.set(targetUserId, 'success');
+                    CONFIG.activeCallButtons.delete(targetUserId);
+                    renderUsersList([]);
+                }
+            };
+            
+            // Listen for ICE candidates from the other user
+            db.collection('ice-candidates')
+                .where('toUserId', '==', CONFIG.myUsername)
+                .where('fromUserId', '==', targetUserId)
+                .where('callId', '==', callId)
+                .onSnapshot(snapshot => {
+                    snapshot.docChanges().forEach(change => {
+                        if (change.type === 'added') {
+                            const data = change.doc.data();
+                            if (CONFIG.peerConnection) {
+                                CONFIG.peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+                            }
+                        }
+                    });
+                });
+            
+            return CONFIG.peerConnection;
+        }
+
+        function processIceCandidateQueue() {
+            if (!CONFIG.peerConnection || CONFIG.iceCandidatesQueue.length === 0) return;
+            
+            log(`🔄 Processing ${CONFIG.iceCandidatesQueue.length} queued candidates`);
+            CONFIG.iceCandidatesQueue.forEach(candidate => {
+                CONFIG.peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+            });
+            CONFIG.iceCandidatesQueue = [];
         }
 
         // ==================== MEDIA INITIALIZATION ====================
@@ -699,278 +1057,13 @@
                 localVideo.srcObject = CONFIG.localStream;
                 log('✅ Media access granted');
                 
-                // Enable call button for non-admin users
-                if (!CONFIG.isAdmin) {
-                    callAdminBtn.disabled = false;
-                }
-                
             } catch (error) {
                 log(`❌ Media access error: ${error.message}`);
                 alert('Could not access camera/microphone. Please check permissions.');
             }
         }
 
-        // ==================== WEBRTC HELPERS ====================
-        function getIceServers() {
-            // Public STUN servers (always work)
-            const servers = [
-                { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' },
-                { urls: 'stun:stun2.l.google.com:19302' }
-            ];
-            
-            // Optional: Add TURN servers if you have them
-            // servers.push({
-            //     urls: 'turn:your-turn-server.com:3478',
-            //     username: 'username',
-            //     credential: 'password'
-            // });
-            
-            return servers;
-        }
-
-        async function createPeerConnection(targetUserId, isInitiator = false) {
-            log(`🔧 Creating peer connection with ${targetUserId} (initiator: ${isInitiator})`);
-            
-            CONFIG.targetUserId = targetUserId;
-            CONFIG.isInitiator = isInitiator;
-            CONFIG.iceRestartAttempts = 0;
-            
-            const config = {
-                iceServers: getIceServers(),
-                iceCandidatePoolSize: 10
-            };
-            
-            CONFIG.peerConnection = new RTCPeerConnection(config);
-            
-            // Add local tracks
-            if (CONFIG.localStream) {
-                CONFIG.localStream.getTracks().forEach(track => {
-                    CONFIG.peerConnection.addTrack(track, CONFIG.localStream);
-                });
-            }
-            
-            // Handle remote stream
-            CONFIG.remoteStream = new MediaStream();
-            remoteVideo.srcObject = CONFIG.remoteStream;
-            
-            CONFIG.peerConnection.ontrack = (event) => {
-                log(`📥 Received remote ${event.track.kind} track`);
-                event.streams[0].getTracks().forEach(track => {
-                    CONFIG.remoteStream.addTrack(track);
-                });
-            };
-            
-            // Handle ICE candidates
-            CONFIG.peerConnection.onicecandidate = (event) => {
-                if (event.candidate) {
-                    log(`🧊 Generated ICE candidate: ${event.candidate.type || 'unknown'}`);
-                    
-                    // Store in Firestore
-                    const candidatesRef = db.collection('calls')
-                        .doc(CONFIG.targetUserId)
-                        .collection(isInitiator ? 'callerCandidates' : 'calleeCandidates');
-                    
-                    candidatesRef.add({
-                        candidate: event.candidate.toJSON(),
-                        timestamp: firebase.firestore.FieldValue.serverTimestamp()
-                    });
-                }
-            };
-            
-            // Monitor connection state (with improved retry logic)
-            CONFIG.peerConnection.onconnectionstatechange = () => {
-                const state = CONFIG.peerConnection.connectionState;
-                log(`🔗 Connection state: ${state}`);
-                
-                if (state === 'connected') {
-                    CONFIG.isInCall = true;
-                    hangupBtn.disabled = false;
-                    callAdminBtn.disabled = true;
-                    log('✅ Call connected!');
-                    
-                } else if (state === 'disconnected') {
-                    log('⚠️ Connection disconnected');
-                    
-                    if (CONFIG.iceRestartAttempts < CONFIG.MAX_ICE_RESTART_ATTEMPTS) {
-                        setTimeout(() => {
-                            if (CONFIG.peerConnection?.connectionState === 'disconnected') {
-                                log(`🔄 ICE restart attempt ${CONFIG.iceRestartAttempts + 1}/${CONFIG.MAX_ICE_RESTART_ATTEMPTS}`);
-                                CONFIG.peerConnection.restartIce();
-                                CONFIG.iceRestartAttempts++;
-                                
-                                // Create and send new offer if initiator
-                                if (CONFIG.isInitiator) {
-                                    createAndSendOffer();
-                                }
-                            }
-                        }, 2000);
-                    } else {
-                        log('❌ Max ICE restart attempts reached');
-                        cleanupCall();
-                    }
-                    
-                } else if (state === 'failed') {
-                    log('❌ Connection failed');
-                    cleanupCall();
-                }
-            };
-            
-            CONFIG.peerConnection.oniceconnectionstatechange = () => {
-                log(`🧊 ICE state: ${CONFIG.peerConnection.iceConnectionState}`);
-            };
-            
-            return CONFIG.peerConnection;
-        }
-
-        async function createAndSendOffer() {
-            if (!CONFIG.peerConnection || !CONFIG.targetUserId) return;
-            
-            try {
-                log('📤 Creating offer...');
-                const offer = await CONFIG.peerConnection.createOffer();
-                await CONFIG.peerConnection.setLocalDescription(offer);
-                
-                // Store offer in Firestore
-                await db.collection('calls').doc(CONFIG.targetUserId).set({
-                    offer: {
-                        type: offer.type,
-                        sdp: offer.sdp
-                    },
-                    callerId: CONFIG.myUsername,
-                    timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-                    status: 'ringing'
-                });
-                
-                log('✅ Offer sent');
-                
-            } catch (error) {
-                log(`❌ Error creating offer: ${error.message}`);
-            }
-        }
-
-        // ==================== CALL FUNCTIONS ====================
-        async function callUser(targetUsername) {
-            if (!CONFIG.localStream) {
-                alert('Please wait for camera access');
-                return;
-            }
-            
-            log(`📞 Calling ${targetUsername}...`);
-            
-            try {
-                await createPeerConnection(targetUsername, true);
-                
-                // Listen for answer
-                db.collection('calls').doc(CONFIG.myUsername).onSnapshot(async (snapshot) => {
-                    if (!snapshot.exists) return;
-                    
-                    const data = snapshot.data();
-                    if (data.answer && CONFIG.peerConnection && !CONFIG.peerConnection.currentRemoteDescription) {
-                        log('📥 Received answer');
-                        const answer = new RTCSessionDescription(data.answer);
-                        await CONFIG.peerConnection.setRemoteDescription(answer);
-                        
-                        // Process any queued ICE candidates
-                        processIceCandidateQueue();
-                    }
-                });
-                
-                // Listen for callee's ICE candidates
-                db.collection('calls')
-                    .doc(targetUsername)
-                    .collection('calleeCandidates')
-                    .onSnapshot(snapshot => {
-                        snapshot.docChanges().forEach(change => {
-                            if (change.type === 'added') {
-                                const data = change.doc.data();
-                                if (CONFIG.peerConnection) {
-                                    CONFIG.peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-                                } else {
-                                    CONFIG.iceCandidatesQueue.push(data.candidate);
-                                }
-                            }
-                        });
-                    });
-                
-                // Create and send offer
-                await createAndSendOffer();
-                
-            } catch (error) {
-                log(`❌ Call error: ${error.message}`);
-            }
-        }
-
-        window.callUser = callUser;
-
-        async function listenForIncomingCalls() {
-            db.collection('calls').doc(CONFIG.myUsername).onSnapshot(async (snapshot) => {
-                if (!snapshot.exists) return;
-                
-                const data = snapshot.data();
-                if (data.offer && data.status === 'ringing') {
-                    const callerId = data.callerId;
-                    log(`📞 Incoming call from ${callerId}`);
-                    
-                    // Auto-answer for demo (in real app, show UI)
-                    await acceptCall(callerId, data.offer);
-                }
-            });
-        }
-
-        async function acceptCall(callerId, offer) {
-            log(`✅ Accepting call from ${callerId}`);
-            
-            try {
-                await createPeerConnection(callerId, false);
-                
-                // Set remote description
-                await CONFIG.peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-                
-                // Create answer
-                const answer = await CONFIG.peerConnection.createAnswer();
-                await CONFIG.peerConnection.setLocalDescription(answer);
-                
-                // Store answer in Firestore
-                await db.collection('calls').doc(callerId).set({
-                    answer: {
-                        type: answer.type,
-                        sdp: answer.sdp
-                    },
-                    status: 'accepted',
-                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
-                }, { merge: true });
-                
-                // Listen for caller's ICE candidates
-                db.collection('calls')
-                    .doc(callerId)
-                    .collection('callerCandidates')
-                    .onSnapshot(snapshot => {
-                        snapshot.docChanges().forEach(change => {
-                            if (change.type === 'added') {
-                                const data = change.doc.data();
-                                CONFIG.peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-                            }
-                        });
-                    });
-                
-                log('✅ Answer sent');
-                
-            } catch (error) {
-                log(`❌ Error accepting call: ${error.message}`);
-            }
-        }
-
-        function processIceCandidateQueue() {
-            if (!CONFIG.peerConnection || CONFIG.iceCandidatesQueue.length === 0) return;
-            
-            log(`🔄 Processing ${CONFIG.iceCandidatesQueue.length} queued candidates`);
-            CONFIG.iceCandidatesQueue.forEach(candidate => {
-                CONFIG.peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-            });
-            CONFIG.iceCandidatesQueue = [];
-        }
-
+        // ==================== CALL CLEANUP ====================
         function cleanupCall() {
             log('🧹 Cleaning up call');
             
@@ -983,19 +1076,15 @@
             CONFIG.targetUserId = null;
             CONFIG.iceCandidatesQueue = [];
             CONFIG.iceRestartAttempts = 0;
+            CONFIG.activeCallId = null;
             
             hangupBtn.disabled = true;
-            
-            if (!CONFIG.isAdmin) {
-                callAdminBtn.disabled = false;
-            }
-            
             remoteVideo.srcObject = null;
+            
+            // Re-enable all call buttons
+            CONFIG.activeCallButtons.clear();
+            renderUsersList([]);
         }
-
-        callAdminBtn.addEventListener('click', () => {
-            callUser(CONFIG.adminUsername);
-        });
 
         hangupBtn.addEventListener('click', cleanupCall);
 
