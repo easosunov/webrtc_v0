@@ -41,13 +41,16 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
     <!-- Our modular JavaScript files -->
-<script src="js/config.js"></script>
-<script src="js/ui.js"></script>
-<script src="js/auth.js"></script>
-<script src="js/users.js"></script>
-<script src="js/webrtc.js"></script>
-<script src="js/calls.js"></script>
-<script src="js/init.js"></script>  <!-- New initialization file -->
+
+<!-- Our modular JavaScript files - in correct order -->
+<script src="js/config.js"></script>  <!-- No DOM dependencies -->
+<script src="js/ui.js"></script>      <!-- Sets up DOM -->
+<script src="js/init.js"></script>    <!-- Signals when ready -->
+<script src="js/auth.js"></script>    <!-- Waits for ui-ready -->
+<script src="js/users.js"></script>   <!-- Waits for ui-ready -->
+<script src="js/webrtc.js"></script>  <!-- Waits for ui-ready -->
+<script src="js/calls.js"></script>   <!-- Waits for ui-ready -->
+
 
 </body>
 </html>
