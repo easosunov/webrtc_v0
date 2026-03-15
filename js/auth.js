@@ -193,7 +193,48 @@ async function login() {
         } catch (e) {
             console.error('Error starting historical ice cleanup:', e);
         }
-        // ===== END OF ADDED CODE =====
+        // After successful login, add this:
+try {
+    console.log('🧹 Clearing old ice-candidates...');
+    
+    // Get all ice-candidates where this user is the sender
+    const snapshot = await db.collection('ice-candidates')
+        .where('fromUserId', '==', CONFIG.myUsername)
+        .get();
+    
+    if (!snapshot.empty) {
+        console.log(`📊 Found ${snapshot.size} old ice-candidates to delete`);
+        
+        // Delete in batches of 500 (Firestore limit)
+        const batch = db.batch();
+        let count = 0;
+        
+        snapshot.forEach(doc => {
+            batch.delete(doc.ref);
+            count++;
+            
+            if (count === 500) {
+                // Commit and start new batch
+                await batch.commit();
+                console.log(`✅ Deleted ${count} so far...`);
+                count = 0;
+            }
+        });
+        
+        // Commit final batch
+        if (count > 0) {
+            await batch.commit();
+        }
+        
+        console.log(`✅ Cleared all old ice-candidates`);
+    } else {
+        console.log('📭 No old ice-candidates to clear');
+    }
+} catch (e) {
+    console.error('Error clearing ice-candidates:', e);
+}
+		
+		// ===== END OF ADDED CODE =====
         
         try {
             if (window.initMedia) {
