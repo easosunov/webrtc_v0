@@ -244,7 +244,7 @@
             transition: all 0.3s ease;
         }
 
-        /* Fullscreen mode styles - labels removed */
+        /* Fullscreen mode styles */
         .video-container.fullscreen-mode {
             display: block;
             position: relative;
@@ -586,6 +586,11 @@
             
             .users-panel {
                 max-height: 300px;
+            }
+            
+            /* Stack videos vertically on mobile */
+            .video-container {
+                grid-template-columns: 1fr;
             }
         }
 
