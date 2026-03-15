@@ -4,7 +4,7 @@ console.log('✅ apk.js loaded');
 const APK_PACKAGE = "com.easosunov.communicator";
 const isAndroid = /android/i.test(navigator.userAgent);
 
-// Start the APK listener service with multiple fallback methods
+// Start the APK listener service
 window.startApkListener = function() {
     if (!isAndroid) {
         alert("APK is only available on Android devices");
@@ -18,75 +18,32 @@ window.startApkListener = function() {
     
     console.log("📱 Launching APK listener for user:", window.CONFIG.myUsername);
     
-    // Method 1: Custom scheme intent (should work with your manifest)
-    const intentUrl = `intent://start?uid=${window.CONFIG.myUsername}#Intent;scheme=webrtc;package=${APK_PACKAGE};S.browser_fallback_url=https://example.com;end`;
+    // SIMPLIFIED INTENT - no fallback URL
+    const intentUrl = `intent://start?uid=${window.CONFIG.myUsername}#Intent;scheme=webrtc;package=${APK_PACKAGE};end`;
     
-    // Method 2: Direct package launch (alternative)
-    const packageIntent = `intent://#Intent;package=${APK_PACKAGE};end`;
-    
-    // Method 3: Market intent (if app not installed)
-    const marketIntent = `market://details?id=${APK_PACKAGE}`;
-    
-    // Try custom scheme first
-    console.log("Attempting intent:", intentUrl);
+    // Try to open the app
     window.location.href = intentUrl;
     
     // Update UI optimistically
-    const statusEl = document.getElementById('apkStatus');
-    const startBtn = document.getElementById('startApkBtn');
+    document.getElementById('apkStatus').innerHTML = '✅ APK starting...';
+    document.getElementById('startApkBtn').disabled = true;
     
-    if (statusEl) statusEl.innerHTML = '✅ APK starting...';
-    if (startBtn) startBtn.disabled = true;
-    
-    // Check if app opened (if page still visible after 1.5 seconds, intent failed)
+    // Show instruction if app doesn't open
     setTimeout(() => {
         if (document.visibilityState === 'visible') {
-            console.log("⚠️ Intent may have failed, trying direct package launch");
-            
-            // Try direct package launch
-            window.location.href = packageIntent;
-            
-            setTimeout(() => {
-                if (document.visibilityState === 'visible') {
-                    console.log("⚠️ Direct package also failed");
-                    
-                    if (statusEl) {
-                        statusEl.innerHTML = '❌ APK not found - please install it first';
-                    }
-                    if (startBtn) startBtn.disabled = false;
-                    
-                    if (window.showStatusModal) {
-                        window.showStatusModal(
-                            "📱 APK Not Found", 
-                            "Please install the WebRTC Listener APK first",
-                            true
-                        );
-                        
-                        // Offer to download
-                        setTimeout(() => {
-                            if (confirm("Download APK from your computer?")) {
-                                window.location.href = marketIntent;
-                            }
-                        }, 2000);
-                    }
-                }
-            }, 1000);
+            if (window.showStatusModal) {
+                window.showStatusModal(
+                    "📱 APK Launch", 
+                    "If the app didn't open, please open it manually from your app drawer",
+                    false
+                );
+            }
+            // Don't disable the button - user can try again
+            document.getElementById('startApkBtn').disabled = false;
         }
-    }, 1500);
-    
-    // Try an invisible iframe approach as backup
-    try {
-        const iframe = document.createElement('iframe');
-        iframe.style.display = 'none';
-        iframe.src = `webrtc://start?uid=${window.CONFIG.myUsername}`;
-        document.body.appendChild(iframe);
-        setTimeout(() => {
-            document.body.removeChild(iframe);
-        }, 1000);
-    } catch (e) {
-        console.log("Iframe method failed:", e);
-    }
+    }, 2000);
 };
+
 
 // Stop the APK listener
 window.stopApkListener = function() {
