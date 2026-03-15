@@ -436,114 +436,83 @@ window.cleanupOldCallsKeepLatest = async function() {
     }
 };
 
-// ==================== CLEANUP ICE CANDIDATES (KEEP ONLY LATEST CALL'S CANDIDATES) ====================
-window.cleanupIceCandidatesKeepLatest = async function() {
+// ==================== CLEANUP ORPHANED ICE CANDIDATES ====================
+window.cleanupOrphanedIceCandidates = async function() {
     if (!CONFIG.myUsername) return;
     
     try {
-        console.log('🧹 Starting ice-candidates cleanup - keeping only candidates from latest call per user...');
+        console.log('🧹 Cleaning up orphaned ice-candidates...');
         
+        // Get all ice-candidates where this user is the sender
         const candidatesSnapshot = await db.collection('ice-candidates')
             .where('fromUserId', '==', CONFIG.myUsername)
             .get();
         
         if (candidatesSnapshot.empty) {
-            console.log('📭 No ice-candidates to clean up');
+            console.log('📭 No ice-candidates to check');
             return;
         }
         
         console.log(`📊 Found ${candidatesSnapshot.size} total ice-candidates`);
         
-        const candidatesByUser = {};
-        
+        // Collect all unique callIds from these candidates
+        const callIds = new Set();
         candidatesSnapshot.forEach(doc => {
-            const candidateData = doc.data();
-            const otherUser = candidateData.toUserId;
-            
-            if (!candidatesByUser[otherUser]) {
-                candidatesByUser[otherUser] = [];
-            }
-            
-            let timestamp = 0;
-            if (candidateData.timestamp) {
-                timestamp = candidateData.timestamp.toMillis?.() || 
-                           candidateData.timestamp._seconds * 1000 || 
-                           candidateData.timestamp;
-            }
-            
-            candidatesByUser[otherUser].push({
-                id: doc.id,
-                timestamp: timestamp,
-                ref: doc.ref,
-                data: candidateData,
-                callId: candidateData.callId
-            });
+            const callId = doc.data().callId;
+            if (callId) callIds.add(callId);
         });
         
-        const batch = db.batch();
-        let deletedCount = 0;
-        let keptCount = 0;
+        if (callIds.size === 0) {
+            console.log('⚠️ No callIds found in ice-candidates');
+            return;
+        }
         
-        for (const otherUser of Object.keys(candidatesByUser)) {
-            const userCandidates = candidatesByUser[otherUser];
-            
-            const callsBetween = await db.collection('calls')
-                .where('callerId', 'in', [CONFIG.myUsername, otherUser])
-                .where('calleeId', 'in', [CONFIG.myUsername, otherUser])
+        console.log(`🔍 Checking ${callIds.size} unique callIds against calls collection`);
+        
+        // Check which callIds still exist in the calls collection
+        // Firestore 'in' queries are limited to 10 values at a time
+        const callIdArray = Array.from(callIds);
+        const existingCallIds = new Set();
+        
+        // Process in batches of 10
+        for (let i = 0; i < callIdArray.length; i += 10) {
+            const batch = callIdArray.slice(i, i + 10);
+            const callsSnapshot = await db.collection('calls')
+                .where('__name__', 'in', batch)
                 .get();
             
-            if (callsBetween.empty) {
-                userCandidates.forEach(candidate => {
-                    batch.delete(candidate.ref);
-                    deletedCount++;
-                });
-                console.log(`🗑️ No calls found for user ${otherUser}, deleting ${userCandidates.length} candidates`);
-                continue;
-            }
-            
-            let latestCallId = null;
-            let latestTimestamp = 0;
-            
-            callsBetween.forEach(doc => {
-                const callData = doc.data();
-                let callTime = 0;
-                if (callData.timestamp) {
-                    callTime = callData.timestamp.toMillis?.() || 
-                               callData.timestamp._seconds * 1000 || 
-                               callData.timestamp;
-                }
-                
-                if (callTime > latestTimestamp) {
-                    latestTimestamp = callTime;
-                    latestCallId = doc.id;
-                }
-            });
-            
-            console.log(`✅ Most recent call with ${otherUser}: ${latestCallId}`);
-            
-            userCandidates.forEach(candidate => {
-                if (candidate.callId === latestCallId) {
-                    keptCount++;
-                    console.log(`✅ Keeping ice-candidate from latest call with ${otherUser}`);
-                } else {
-                    batch.delete(candidate.ref);
-                    deletedCount++;
-                    console.log(`🗑️ Deleting old ice-candidate from call with ${otherUser}`);
-                }
+            callsSnapshot.forEach(doc => {
+                existingCallIds.add(doc.id);
             });
         }
         
+        console.log(`✅ Found ${existingCallIds.size} calls still existing`);
+        
+        // Now delete any ice-candidate whose callId is NOT in existingCallIds
+        const deleteBatch = db.batch();
+        let deletedCount = 0;
+        
+        candidatesSnapshot.forEach(doc => {
+            const callId = doc.data().callId;
+            if (!existingCallIds.has(callId)) {
+                deleteBatch.delete(doc.ref);
+                deletedCount++;
+                console.log(`🗑️ Deleting orphaned ice-candidate for call ${callId}`);
+            }
+        });
+        
         if (deletedCount > 0) {
-            await batch.commit();
-            console.log(`🧹 Ice-candidates cleanup complete: kept ${keptCount}, deleted ${deletedCount}`);
+            await deleteBatch.commit();
+            console.log(`🧹 Cleanup complete: deleted ${deletedCount} orphaned ice-candidates`);
         } else {
-            console.log(`📭 No old ice-candidates to delete`);
+            console.log(`📭 No orphaned ice-candidates to delete`);
         }
         
     } catch (error) {
         console.log(`❌ Error during ice-candidates cleanup: ${error.message}`);
     }
 };
+
 
 // ==================== HANGUP FUNCTION ====================
 window.hangup = async function(reason = 'user_initiated') {
@@ -630,8 +599,8 @@ window.cleanupAll = async function() {
         await window.cleanupOldCallsKeepLatest();
     }
     
-    if (window.cleanupIceCandidatesKeepLatest) {
-        await window.cleanupIceCandidatesKeepLatest();
+    if (window.cleanupOrphanedIceCandidates) {
+        await window.cleanupOrphanedIceCandidates();
     }
     
     console.log('✅ Full manual cleanup complete');
