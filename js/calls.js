@@ -513,6 +513,147 @@ window.cleanupOrphanedIceCandidates = async function() {
     }
 };
 
+// ==================== ONE-TIME HISTORICAL CLEANUP ====================
+window.historicalIceCleanup = async function() {
+    if (!CONFIG.myUsername) {
+        console.log('❌ Please log in first');
+        return;
+    }
+    
+    console.log('🧹 ===== STARTING HISTORICAL ICE-CANDIDATES CLEANUP =====');
+    console.log('This will delete ALL ice-candidates except those from the most recent call with each user');
+    
+    try {
+        // Get ALL ice-candidates where this user is the sender
+        const candidatesSnapshot = await db.collection('ice-candidates')
+            .where('fromUserId', '==', CONFIG.myUsername)
+            .get();
+        
+        console.log(`📊 Found ${candidatesSnapshot.size} total historical ice-candidates`);
+        
+        if (candidatesSnapshot.empty) {
+            console.log('📭 No ice-candidates to clean up');
+            return;
+        }
+        
+        // Group candidates by the other user
+        const candidatesByUser = {};
+        const callIdToCandidates = {};
+        
+        candidatesSnapshot.forEach(doc => {
+            const data = doc.data();
+            const otherUser = data.toUserId;
+            const callId = data.callId;
+            
+            if (!candidatesByUser[otherUser]) {
+                candidatesByUser[otherUser] = [];
+            }
+            
+            // Get timestamp
+            let timestamp = 0;
+            if (data.timestamp) {
+                timestamp = data.timestamp.toMillis?.() || 
+                           data.timestamp._seconds * 1000 || 
+                           data.timestamp;
+            }
+            
+            const candidateInfo = {
+                id: doc.id,
+                timestamp: timestamp,
+                ref: doc.ref,
+                callId: callId
+            };
+            
+            candidatesByUser[otherUser].push(candidateInfo);
+            
+            if (!callIdToCandidates[callId]) {
+                callIdToCandidates[callId] = [];
+            }
+            callIdToCandidates[callId].push(candidateInfo);
+        });
+        
+        console.log(`👥 Found conversations with: ${Object.keys(candidatesByUser).join(', ')}`);
+        
+        // For each user, find their most recent call
+        const batch = db.batch();
+        let deletedCount = 0;
+        let keptCount = 0;
+        
+        for (const otherUser of Object.keys(candidatesByUser)) {
+            console.log(`\n🔍 Processing user ${otherUser}:`);
+            const userCandidates = candidatesByUser[otherUser];
+            
+            // Get all calls between current user and this other user
+            const callsBetween = await db.collection('calls')
+                .where('callerId', 'in', [CONFIG.myUsername, otherUser])
+                .where('calleeId', 'in', [CONFIG.myUsername, otherUser])
+                .get();
+            
+            console.log(`   Found ${callsBetween.size} calls with this user`);
+            
+            if (callsBetween.empty) {
+                // No calls exist - delete ALL candidates for this user
+                console.log(`   ❌ No calls found - deleting all ${userCandidates.length} candidates`);
+                userCandidates.forEach(candidate => {
+                    batch.delete(candidate.ref);
+                    deletedCount++;
+                });
+                continue;
+            }
+            
+            // Find the most recent call
+            let latestCallId = null;
+            let latestTimestamp = 0;
+            
+            callsBetween.forEach(doc => {
+                const callData = doc.data();
+                let callTime = 0;
+                if (callData.timestamp) {
+                    callTime = callData.timestamp.toMillis?.() || 
+                               callData.timestamp._seconds * 1000 || 
+                               callData.timestamp;
+                }
+                
+                if (callTime > latestTimestamp) {
+                    latestTimestamp = callTime;
+                    latestCallId = doc.id;
+                }
+            });
+            
+            console.log(`   ✅ Most recent call: ${latestCallId}`);
+            
+            // Keep only candidates from the most recent call
+            userCandidates.forEach(candidate => {
+                if (candidate.callId === latestCallId) {
+                    keptCount++;
+                    console.log(`   ✅ Keeping candidate ${candidate.id} from latest call`);
+                } else {
+                    batch.delete(candidate.ref);
+                    deletedCount++;
+                    console.log(`   🗑️ Deleting candidate ${candidate.id} from call ${candidate.callId}`);
+                }
+            });
+        }
+        
+        console.log(`\n📊 Summary: keeping ${keptCount}, deleting ${deletedCount}`);
+        
+        if (deletedCount > 0) {
+            await batch.commit();
+            console.log(`✅ Historical cleanup complete: deleted ${deletedCount} old ice-candidates`);
+        } else {
+            console.log(`📭 No historical ice-candidates to delete`);
+        }
+        
+        // Final count
+        const finalSnapshot = await db.collection('ice-candidates')
+            .where('fromUserId', '==', CONFIG.myUsername)
+            .get();
+        console.log(`📊 Final ice-candidate count: ${finalSnapshot.size}`);
+        
+    } catch (error) {
+        console.log(`❌ Error during historical cleanup:`, error);
+    }
+};
 
 // ==================== HANGUP FUNCTION ====================
 window.hangup = async function(reason = 'user_initiated') {
