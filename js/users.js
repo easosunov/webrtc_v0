@@ -66,7 +66,6 @@ function renderUsersList(users) {
             <div class="user-item">
                 <div class="user-info-left">
                     <span class="user-name">${displayName}</span>
-                    <span class="user-name-small" style="font-size: 10px; color: #999;">ID: ${user.username}</span>
                 </div>
                 <button class="call-user-btn" 
                         onclick="window.callUser('${user.username}')"
@@ -77,7 +76,8 @@ function renderUsersList(users) {
         `;
     });
     window.dom.usersContainer.innerHTML = html;
-};
+}
+
 
 window.debugUsers = async function() {
     console.log('=== DEBUG USERS ===');
