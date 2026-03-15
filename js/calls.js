@@ -739,6 +739,105 @@ setTimeout(async () => {
 
 };
 
+// ==================== AGGRESSIVE ICE-CANDIDATES CLEANUP ====================
+window.aggressiveIceCleanup = async function() {
+    if (!CONFIG.myUsername) {
+        console.log('❌ Please log in first');
+        return;
+    }
+    
+    console.log('🧹 ===== STARTING AGGRESSIVE ICE-CANDIDATES CLEANUP =====');
+    console.log('This will keep only the 3 most recent ice-candidates per call');
+    
+    try {
+        // Get ALL ice-candidates where this user is the sender
+        const candidatesSnapshot = await db.collection('ice-candidates')
+            .where('fromUserId', '==', CONFIG.myUsername)
+            .get();
+        
+        console.log(`📊 Found ${candidatesSnapshot.size} total ice-candidates`);
+        
+        if (candidatesSnapshot.empty) {
+            console.log('📭 No ice-candidates to clean up');
+            return;
+        }
+        
+        // Group candidates by callId
+        const candidatesByCall = {};
+        
+        candidatesSnapshot.forEach(doc => {
+            const data = doc.data();
+            const callId = data.callId;
+            
+            if (!candidatesByCall[callId]) {
+                candidatesByCall[callId] = [];
+            }
+            
+            // Get timestamp
+            let timestamp = 0;
+            if (data.timestamp) {
+                timestamp = data.timestamp.toMillis?.() || 
+                           data.timestamp._seconds * 1000 || 
+                           data.timestamp;
+            }
+            
+            candidatesByCall[callId].push({
+                id: doc.id,
+                timestamp: timestamp,
+                ref: doc.ref,
+                data: data
+            });
+        });
+        
+        console.log(`📞 Found ${Object.keys(candidatesByCall).length} unique calls with ice-candidates`);
+        
+        const batch = db.batch();
+        let totalDeleted = 0;
+        let totalKept = 0;
+        
+        // For each call, keep only the 3 most recent candidates
+        for (const [callId, candidates] of Object.entries(candidatesByCall)) {
+            console.log(`\n🔍 Processing call ${callId}:`);
+            console.log(`   Found ${candidates.length} ice-candidates`);
+            
+            // Sort by timestamp (newest first)
+            candidates.sort((a, b) => b.timestamp - a.timestamp);
+            
+            // Keep only the first 3 (most recent)
+            const keepCount = Math.min(3, candidates.length);
+            
+            candidates.forEach((candidate, index) => {
+                if (index < keepCount) {
+                    totalKept++;
+                    console.log(`   ✅ Keeping candidate ${index + 1}/${keepCount}`);
+                } else {
+                    batch.delete(candidate.ref);
+                    totalDeleted++;
+                    console.log(`   🗑️ Deleting excess candidate ${index + 1}/${candidates.length}`);
+                }
+            });
+        }
+        
+        console.log(`\n📊 Summary: keeping ${totalKept}, deleting ${totalDeleted}`);
+        
+        if (totalDeleted > 0) {
+            await batch.commit();
+            console.log(`✅ Aggressive cleanup complete: deleted ${totalDeleted} excess ice-candidates`);
+        } else {
+            console.log(`📭 No excess ice-candidates to delete`);
+        }
+        
+        // Final count
+        const finalSnapshot = await db.collection('ice-candidates')
+            .where('fromUserId', '==', CONFIG.myUsername)
+            .get();
+        console.log(`📊 Final ice-candidate count: ${finalSnapshot.size}`);
+        
+    } catch (error) {
+        console.log(`❌ Error during aggressive cleanup:`, error);
+    }
+};
+
 // ==================== MANUAL CLEANUP FUNCTION ====================
 window.cleanupAll = async function() {
     console.log('🧹 Running full manual cleanup...');
