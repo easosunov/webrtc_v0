@@ -37,6 +37,8 @@ const CONFIG = {
 
 const TURN_SERVER_URL = 'https://turn-token.easosunov.workers.dev/ice';
 
+window.APK_PACKAGE = "com.easosunov.communicator";
+
 // Make CONFIG and db globally available
 window.CONFIG = CONFIG;
 window.db = db;
