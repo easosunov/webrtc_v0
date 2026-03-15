@@ -283,49 +283,6 @@
             background: #f44336;
             color: white;
         }
-		
-		
-		/* Call Status Modal */
-		#status-modal {
-			display: none;
-			position: fixed;
-			top: 50%;
-			left: 50%;
-			transform: translate(-50%, -50%);
-			background: white;
-			padding: 30px;
-			border-radius: 15px;
-			box-shadow: 0 10px 40px rgba(0,0,0,0.3);
-			z-index: 2100;
-			min-width: 300px;
-			text-align: center;
-			animation: slideIn 0.3s ease;
-		}
-
-		#status-modal h3 {
-			color: #333;
-			font-size: 24px;
-			margin-bottom: 10px;
-		}
-
-		#status-modal p {
-			color: #666;
-			font-size: 18px;
-			margin-bottom: 20px;
-		}
-
-		#status-modal-overlay {
-			display: none;
-			position: fixed;
-			top: 0;
-			left: 0;
-			right: 0;
-			bottom: 0;
-			background: rgba(0,0,0,0.5);
-			z-index: 2099;
-			animation: fadeIn 0.3s ease;
-		}
-		
 
         /* Users Panel */
         .users-panel {
@@ -413,6 +370,73 @@
             border-radius: 4px;
             margin: 0 3px;
             font-family: monospace;
+        }
+
+        /* APK Control Panel */
+        .apk-panel {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f0f7ff;
+            border-radius: 10px;
+            border: 1px solid #cce5ff;
+        }
+
+        .apk-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .apk-header span {
+            font-size: 20px;
+        }
+
+        .apk-header h4 {
+            margin: 0;
+            color: #0066cc;
+        }
+
+        .apk-description {
+            font-size: 13px;
+            color: #555;
+            margin-bottom: 15px;
+        }
+
+        .apk-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .apk-start-btn {
+            flex: 2;
+            padding: 12px;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .apk-stop-btn {
+            flex: 1;
+            padding: 12px;
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .apk-status {
+            margin-top: 10px;
+            font-size: 12px;
+            padding: 8px;
+            background: #e9ecef;
+            border-radius: 5px;
+            color: #495057;
         }
 
         /* Incoming Call Modal */
@@ -607,6 +631,29 @@
                     <div class="call-controls">
                         <button class="call-btn hangup" id="hangup-btn" disabled>Hang Up</button>
                     </div>
+                    
+                    <!-- APK Background Listener Control -->
+                    <div class="apk-panel">
+                        <div class="apk-header">
+                            <span>📱</span>
+                            <h4>Android Background Listener</h4>
+                        </div>
+                        <div class="apk-description">
+                            Start the background service to receive notifications when browser is closed.
+                            The APK will notify you, then you open the browser to answer normally.
+                        </div>
+                        <div class="apk-buttons">
+                            <button id="startApkBtn" onclick="startApkListener()" class="apk-start-btn">
+                                ▶️ Start Background Listener
+                            </button>
+                            <button onclick="stopApkListener()" class="apk-stop-btn">
+                                ⏹️ Stop
+                            </button>
+                        </div>
+                        <div id="apkStatus" class="apk-status">
+                            ℹ️ Not running
+                        </div>
+                    </div>
                 </div>
                 
                 <div class="users-panel">
@@ -627,16 +674,6 @@
             <button class="modal-btn reject" id="reject-call">Reject</button>
         </div>
     </div>
-	
-	<!-- Call Status Modal -->
-	<div id="status-modal-overlay"></div>
-	<div id="status-modal">
-		<h3 id="status-modal-title">📢 Call Status</h3>
-		<p id="status-modal-message">Loading...</p>
-		<div class="modal-buttons">
-			<button class="modal-btn accept" id="status-modal-ok">OK</button>
-		</div>
-	</div>
 
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
@@ -650,5 +687,6 @@
     <script src="js/users.js"></script>
     <script src="js/webrtc.js"></script>
     <script src="js/calls.js"></script>
+    <script src="js/apk.js"></script>
 </body>
 </html>
