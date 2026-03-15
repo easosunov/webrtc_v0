@@ -281,6 +281,7 @@
             gap: 10px;
             justify-content: center;
             margin: 20px 0;
+            flex-wrap: wrap;
         }
 
         .call-btn {
@@ -306,6 +307,33 @@
         .call-btn.hangup {
             background: #f44336;
             color: white;
+        }
+
+        /* Camera Switch Button */
+        .camera-switch-btn {
+            padding: 12px 20px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 25px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .camera-switch-btn:hover:not(:disabled) {
+            background: #5a67d8;
+            transform: scale(1.02);
+        }
+
+        .camera-switch-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            display: none;
         }
 
         /* Right Panels Container */
@@ -619,6 +647,16 @@
                 min-width: 250px;
                 padding: 20px;
             }
+            
+            .call-controls {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .call-btn, .camera-switch-btn {
+                width: 100%;
+                max-width: 200px;
+            }
         }
     </style>
 </head>
@@ -682,11 +720,10 @@
                     
                     <div class="call-controls">
                         <button class="call-btn hangup" id="hangup-btn" disabled>Hang Up</button>
+                        <button id="switch-camera-btn" class="camera-switch-btn" onclick="switchCamera()" style="display: none;">
+                            🔄 Switch Camera
+                        </button>
                     </div>
-					
-					<button id="switch-camera-btn" onclick="switchCamera()" style="display:none; padding:10px; background:#667eea; color:white; border:none; border-radius:5px; cursor:pointer; margin-left:10px;">
-						🔄 Switch Camera
-					</button>
                 </div>
                 
                 <!-- Right side: All panels stacked vertically -->
