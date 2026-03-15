@@ -581,14 +581,21 @@ window.hangup = async function(reason = 'user_initiated') {
     
     if (window.loadUsers) window.loadUsers();
     
-    setTimeout(async () => {
-        if (window.cleanupOldCallsKeepLatest) {
-            await window.cleanupOldCallsKeepLatest();
-        }
-        if (window.cleanupIceCandidatesKeepLatest) {
-            await window.cleanupIceCandidatesKeepLatest();
-        }
-    }, 1000);
+setTimeout(async () => {
+    console.log('🧹 Running post-call cleanups...');
+    
+    // Clean up old calls first (keep only latest per user)
+    if (window.cleanupOldCallsKeepLatest) {
+        await window.cleanupOldCallsKeepLatest();
+    }
+    
+    // Then clean up orphaned ice-candidates (delete any without a call)
+    if (window.cleanupOrphanedIceCandidates) {
+        await window.cleanupOrphanedIceCandidates();
+    }
+}, 3000); // Increased to 3 seconds for better timing
+
+
 };
 
 // ==================== MANUAL CLEANUP FUNCTION ====================
