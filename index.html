@@ -223,6 +223,7 @@
             grid-template-columns: 1fr 1fr;
             gap: 15px;
             margin-bottom: 20px;
+            transition: all 0.3s ease;
         }
 
         .video-box {
@@ -231,6 +232,7 @@
             overflow: hidden;
             aspect-ratio: 16/9;
             position: relative;
+            transition: all 0.3s ease;
         }
 
         .video-box video {
@@ -238,6 +240,8 @@
             height: 100%;
             object-fit: cover;
             background: #1a1a1a;
+            cursor: pointer;
+            transition: all 0.3s ease;
         }
 
         .video-label {
@@ -250,6 +254,58 @@
             border-radius: 5px;
             font-size: 12px;
             z-index: 10;
+            pointer-events: none;
+            transition: all 0.3s ease;
+        }
+
+        /* Fullscreen mode styles */
+        .video-container.fullscreen-mode {
+            display: block;
+            position: relative;
+            margin-bottom: 0;
+        }
+
+        .video-container.fullscreen-mode #remote-video {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 1000;
+            object-fit: contain;
+            background: black;
+            border-radius: 0;
+        }
+
+        .video-container.fullscreen-mode #local-video {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 200px;
+            height: 150px;
+            z-index: 1001;
+            border: 2px solid white;
+            border-radius: 8px;
+            object-fit: cover;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+
+        .video-container.fullscreen-mode .video-label {
+            z-index: 1002;
+        }
+
+        .video-container.fullscreen-mode #remote-video + .video-label {
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            z-index: 1002;
+        }
+
+        .video-container.fullscreen-mode #local-video + .video-label {
+            position: fixed;
+            bottom: 180px;
+            right: 20px;
+            z-index: 1002;
         }
 
         .call-controls {
@@ -566,8 +622,17 @@
         }
 
         @media (max-width: 768px) {
-            .video-container {
-                grid-template-columns: 1fr;
+            .video-container.fullscreen-mode #local-video {
+                width: 120px;
+                height: 90px;
+                bottom: 10px;
+                right: 10px;
+            }
+            
+            .video-container.fullscreen-mode #local-video + .video-label {
+                bottom: 110px;
+                right: 10px;
+                font-size: 10px;
             }
             
             .login-header h1 {
@@ -639,7 +704,7 @@
             <div class="main-content">
                 <!-- Left side: Video section -->
                 <div class="video-section">
-                    <div class="video-container">
+                    <div class="video-container" id="video-container">
                         <div class="video-box">
                             <video id="local-video" autoplay playsinline muted></video>
                             <div class="video-label">You</div>
@@ -704,6 +769,36 @@
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
+    <!-- Video toggle functionality -->
+    <script>
+        // ==================== VIDEO SCREEN TOGGLE ====================
+        let videoMode = 'normal'; // 'normal' or 'fullscreen'
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            const remoteVideo = document.getElementById('remote-video');
+            if (remoteVideo) {
+                remoteVideo.addEventListener('click', toggleVideoMode);
+            }
+        });
+        
+        function toggleVideoMode() {
+            const videoContainer = document.getElementById('video-container');
+            const remoteVideo = document.getElementById('remote-video');
+            
+            if (!videoContainer || !remoteVideo) return;
+            
+            if (videoMode === 'normal') {
+                // Switch to fullscreen mode
+                videoContainer.classList.add('fullscreen-mode');
+                videoMode = 'fullscreen';
+            } else {
+                // Revert to normal mode
+                videoContainer.classList.remove('fullscreen-mode');
+                videoMode = 'normal';
+            }
+        }
+    </script>
 
     <!-- Our modular JavaScript files - in correct order -->
     <script src="js/config.js"></script>
