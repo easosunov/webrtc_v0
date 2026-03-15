@@ -126,15 +126,22 @@ function handleKeypadInput(digit) {
 
 // ==================== CLEAR OLD ICE-CANDIDATES ON LOGIN ====================
 async function clearOldIceCandidates() {
-    if (!CONFIG.myUsername) return;
+    console.log('🧹 Entering clearOldIceCandidates function');
+    
+    if (!CONFIG || !CONFIG.myUsername) {
+        console.log('⚠️ No username yet, skipping ice-candidates cleanup');
+        return;
+    }
+    
+    console.log(`🧹 Clearing old ice-candidates for user: ${CONFIG.myUsername}`);
     
     try {
-        console.log('🧹 Checking for old ice-candidates to clear...');
-        
-        // Get all ice-candidates where this user is the sender
+        console.log('🔍 Querying ice-candidates collection...');
         const snapshot = await db.collection('ice-candidates')
             .where('fromUserId', '==', CONFIG.myUsername)
             .get();
+        
+        console.log(`📊 Query returned ${snapshot.size} documents`);
         
         if (snapshot.empty) {
             console.log('📭 No old ice-candidates found');
@@ -143,33 +150,32 @@ async function clearOldIceCandidates() {
         
         console.log(`📊 Found ${snapshot.size} old ice-candidates to delete`);
         
-        // Delete in batches of 500 (Firestore limit)
-        const batch = db.batch();
-        let count = 0;
+        // Delete in batches of 500
         let totalDeleted = 0;
+        let batch = db.batch();
+        let count = 0;
         
-        for (const doc of snapshot.docs) {
-            batch.delete(doc.ref);
+        // Use forEach with a Promise-based approach
+        const docs = snapshot.docs;
+        for (let i = 0; i < docs.length; i++) {
+            batch.delete(docs[i].ref);
             count++;
             
-            if (count === 500) {
+            if (count === 500 || i === docs.length - 1) {
+                console.log(`💾 Committing batch of ${count} deletions...`);
                 await batch.commit();
                 totalDeleted += count;
                 console.log(`✅ Deleted ${totalDeleted} so far...`);
+                batch = db.batch();
                 count = 0;
             }
-        }
-        
-        // Commit final batch
-        if (count > 0) {
-            await batch.commit();
-            totalDeleted += count;
         }
         
         console.log(`✅ Successfully cleared ${totalDeleted} old ice-candidates`);
         
     } catch (error) {
-        console.error('❌ Error clearing ice-candidates:', error);
+        console.error('❌ ERROR in clearOldIceCandidates:', error);
+        console.error('Error details:', error.message);
     }
 }
 
@@ -186,6 +192,7 @@ async function login() {
     }
     
     try {
+        console.log('📡 Querying Firestore for user document...');
         const userRef = db.collection('users').doc(accessCode);
         const userDoc = await userRef.get();
         
@@ -206,10 +213,13 @@ async function login() {
         }
         
         const userData = userDoc.data();
+        console.log('✅ User data retrieved:', userData);
         
         CONFIG.myUsername = accessCode;
         CONFIG.myDisplayName = userData.displayname || userData.displayName || accessCode;
         CONFIG.isAdmin = userData.isadmin || userData.isAdmin || false;
+        
+        console.log(`✅ Set CONFIG: username=${CONFIG.myUsername}, displayName=${CONFIG.myDisplayName}, isAdmin=${CONFIG.isAdmin}`);
         
         if (window.dom && window.dom.currentUserSpan) {
             window.dom.currentUserSpan.textContent = CONFIG.myDisplayName;
@@ -218,10 +228,12 @@ async function login() {
         if (window.dom && window.dom.callScreen) window.dom.callScreen.style.display = 'block';
         if (window.dom && window.dom.loginStatus) window.dom.loginStatus.textContent = '';
         
-        console.log(`✅ Logged in as ${CONFIG.myDisplayName} (${accessCode})`);
+        console.log('✅ UI updated, showing call screen');
         
         // ===== CLEAR OLD ICE-CANDIDATES ON LOGIN =====
+        console.log('🔜 About to call clearOldIceCandidates...');
         await clearOldIceCandidates();
+        console.log('✅ clearOldIceCandidates completed');
         
         // Initialize other modules with error handling
         try {
@@ -260,8 +272,11 @@ async function login() {
             console.error('Error in listenForIncomingCalls:', e);
         }
         
+        console.log('✅ Login complete!');
+        
     } catch (error) {
         console.log(`❌ Login error: ${error.message}`);
+        console.error('Full error:', error);
         if (window.dom && window.dom.loginStatus) {
             window.dom.loginStatus.className = 'status-message error';
             window.dom.loginStatus.textContent = 'Login failed. Please try again.';
