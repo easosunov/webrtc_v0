@@ -10,7 +10,13 @@ window.initMedia = async function() {
             }
         });
         
-        if (window.dom && window.dom.localVideo) window.dom.localVideo.srcObject = CONFIG.localStream;
+        if (window.dom && window.dom.localVideo) {
+            window.dom.localVideo.srcObject = CONFIG.localStream;
+        }
+        
+        // Initialize camera detection after stream is obtained
+        await window.initCameraDetection();
+        
         console.log('✅ Media access granted');
         
     } catch (error) {
@@ -150,6 +156,155 @@ window.createPeerConnection = async function(targetUsername, isCaller = true) {
     };
     
     return CONFIG.peerConnection;
+};
+
+// ==================== CAMERA SWITCHING ====================
+let currentFacingMode = 'user'; // 'user' = front camera, 'environment' = rear camera
+let hasMultipleCameras = false;
+
+// Initialize camera detection
+window.initCameraDetection = async function() {
+    try {
+        console.log('📷 Detecting available cameras...');
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter(device => device.kind === 'videoinput');
+        
+        hasMultipleCameras = videoDevices.length > 1;
+        console.log(`📷 Found ${videoDevices.length} camera(s):`, 
+            videoDevices.map(d => d.label || 'Unnamed').join(', '));
+        
+        // Update UI if camera switch button exists
+        updateCameraButtonVisibility();
+        
+        return videoDevices;
+    } catch (error) {
+        console.error('❌ Failed to detect cameras:', error);
+        return [];
+    }
+};
+
+// Update camera button visibility
+function updateCameraButtonVisibility() {
+    const switchBtn = document.getElementById('switch-camera-btn');
+    if (switchBtn) {
+        if (hasMultipleCameras) {
+            switchBtn.style.display = 'block';
+            switchBtn.disabled = false;
+        } else {
+            switchBtn.style.display = 'none';
+        }
+    }
+}
+
+// Switch between front and rear camera
+window.switchCamera = async function() {
+    if (!hasMultipleCameras) {
+        alert('No alternate camera available');
+        return false;
+    }
+    
+    if (!CONFIG.localStream) {
+        alert('No active camera stream');
+        return false;
+    }
+    
+    console.log('🔄 Switching camera from', currentFacingMode);
+    
+    // Toggle facing mode
+    const newFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
+    
+    try {
+        // Get current video track settings to preserve resolution
+        const videoTrack = CONFIG.localStream.getVideoTracks()[0];
+        const settings = videoTrack.getSettings();
+        
+        // Stop all tracks in current stream
+        CONFIG.localStream.getTracks().forEach(track => track.stop());
+        
+        // Request new stream with desired camera
+        const constraints = {
+            audio: true,
+            video: {
+                facingMode: newFacingMode,
+                width: settings.width ? { ideal: settings.width } : { ideal: 1280 },
+                height: settings.height ? { ideal: settings.height } : { ideal: 720 },
+                frameRate: { ideal: 30 }
+            }
+        };
+        
+        console.log('📷 Requesting camera with facingMode:', newFacingMode);
+        
+        const newStream = await navigator.mediaDevices.getUserMedia(constraints);
+        
+        // Update CONFIG with new stream
+        CONFIG.localStream = newStream;
+        
+        // Update video element
+        if (window.dom && window.dom.localVideo) {
+            window.dom.localVideo.srcObject = newStream;
+        }
+        
+        // If in a call, replace tracks in peer connection
+        if (CONFIG.peerConnection && CONFIG.isInCall) {
+            console.log('🔄 Updating peer connection with new camera');
+            
+            const senders = CONFIG.peerConnection.getSenders();
+            const videoSender = senders.find(sender => 
+                sender.track && sender.track.kind === 'video'
+            );
+            
+            if (videoSender) {
+                const newVideoTrack = newStream.getVideoTracks()[0];
+                await videoSender.replaceTrack(newVideoTrack);
+                console.log('✅ Video track replaced in peer connection');
+            }
+            
+            const audioSender = senders.find(sender => 
+                sender.track && sender.track.kind === 'audio'
+            );
+            
+            if (audioSender) {
+                const newAudioTrack = newStream.getAudioTracks()[0];
+                await audioSender.replaceTrack(newAudioTrack);
+            }
+        }
+        
+        currentFacingMode = newFacingMode;
+        console.log('✅ Camera switched to', currentFacingMode === 'user' ? 'front' : 'rear');
+        
+        // Show feedback
+        if (window.showStatusModal) {
+            window.showStatusModal(
+                '📷 Camera Switched',
+                `Now using ${currentFacingMode === 'user' ? 'front' : 'rear'} camera`,
+                false
+            );
+            setTimeout(() => window.hideStatusModal(), 1500);
+        }
+        
+        return true;
+        
+    } catch (error) {
+        console.error('❌ Failed to switch camera:', error);
+        
+        // Try to recover original stream
+        try {
+            console.log('Attempting to recover original camera...');
+            const fallbackStream = await navigator.mediaDevices.getUserMedia({
+                audio: true,
+                video: { facingMode: currentFacingMode }
+            });
+            CONFIG.localStream = fallbackStream;
+            if (window.dom && window.dom.localVideo) {
+                window.dom.localVideo.srcObject = fallbackStream;
+            }
+        } catch (fallbackError) {
+            console.error('Recovery failed:', fallbackError);
+        }
+        
+        alert('Failed to switch camera. Please check permissions.');
+        return false;
+    }
 };
 
 async function restartIce() {
