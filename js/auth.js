@@ -181,6 +181,20 @@ async function login() {
             console.error('Error in cleanupStaleCalls:', e);
         }
         
+        // ===== ADD THIS: Run historical ice-candidates cleanup on login =====
+        try {
+            if (window.historicalIceCleanup) {
+                console.log('🧹 Running historical ice-candidates cleanup...');
+                // Run it in the background - don't await to speed up login
+                window.historicalIceCleanup().catch(e => 
+                    console.error('Error in historical ice cleanup:', e)
+                );
+            }
+        } catch (e) {
+            console.error('Error starting historical ice cleanup:', e);
+        }
+        // ===== END OF ADDED CODE =====
+        
         try {
             if (window.initMedia) {
                 console.log('Calling initMedia...');
@@ -190,13 +204,10 @@ async function login() {
             console.error('Error in initMedia:', e);
         }
         
-        // *** FIX: Add loadUsers call here ***
         try {
             if (window.loadUsers) {
                 console.log('Calling loadUsers...');
                 await window.loadUsers();
-            } else {
-                console.error('loadUsers function not found!');
             }
         } catch (e) {
             console.error('Error in loadUsers:', e);
@@ -219,6 +230,7 @@ async function login() {
         }
     }
 }
+
 
 async function logout() {
     console.log('Logout function called');
