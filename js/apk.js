@@ -1,8 +1,11 @@
 // ==================== APK LAUNCHER ====================
 console.log('✅ apk.js loaded');
 
-const APK_PACKAGE = "com.easosunov.communicator";
+const APK_PACKAGE = "com.webrtc.communicator";
 const isAndroid = /android/i.test(navigator.userAgent);
+
+// Make isAndroid globally available
+window.isAndroid = isAndroid;
 
 // Start the APK listener service
 window.startApkListener = function() {
@@ -18,49 +21,60 @@ window.startApkListener = function() {
     
     console.log("📱 Launching APK listener for user:", window.CONFIG.myUsername);
     
-    // Update UI to waiting state
-    document.getElementById('apkStatus').innerHTML = '⏳ Waiting for your approval...';
-    document.getElementById('startApkBtn').disabled = true;
+    // Get DOM elements
+    const statusEl = document.getElementById('apkStatus');
+    const startBtn = document.getElementById('startApkBtn');
     
-    // SINGLE intent - no fallbacks, no rapid timeouts
-    const intentUrl = `intent://start?uid=${window.CONFIG.myUsername}#Intent;scheme=webrtc;package=com.webrtc.communicator;end`;
-    window.location.href = intentUrl;
-    
-    // Show a helpful message
-    if (window.showStatusModal) {
-        window.showStatusModal(
-            "📱 Approve Launch", 
-            "Tap 'Continue' when Chrome asks to open the app",
-            false
-        );
+    if (!statusEl || !startBtn) {
+        console.error("APK control elements not found");
+        return;
     }
     
-    // Monitor if page goes hidden (app launches)
+    // Update UI
+    statusEl.innerHTML = '🚀 Launching...';
+    startBtn.disabled = true;
+    
+    // Launch the app with the correct intent format
+    const intentUrl = `intent://start?uid=${window.CONFIG.myUsername}#Intent;scheme=webrtc;package=${APK_PACKAGE};end`;
+    console.log("Intent URL:", intentUrl);
+    window.location.href = intentUrl;
+    
+    // Track if app launched
+    let launched = false;
+    
+    // Check if page goes hidden (app launches)
     const visibilityCheck = setInterval(() => {
         if (document.visibilityState === 'hidden') {
             // App launched successfully
-            document.getElementById('apkStatus').innerHTML = '✅ APK launched!';
+            launched = true;
+            statusEl.innerHTML = '✅ APK launched!';
             clearInterval(visibilityCheck);
+            clearTimeout(timeoutId);
+            console.log("App launched - page hidden");
         }
-    }, 500);
+    }, 200);
     
-    // Long timeout - give user plenty of time to click Continue
-    setTimeout(() => {
+    // Safety timeout
+    const timeoutId = setTimeout(() => {
         clearInterval(visibilityCheck);
-        if (document.visibilityState === 'visible') {
-            // User never clicked Continue or dismissed the pop-up
-            document.getElementById('apkStatus').innerHTML = '❌ Launch cancelled or timed out';
-            document.getElementById('startApkBtn').disabled = false;
-            
-            if (window.showStatusModal) {
-                window.showStatusModal(
-                    "📱 Launch Failed", 
-                    "You need to tap 'Continue' when Chrome asks to open the app",
-                    true
-                );
+        if (!launched) {
+            if (document.visibilityState === 'visible') {
+                statusEl.innerHTML = '❌ Launch failed - tap Continue if prompted';
+                startBtn.disabled = false;
+            } else {
+                // Page is hidden but we missed the event
+                statusEl.innerHTML = '✅ APK should be running';
             }
         }
-    }, 30000); // Give 30 seconds to click Continue
+    }, 5000);
+    
+    // If page is already hidden (very fast launch)
+    if (document.visibilityState === 'hidden') {
+        launched = true;
+        statusEl.innerHTML = '✅ APK launched!';
+        clearInterval(visibilityCheck);
+        clearTimeout(timeoutId);
+    }
 };
 
 // Stop the APK listener
@@ -69,11 +83,11 @@ window.stopApkListener = function() {
     
     console.log("📱 Stopping APK listener");
     
-    const intentUrl = `intent://stop#Intent;scheme=webrtc;package=${APK_PACKAGE};end`;
-    window.location.href = intentUrl;
-    
     const statusEl = document.getElementById('apkStatus');
     const startBtn = document.getElementById('startApkBtn');
+    
+    const intentUrl = `intent://stop#Intent;scheme=webrtc;package=${APK_PACKAGE};end`;
+    window.location.href = intentUrl;
     
     if (statusEl) statusEl.innerHTML = '⏸️ APK stopped';
     if (startBtn) startBtn.disabled = false;
@@ -165,14 +179,30 @@ function updateApkStatus() {
     
     if (isAndroid) {
         statusEl.innerHTML = '📱 Android ready - Click Start to enable background listener';
+    } else {
+        statusEl.innerHTML = '📱 APK only available on Android devices';
     }
 }
 
-// Run on load
-updateApkStatus();
+// When page becomes visible again, check if app should be running
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+        // Page came back to foreground
+        const statusEl = document.getElementById('apkStatus');
+        const startBtn = document.getElementById('startApkBtn');
+        
+        if (statusEl && startBtn && startBtn.disabled) {
+            // Button is disabled but we're visible - app must be running
+            statusEl.innerHTML = '✅ APK is running in background';
+        }
+    }
+});
 
-// Add a test function for debugging
+// Test function for debugging
 window.testApkIntent = function() {
     console.log("Testing APK intent...");
     window.location.href = `intent://test#Intent;scheme=webrtc;package=${APK_PACKAGE};end`;
 };
+
+// Run on load
+updateApkStatus();
