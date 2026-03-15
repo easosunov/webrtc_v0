@@ -76,8 +76,10 @@ window.stopApkListener = function() {
     
     console.log("📱 Stopping APK listener");
     
-    // Use STOP_SERVICE action
-    const intentUrl = `intent://#Intent;action=STOP_SERVICE;package=${APK_PACKAGE};scheme=webrtc;end`;
+    // SIMPLE intent - just open the app, it will check for running service
+    const intentUrl = `intent://#Intent;package=${APK_PACKAGE};end`;
+    
+    console.log("Stop intent URL:", intentUrl);
     window.location.href = intentUrl;
     
     // Update UI immediately
@@ -89,15 +91,8 @@ window.stopApkListener = function() {
         startBtn.disabled = false;
         startBtn.innerHTML = '▶️ Start Listener';
     }
-    
-    // Force icon to gray after a delay (in case intent fails)
-    setTimeout(() => {
-        if (window.CONFIG?.myUsername) {
-            // Force check service status
-            console.log("Forcing status check after stop");
-        }
-    }, 2000);
 };
+
 
 
 // Handle URL parameters when opened by APK
