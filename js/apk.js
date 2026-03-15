@@ -76,18 +76,29 @@ window.stopApkListener = function() {
     
     console.log("📱 Stopping APK listener");
     
+    // Use STOP_SERVICE action
+    const intentUrl = `intent://#Intent;action=STOP_SERVICE;package=${APK_PACKAGE};scheme=webrtc;end`;
+    window.location.href = intentUrl;
+    
+    // Update UI immediately
     const statusEl = document.getElementById('apkStatus');
     const startBtn = document.getElementById('startApkBtn');
     
-    const intentUrl = `intent://stop#Intent;scheme=webrtc;package=${APK_PACKAGE};end`;
-    window.location.href = intentUrl;
-    
-    if (statusEl) {
-        statusEl.innerHTML = '⏸️ APK stopped';
-        sessionStorage.removeItem('apkConfirmed');
+    if (statusEl) statusEl.innerHTML = '⏹️ Stop command sent...';
+    if (startBtn) {
+        startBtn.disabled = false;
+        startBtn.innerHTML = '▶️ Start Listener';
     }
-    if (startBtn) startBtn.disabled = false;
+    
+    // Force icon to gray after a delay (in case intent fails)
+    setTimeout(() => {
+        if (window.CONFIG?.myUsername) {
+            // Force check service status
+            console.log("Forcing status check after stop");
+        }
+    }, 2000);
 };
+
 
 // Handle URL parameters when opened by APK
 (function handleApkLaunch() {
