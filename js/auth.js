@@ -124,6 +124,55 @@ function handleKeypadInput(digit) {
     updateDisplay();
 }
 
+// ==================== CLEAR OLD ICE-CANDIDATES ON LOGIN ====================
+async function clearOldIceCandidates() {
+    if (!CONFIG.myUsername) return;
+    
+    try {
+        console.log('🧹 Checking for old ice-candidates to clear...');
+        
+        // Get all ice-candidates where this user is the sender
+        const snapshot = await db.collection('ice-candidates')
+            .where('fromUserId', '==', CONFIG.myUsername)
+            .get();
+        
+        if (snapshot.empty) {
+            console.log('📭 No old ice-candidates found');
+            return;
+        }
+        
+        console.log(`📊 Found ${snapshot.size} old ice-candidates to delete`);
+        
+        // Delete in batches of 500 (Firestore limit)
+        const batch = db.batch();
+        let count = 0;
+        let totalDeleted = 0;
+        
+        for (const doc of snapshot.docs) {
+            batch.delete(doc.ref);
+            count++;
+            
+            if (count === 500) {
+                await batch.commit();
+                totalDeleted += count;
+                console.log(`✅ Deleted ${totalDeleted} so far...`);
+                count = 0;
+            }
+        }
+        
+        // Commit final batch
+        if (count > 0) {
+            await batch.commit();
+            totalDeleted += count;
+        }
+        
+        console.log(`✅ Successfully cleared ${totalDeleted} old ice-candidates`);
+        
+    } catch (error) {
+        console.error('❌ Error clearing ice-candidates:', error);
+    }
+}
+
 // ==================== AUTHENTICATION ====================
 async function login() {
     console.log('🚨 Login function called!');
@@ -159,8 +208,8 @@ async function login() {
         const userData = userDoc.data();
         
         CONFIG.myUsername = accessCode;
-        CONFIG.myDisplayName = userData.displayName || accessCode;
-        CONFIG.isAdmin = userData.isAdmin || false;
+        CONFIG.myDisplayName = userData.displayname || userData.displayName || accessCode;
+        CONFIG.isAdmin = userData.isadmin || userData.isAdmin || false;
         
         if (window.dom && window.dom.currentUserSpan) {
             window.dom.currentUserSpan.textContent = CONFIG.myDisplayName;
@@ -171,6 +220,9 @@ async function login() {
         
         console.log(`✅ Logged in as ${CONFIG.myDisplayName} (${accessCode})`);
         
+        // ===== CLEAR OLD ICE-CANDIDATES ON LOGIN =====
+        await clearOldIceCandidates();
+        
         // Initialize other modules with error handling
         try {
             if (window.cleanupStaleCalls) {
@@ -180,61 +232,6 @@ async function login() {
         } catch (e) {
             console.error('Error in cleanupStaleCalls:', e);
         }
-        
-        // ===== ADD THIS: Run historical ice-candidates cleanup on login =====
-        try {
-            if (window.historicalIceCleanup) {
-                console.log('🧹 Running historical ice-candidates cleanup...');
-                // Run it in the background - don't await to speed up login
-                window.historicalIceCleanup().catch(e => 
-                    console.error('Error in historical ice cleanup:', e)
-                );
-            }
-        } catch (e) {
-            console.error('Error starting historical ice cleanup:', e);
-        }
-        // After successful login, add this:
-try {
-    console.log('🧹 Clearing old ice-candidates...');
-    
-    // Get all ice-candidates where this user is the sender
-    const snapshot = await db.collection('ice-candidates')
-        .where('fromUserId', '==', CONFIG.myUsername)
-        .get();
-    
-    if (!snapshot.empty) {
-        console.log(`📊 Found ${snapshot.size} old ice-candidates to delete`);
-        
-        // Delete in batches of 500 (Firestore limit)
-        const batch = db.batch();
-        let count = 0;
-        
-        snapshot.forEach(doc => {
-            batch.delete(doc.ref);
-            count++;
-            
-            if (count === 500) {
-                // Commit and start new batch
-                await batch.commit();
-                console.log(`✅ Deleted ${count} so far...`);
-                count = 0;
-            }
-        });
-        
-        // Commit final batch
-        if (count > 0) {
-            await batch.commit();
-        }
-        
-        console.log(`✅ Cleared all old ice-candidates`);
-    } else {
-        console.log('📭 No old ice-candidates to clear');
-    }
-} catch (e) {
-    console.error('Error clearing ice-candidates:', e);
-}
-		
-		// ===== END OF ADDED CODE =====
         
         try {
             if (window.initMedia) {
@@ -271,7 +268,6 @@ try {
         }
     }
 }
-
 
 async function logout() {
     console.log('Logout function called');
