@@ -14,13 +14,13 @@ window.loadUsers = async function() {
             console.log(`🔍 Found user: ${doc.id}`);
             if (doc.id !== CONFIG.myUsername) {
                 const userData = doc.data();
-                // Get displayName from document data
-                const displayName = userData.displayName || doc.id;
+                // Get displayname from document data (lowercase 'n')
+                const displayName = userData.displayname || doc.id;
                 console.log(`✅ Adding user ${doc.id} with display name: ${displayName}`);
                 users.push({
                     username: doc.id,           // The document ID (e.g., "111")
                     displayName: displayName,    // The friendly name
-                    isAdmin: userData.isAdmin || false
+                    isAdmin: userData.isadmin || userData.isAdmin || false
                 });
             } else {
                 console.log(`⏭️ Skipping self: ${doc.id}`);
