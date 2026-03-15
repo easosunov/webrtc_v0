@@ -209,7 +209,7 @@
 
         .main-content {
             display: grid;
-            grid-template-columns: 1fr 300px;
+            grid-template-columns: 1fr 350px;
             gap: 20px;
         }
 
@@ -284,13 +284,20 @@
             color: white;
         }
 
+        /* Right Panels Container */
+        .right-panels {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
         /* Users Panel */
         .users-panel {
             background: #f9f9f9;
             border-radius: 10px;
             padding: 20px;
             height: fit-content;
-            max-height: calc(100vh - 200px);
+            max-height: 400px;
             overflow-y: auto;
         }
 
@@ -357,24 +364,8 @@
             cursor: not-allowed;
         }
 
-        .key-hint {
-            text-align: center;
-            margin-top: 10px;
-            font-size: 12px;
-            color: #666;
-        }
-
-        .key-hint span {
-            background: #f0f0f0;
-            padding: 3px 8px;
-            border-radius: 4px;
-            margin: 0 3px;
-            font-family: monospace;
-        }
-
         /* APK Control Panel */
         .apk-panel {
-            margin-top: 20px;
             padding: 15px;
             background: #f0f7ff;
             border-radius: 10px;
@@ -419,6 +410,11 @@
             cursor: pointer;
         }
 
+        .apk-start-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
         .apk-stop-btn {
             flex: 1;
             padding: 12px;
@@ -430,6 +426,11 @@
             cursor: pointer;
         }
 
+        .apk-stop-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
         .apk-status {
             margin-top: 10px;
             font-size: 12px;
@@ -437,6 +438,21 @@
             background: #e9ecef;
             border-radius: 5px;
             color: #495057;
+        }
+
+        .key-hint {
+            text-align: center;
+            margin-top: 10px;
+            font-size: 12px;
+            color: #666;
+        }
+
+        .key-hint span {
+            background: #f0f0f0;
+            padding: 3px 8px;
+            border-radius: 4px;
+            margin: 0 3px;
+            font-family: monospace;
         }
 
         /* Incoming Call Modal */
@@ -534,9 +550,14 @@
             to { opacity: 1; }
         }
 
+        /* Mobile Responsive */
         @media (max-width: 1024px) {
             .main-content {
                 grid-template-columns: 1fr;
+            }
+            
+            .right-panels {
+                margin-top: 20px;
             }
             
             .users-panel {
@@ -616,6 +637,7 @@
             </div>
             
             <div class="main-content">
+                <!-- Left side: Video section -->
                 <div class="video-section">
                     <div class="video-container">
                         <div class="video-box">
@@ -631,8 +653,17 @@
                     <div class="call-controls">
                         <button class="call-btn hangup" id="hangup-btn" disabled>Hang Up</button>
                     </div>
+                </div>
+                
+                <!-- Right side: All panels stacked vertically -->
+                <div class="right-panels">
+                    <!-- Available Users Panel (top) -->
+                    <div class="users-panel">
+                        <h3>Available Users</h3>
+                        <div id="users-container"></div>
+                    </div>
                     
-                    <!-- APK Background Listener Control -->
+                    <!-- Android Background Listener Panel (bottom) -->
                     <div class="apk-panel">
                         <div class="apk-header">
                             <span>📱</span>
@@ -644,7 +675,7 @@
                         </div>
                         <div class="apk-buttons">
                             <button id="startApkBtn" onclick="startApkListener()" class="apk-start-btn">
-                                ▶️ Start Background Listener
+                                ▶️ Start Listener
                             </button>
                             <button onclick="stopApkListener()" class="apk-stop-btn">
                                 ⏹️ Stop
@@ -654,11 +685,6 @@
                             ℹ️ Not running
                         </div>
                     </div>
-                </div>
-                
-                <div class="users-panel">
-                    <h3>Available Users</h3>
-                    <div id="users-container"></div>
                 </div>
             </div>
         </div>
