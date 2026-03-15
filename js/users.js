@@ -1,6 +1,7 @@
 console.log('✅ users.js loaded');
 
 // ==================== LOAD USERS ====================
+
 window.loadUsers = async function() {
     try {
         console.log('📋 Loading users from Firestore...');
@@ -13,10 +14,12 @@ window.loadUsers = async function() {
             console.log(`🔍 Found user: ${doc.id}`);
             if (doc.id !== CONFIG.myUsername) {
                 const userData = doc.data();
-                console.log(`✅ Adding user ${doc.id} to list`);
+                // Get displayName from document data
+                const displayName = userData.displayName || doc.id;
+                console.log(`✅ Adding user ${doc.id} with display name: ${displayName}`);
                 users.push({
-                    username: doc.id,
-                    displayName: userData.displayName || doc.id,
+                    username: doc.id,           // The document ID (e.g., "111")
+                    displayName: displayName,    // The friendly name
                     isAdmin: userData.isAdmin || false
                 });
             } else {
