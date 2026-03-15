@@ -127,6 +127,12 @@ window.callUser = async function(targetUsername) {
         CONFIG.callStartTime = Date.now();
         CONFIG.callTimeout = null;
         
+        // Enable hangup button immediately so user can cancel
+        if (window.dom && window.dom.hangupBtn) {
+            window.dom.hangupBtn.disabled = false;
+            console.log('✅ Hangup button enabled for cancellation');
+        }
+        
         // Update all buttons - disable all and set the called user to "Calling..."
         updateAllCallButtons(targetUsername, 'calling');
         
@@ -156,33 +162,30 @@ window.callUser = async function(targetUsername) {
             
             const data = snapshot.data();
             
-            // Check if call was rejected
             if (data.status === 'rejected') {
-				console.log('❌ Call was rejected');
-				stopRingbackTone();
-				if (CONFIG.callTimeout) {
-					clearTimeout(CONFIG.callTimeout);
-					CONFIG.callTimeout = null;
-				}
-				if (window.showStatusModal) {
-					window.showStatusModal('📢 Call Rejected', 'The call was rejected by the recipient', true);
-				}
-				window.hangup('rejected');
-				unsubscribe();
-				return;
-			}
+                console.log('❌ Call was rejected');
+                stopRingbackTone();
+                if (CONFIG.callTimeout) {
+                    clearTimeout(CONFIG.callTimeout);
+                    CONFIG.callTimeout = null;
+                }
+                if (window.showStatusModal) {
+                    window.showStatusModal('📢 Call Rejected', 'The call was rejected by the recipient', true);
+                }
+                window.hangup('rejected');
+                unsubscribe();
+                return;
+            }
             
             if (data.answer && CONFIG.peerConnection && !CONFIG.peerConnection.currentRemoteDescription) {
                 console.log('📥 Received answer');
                 stopRingbackTone();
                 
-                // Clear the timeout since call was answered
                 if (CONFIG.callTimeout) {
                     clearTimeout(CONFIG.callTimeout);
                     CONFIG.callTimeout = null;
                 }
                 
-                // When call is answered, update buttons to "In call"
                 updateAllCallButtons(targetUsername, 'incall');
                 
                 CONFIG.peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer))
@@ -205,16 +208,15 @@ window.callUser = async function(targetUsername) {
                 });
             });
         
-        // Set timeout for unanswered calls
         CONFIG.callTimeout = setTimeout(() => {
             if (CONFIG.isInCall && !CONFIG.peerConnection?.currentRemoteDescription) {
-				console.log('⏰ Call timeout - no answer received');
-				stopRingbackTone();
-				if (window.showStatusModal) {
-					window.showStatusModal('⏰ Call Timeout', 'No answer - call timed out', true);
-				}
-				window.hangup('timeout');
-			}
+                console.log('⏰ Call timeout - no answer received');
+                stopRingbackTone();
+                if (window.showStatusModal) {
+                    window.showStatusModal('⏰ Call Timeout', 'No answer - call timed out', true);
+                }
+                window.hangup('timeout');
+            }
         }, 30000);
         
     } catch (error) {
@@ -227,10 +229,12 @@ window.callUser = async function(targetUsername) {
             clearTimeout(CONFIG.callTimeout);
             CONFIG.callTimeout = null;
         }
+        if (window.dom && window.dom.hangupBtn) {
+            window.dom.hangupBtn.disabled = true;
+        }
         if (window.loadUsers) window.loadUsers();
     }
 };
-
 
 // ==================== ANSWER FUNCTION ====================
 window.answerCall = async function(callId, callerId, offer) {
@@ -290,8 +294,6 @@ window.answerCall = async function(callId, callerId, offer) {
         if (window.hangup) window.hangup('answer_error');
     }
 };
-
-
 
 // ==================== UPDATE ALL CALL BUTTONS ====================
 function updateAllCallButtons(partnerUsername, state) {
@@ -543,46 +545,33 @@ window.cleanupIceCandidatesKeepLatest = async function() {
     }
 };
 
-// ==================== HANGUP FUNCTION WITH AUTO-CLEANUP ====================
+// ==================== HANGUP FUNCTION ====================
 window.hangup = async function(reason = 'user_initiated') {
     console.log(`📞 Call ended - reason: ${reason}`);
     
     if (window.stopRingtone) window.stopRingtone();
     stopRingbackTone();
     
-    // Clear timeout if it exists
     if (CONFIG.callTimeout) {
         clearTimeout(CONFIG.callTimeout);
         CONFIG.callTimeout = null;
     }
     
-    // If we have a current call ID, update its status
     if (CONFIG.currentCallId) {
         try {
-            // Check if the call is still ringing (no answer yet)
             const callDoc = await db.collection('calls').doc(CONFIG.currentCallId).get();
             if (callDoc.exists) {
                 const callData = callDoc.data();
                 
-                // If call is still ringing, mark as rejected or ended based on who hung up
                 if (callData.status === 'ringing') {
                     if (callData.callerId === CONFIG.myUsername) {
-                        // Caller hung up before answer - mark as cancelled
                         await db.collection('calls').doc(CONFIG.currentCallId).update({
                             status: 'cancelled',
                             endedAt: firebase.firestore.FieldValue.serverTimestamp()
                         });
                         console.log('📞 Call cancelled by caller');
-                    } else {
-                        // Callee hung up before answering - mark as rejected
-                        await db.collection('calls').doc(CONFIG.currentCallId).update({
-                            status: 'rejected',
-                            endedAt: firebase.firestore.FieldValue.serverTimestamp()
-                        });
-                        console.log('📞 Call rejected by callee');
                     }
                 } else {
-                    // Normal hangup after connection
                     await db.collection('calls').doc(CONFIG.currentCallId).update({
                         status: 'ended',
                         endedAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -624,12 +613,9 @@ window.hangup = async function(reason = 'user_initiated') {
     if (window.loadUsers) window.loadUsers();
     
     setTimeout(async () => {
-        console.log('🧹 Running post-call cleanups...');
-        
         if (window.cleanupOldCallsKeepLatest) {
             await window.cleanupOldCallsKeepLatest();
         }
-        
         if (window.cleanupIceCandidatesKeepLatest) {
             await window.cleanupIceCandidatesKeepLatest();
         }
