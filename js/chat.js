@@ -1,5 +1,24 @@
 console.log('✅ chat.js loaded');
 
+// ==================== URL DETECTION ====================
+function makeLinksClickable(text) {
+    if (!text) return text;
+    
+    // Regular expression to match URLs
+    const urlRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)/gi;
+    
+    return text.replace(urlRegex, function(url) {
+        // Add https:// if missing
+        let fullUrl = url;
+        if (url.startsWith('www')) {
+            fullUrl = 'https://' + url;
+        }
+        
+        return `<a href="${fullUrl}" target="_blank" rel="noopener noreferrer" 
+                style="color: #0066cc; text-decoration: underline;">${url}</a>`;
+    });
+}
+
 // ==================== CHAT HELPERS ====================
 function getChatId(user1, user2) {
     // Sort to ensure same ID regardless of order
@@ -192,18 +211,18 @@ async function loadMessages(chatId) {
             const isMe = msg.senderId === CONFIG.myUsername;
             const showSender = !isMe && msg.senderId !== lastSender;
             
-            html += `
-                <div class="message ${isMe ? 'message-me' : 'message-other'}">
-                    ${showSender ? `<div class="message-sender">${msg.senderName || msg.senderId}</div>` : ''}
-                    <div class="message-bubble">
-                        <div class="message-text">${msg.text}</div>
-                        <div class="message-time">
-                            ${msgDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            ${isMe ? (msg.readBy?.includes(CONFIG.myUsername) ? ' ✓✓' : ' ✓') : ''}
-                        </div>
-                    </div>
-                </div>
-            `;
+			html += `
+				<div class="message ${isMe ? 'message-me' : 'message-other'}">
+					${showSender ? `<div class="message-sender">${msg.senderName || msg.senderId}</div>` : ''}
+					<div class="message-bubble">
+						<div class="message-text">${makeLinksClickable(msg.text)}</div>
+						<div class="message-time">
+							${msgDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+							${isMe ? (msg.readBy?.includes(CONFIG.myUsername) ? ' ✓✓' : ' ✓') : ''}
+						</div>
+					</div>
+				</div>
+			`;    
             
             lastSender = msg.senderId;
         });
