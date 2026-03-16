@@ -6,6 +6,58 @@ function getChatId(user1, user2) {
     return [user1, user2].sort().join('_');
 }
 
+// ==================== DELETE A CHAT ====================
+window.deleteChat = async function(chatId) {
+    if (!confirm('Are you sure you want to delete this chat? All messages will be permanently deleted.')) {
+        return;
+    }
+    
+    try {
+        console.log('🗑️ Deleting chat:', chatId);
+        
+        // First, delete all messages in the subcollection
+        const messagesSnapshot = await db.collection('chats').doc(chatId)
+            .collection('messages')
+            .get();
+        
+        // Delete messages in batches of 500
+        const batch = db.batch();
+        let count = 0;
+        
+        for (const doc of messagesSnapshot.docs) {
+            batch.delete(doc.ref);
+            count++;
+            
+            if (count === 500) {
+                await batch.commit();
+                count = 0;
+            }
+        }
+        
+        // Commit final batch if any
+        if (count > 0) {
+            await batch.commit();
+        }
+        
+        // Finally, delete the chat document itself
+        await db.collection('chats').doc(chatId).delete();
+        
+        console.log('✅ Chat deleted successfully');
+        
+        // Refresh chats list
+        await window.loadChats();
+        
+        // Close chat view if it was open
+        if (document.getElementById('current-chat-id').value === chatId) {
+            window.closeChat();
+        }
+        
+    } catch (error) {
+        console.error('❌ Error deleting chat:', error);
+        alert('Failed to delete chat');
+    }
+};
+
 // ==================== SHOW USERS FOR NEW CHAT ====================
 window.showUsersForChat = function() {
     // Simply show the users panel - users are already there
@@ -231,8 +283,6 @@ async function markChatAsRead(chatId) {
 
 // ==================== LISTEN FOR NEW MESSAGES ====================
 function listenForMessages(chatId) {
-    const messagesContainer = document.getElementById('chat-messages');
-    
     db.collection('chats').doc(chatId)
         .collection('messages')
         .orderBy('timestamp', 'asc')
@@ -282,19 +332,29 @@ window.loadChats = async function() {
             const timeStr = formatMessageTime(lastMessageTime);
             const unread = data.unreadCount?.[CONFIG.myUsername] || 0;
             
+            // Updated HTML with delete button
             html += `
-                <div class="chat-item" onclick="openChat('${doc.id}')">
-                    <div class="chat-avatar">${chatName.substring(0,2).toUpperCase()}</div>
-                    <div class="chat-info">
-                        <div class="chat-header">
-                            <span class="chat-name">${chatName}</span>
-                            <span class="chat-time">${timeStr}</span>
-                        </div>
-                        <div class="chat-preview">
-                            <span class="chat-message">${data.lastMessage || 'No messages'}</span>
-                            ${unread > 0 ? `<span class="unread-badge">${unread}</span>` : ''}
+                <div class="chat-item" style="display: flex; align-items: center; padding: 10px; border-bottom: 1px solid #eee;">
+                    <div onclick="openChat('${doc.id}')" style="display: flex; flex: 1; cursor: pointer;">
+                        <div class="chat-avatar">${chatName.substring(0,2).toUpperCase()}</div>
+                        <div class="chat-info">
+                            <div class="chat-header">
+                                <span class="chat-name">${chatName}</span>
+                                <span class="chat-time">${timeStr}</span>
+                            </div>
+                            <div class="chat-preview">
+                                <span class="chat-message">${data.lastMessage || 'No messages'}</span>
+                                ${unread > 0 ? `<span class="unread-badge">${unread}</span>` : ''}
+                            </div>
                         </div>
                     </div>
+                    <button onclick="deleteChat('${doc.id}'); event.stopPropagation();" 
+                            style="background: none; border: none; color: #999; cursor: pointer; padding: 5px 10px; font-size: 16px; border-radius: 50%;"
+                            onmouseover="this.style.backgroundColor='#f0f0f0'"
+                            onmouseout="this.style.backgroundColor='transparent'"
+                            title="Delete chat">
+                        🗑️
+                    </button>
                 </div>
             `;
         });
@@ -319,7 +379,7 @@ function formatMessageTime(date) {
     }
 }
 
-// Load chats when user logs in - FIXED: renamed to avoid conflict
+// Load chats when user logs in
 const chatOriginalLogin = window.login;
 if (chatOriginalLogin) {
     window.login = async function() {
