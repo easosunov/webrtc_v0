@@ -987,6 +987,38 @@
                     </div>
                 </div>
                 
+				<!-- Chat Section (WhatsApp-style) -->
+				<div class="chat-section">
+					<div class="chat-layout">
+						<!-- Left sidebar - Chats list -->
+						<div class="chats-sidebar" id="chats-view">
+							<div class="chats-header">
+								<h3>Chats</h3>
+								<button class="new-chat-btn" onclick="showUsersForChat()">➕ New Chat</button>
+							</div>
+							<div id="chats-container">
+								<!-- Chats will be loaded here -->
+							</div>
+						</div>
+						
+						<!-- Right side - Active chat -->
+						<div class="chat-view" id="chat-view" style="display: none;">
+							<div class="chat-view-header">
+								<button class="back-btn" onclick="closeChat()">←</button>
+								<h3 id="current-chat-name">Select a chat</h3>
+							</div>
+							<div class="chat-messages-container" id="chat-messages">
+								<!-- Messages will be loaded here -->
+							</div>
+							<div class="chat-input-area">
+								<input type="text" id="message-input" placeholder="Type a message...">
+								<button onclick="sendMessage()">Send</button>
+							</div>
+							<input type="hidden" id="current-chat-id">
+						</div>
+					</div>
+				</div>
+				
                 <!-- Right side: All panels stacked vertically -->
                 <div class="right-panels">
                     <!-- Available Users Panel (top) -->
