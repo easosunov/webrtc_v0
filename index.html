@@ -81,30 +81,39 @@
             padding: 10px;
             border-bottom: 1px solid #f0f0f0;
             transition: background 0.2s;
+            position: relative;
         }
 
         .chat-item:hover {
             background: #f5f5f5;
         }
 
-        .chat-item button {
-            opacity: 0.5;
-            transition: opacity 0.2s;
+        .chat-item .chat-content {
+            display: flex;
+            flex: 1;
+            cursor: pointer;
+        }
+
+        .chat-item .delete-chat-btn {
             background: none;
             border: none;
             color: #999;
             cursor: pointer;
-            padding: 5px 10px;
+            padding: 8px 12px;
             font-size: 16px;
             border-radius: 50%;
+            opacity: 0.5;
+            transition: all 0.2s;
+            margin-right: 5px;
         }
 
-        .chat-item:hover button {
+        .chat-item:hover .delete-chat-btn {
             opacity: 1;
         }
 
-        .chat-item button:hover {
-            background-color: #e0e0e0;
+        .chat-item .delete-chat-btn:hover {
+            background-color: #ffebee;
+            color: #f44336;
         }
 
         .chat-avatar {
@@ -185,6 +194,7 @@
             border-bottom: 1px solid #e0e0e0;
             display: flex;
             align-items: center;
+            position: relative;
         }
 
         .back-btn {
@@ -200,6 +210,23 @@
             margin: 0;
             color: #333;
             font-size: 16px;
+            flex: 1;
+        }
+
+        .delete-chat-header-btn {
+            background: none;
+            border: none;
+            color: #999;
+            cursor: pointer;
+            padding: 8px 12px;
+            font-size: 18px;
+            border-radius: 50%;
+            transition: all 0.2s;
+        }
+
+        .delete-chat-header-btn:hover {
+            background-color: #ffebee;
+            color: #f44336;
         }
 
         .chat-messages-container {
@@ -627,7 +654,7 @@
             border-radius: 10px;
             padding: 20px;
             height: fit-content;
-            max-height: 300px;
+            max-height: 250px;
             overflow-y: auto;
         }
 
@@ -646,7 +673,7 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 12px;
+            padding: 8px 12px;
             border-bottom: 1px solid #e0e0e0;
             transition: background 0.2s ease;
         }
@@ -676,12 +703,12 @@
             color: white;
             border: none;
             border-radius: 5px;
-            padding: 8px 12px;
+            padding: 6px 10px;
             cursor: pointer;
             font-size: 12px;
             font-weight: 500;
             transition: all 0.2s ease;
-            min-width: 60px;
+            min-width: 50px;
         }
 
         .call-user-btn:hover:not(:disabled) {
@@ -699,12 +726,12 @@
             color: white;
             border: none;
             border-radius: 5px;
-            padding: 8px 12px;
+            padding: 6px 10px;
             cursor: pointer;
             font-size: 12px;
             font-weight: 500;
             transition: all 0.2s ease;
-            min-width: 60px;
+            min-width: 50px;
         }
 
         .chat-user-btn:hover:not(:disabled) {
@@ -917,7 +944,7 @@
             }
             
             .users-panel {
-                max-height: 300px;
+                max-height: 200px;
             }
             
             /* Stack videos vertically on mobile */
@@ -1036,45 +1063,13 @@
                 
                 <!-- Right side: All panels stacked vertically -->
                 <div class="right-panels">
-                    <!-- Chat Section (WhatsApp-style) -->
-                    <div class="chat-section">
-                        <div class="chat-layout">
-                            <!-- Left sidebar - Chats list -->
-                            <div class="chats-sidebar" id="chats-view">
-                                <div class="chats-header">
-                                    <h3>Chats</h3>
-                                    <button class="new-chat-btn" onclick="showUsersForChat()">➕ New Chat</button>
-                                </div>
-                                <div id="chats-container">
-                                    <!-- Chats will be loaded here -->
-                                </div>
-                            </div>
-                            
-                            <!-- Right side - Active chat -->
-                            <div class="chat-view" id="chat-view" style="display: none;">
-                                <div class="chat-view-header">
-                                    <button class="back-btn" onclick="closeChat()">←</button>
-                                    <h3 id="current-chat-name">Select a chat</h3>
-                                </div>
-                                <div class="chat-messages-container" id="chat-messages">
-                                    <!-- Messages will be loaded here -->
-                                </div>
-                                <div class="chat-input-area">
-                                    <input type="text" id="message-input" placeholder="Type a message...">
-                                    <button onclick="sendMessage()">Send</button>
-                                </div>
-                                <input type="hidden" id="current-chat-id">
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Available Users Panel -->
+                    <!-- Available Users Panel (top) -->
                     <div class="users-panel">
                         <h3>Available Users</h3>
                         <div id="users-container"></div>
                     </div>
                     
-                    <!-- Android Background Listener Panel -->
+                    <!-- Android Background Listener Panel (middle) -->
                     <div class="apk-panel">
                         <div class="apk-header">
                             <span>📱</span>
@@ -1093,6 +1088,39 @@
                         </div>
                         <div id="apkStatus" class="apk-status">
                             ℹ️ Not running
+                        </div>
+                    </div>
+                    
+                    <!-- Chat Section (bottom) -->
+                    <div class="chat-section">
+                        <div class="chat-layout">
+                            <!-- Left sidebar - Chats list -->
+                            <div class="chats-sidebar" id="chats-view">
+                                <div class="chats-header">
+                                    <h3>Chats</h3>
+                                    <button class="new-chat-btn" onclick="showUsersForChat()">➕ New Chat</button>
+                                </div>
+                                <div id="chats-container">
+                                    <!-- Chats will be loaded here -->
+                                </div>
+                            </div>
+                            
+                            <!-- Right side - Active chat -->
+                            <div class="chat-view" id="chat-view" style="display: none;">
+                                <div class="chat-view-header">
+                                    <button class="back-btn" onclick="closeChat()">←</button>
+                                    <h3 id="current-chat-name">Select a chat</h3>
+                                    <button class="delete-chat-header-btn" onclick="deleteCurrentChat()" title="Delete this chat">🗑️</button>
+                                </div>
+                                <div class="chat-messages-container" id="chat-messages">
+                                    <!-- Messages will be loaded here -->
+                                </div>
+                                <div class="chat-input-area">
+                                    <input type="text" id="message-input" placeholder="Type a message...">
+                                    <button onclick="sendMessage()">Send</button>
+                                </div>
+                                <input type="hidden" id="current-chat-id">
+                            </div>
                         </div>
                     </div>
                 </div>
