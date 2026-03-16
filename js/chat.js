@@ -366,6 +366,48 @@ window.loadChats = async function() {
     }
 };
 
+// ==================== DELETE CURRENT CHAT ====================
+window.deleteCurrentChat = async function() {
+    const chatId = document.getElementById('current-chat-id').value;
+    if (!chatId) {
+        alert('No chat selected');
+        return;
+    }
+    
+    if (!confirm('Are you sure you want to delete this chat? All messages will be permanently deleted.')) {
+        return;
+    }
+    
+    try {
+        console.log('🗑️ Deleting current chat:', chatId);
+        
+        // First, delete all messages in the subcollection
+        const messagesSnapshot = await db.collection('chats').doc(chatId)
+            .collection('messages')
+            .get();
+        
+        // Delete messages in batches
+        const batch = db.batch();
+        messagesSnapshot.forEach(doc => {
+            batch.delete(doc.ref);
+        });
+        await batch.commit();
+        
+        // Finally, delete the chat document itself
+        await db.collection('chats').doc(chatId).delete();
+        
+        console.log('✅ Chat deleted successfully');
+        
+        // Close chat view and refresh list
+        window.closeChat();
+        await window.loadChats();
+        
+    } catch (error) {
+        console.error('❌ Error deleting chat:', error);
+        alert('Failed to delete chat');
+    }
+};
+
 function formatMessageTime(date) {
     const now = new Date();
     const diff = now - date;
