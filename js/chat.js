@@ -374,39 +374,42 @@ window.deleteCurrentChat = async function() {
         return;
     }
     
-    if (!confirm('Are you sure you want to delete this chat? All messages will be permanently deleted.')) {
+    if (!confirm('⚠️ Are you sure you want to delete this chat? All messages will be permanently deleted.')) {
         return;
     }
     
     try {
         console.log('🗑️ Deleting current chat:', chatId);
         
-        // First, delete all messages in the subcollection
+        // First, get all messages
         const messagesSnapshot = await db.collection('chats').doc(chatId)
             .collection('messages')
             .get();
         
-        // Delete messages in batches
-        const batch = db.batch();
-        messagesSnapshot.forEach(doc => {
-            batch.delete(doc.ref);
-        });
-        await batch.commit();
+        console.log(`📊 Found ${messagesSnapshot.size} messages to delete`);
+        
+        // Delete messages one by one (more reliable for permissions)
+        for (const doc of messagesSnapshot.docs) {
+            await doc.ref.delete();
+            console.log('✅ Deleted message:', doc.id);
+        }
         
         // Finally, delete the chat document itself
         await db.collection('chats').doc(chatId).delete();
-        
         console.log('✅ Chat deleted successfully');
         
         // Close chat view and refresh list
         window.closeChat();
         await window.loadChats();
         
+        alert('Chat deleted successfully');
+        
     } catch (error) {
         console.error('❌ Error deleting chat:', error);
-        alert('Failed to delete chat');
+        alert('Failed to delete chat: ' + error.message);
     }
 };
+
 
 function formatMessageTime(date) {
     const now = new Date();
