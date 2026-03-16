@@ -319,11 +319,11 @@ function formatMessageTime(date) {
     }
 }
 
-// Load chats when user logs in
-const originalLogin = window.login;
-if (originalLogin) {
+// Load chats when user logs in - FIXED: renamed to avoid conflict
+const chatOriginalLogin = window.login;
+if (chatOriginalLogin) {
     window.login = async function() {
-        await originalLogin.apply(this, arguments);
+        await chatOriginalLogin.apply(this, arguments);
         await window.loadChats();
     };
 }
