@@ -52,11 +52,11 @@ function renderUsersList(users) {
         const isThisUserBeingCalled = CONFIG.currentCallId?.includes(user.username);
         
         let buttonText = 'Call';
-        let disabled = !CONFIG.localStream || (isCallActive && !isThisUserBeingCalled);
+        let callDisabled = !CONFIG.localStream || (isCallActive && !isThisUserBeingCalled);
         
         if (isThisUserBeingCalled) {
             buttonText = 'Calling...';
-            disabled = true;
+            callDisabled = true;
         }
         
         // Use displayName if available, otherwise fall back to username
@@ -67,17 +67,23 @@ function renderUsersList(users) {
                 <div class="user-info-left">
                     <span class="user-name">${displayName}</span>
                 </div>
-                <button class="call-user-btn" 
-                        onclick="window.callUser('${user.username}')"
-                        ${disabled ? 'disabled' : ''}>
-                    ${buttonText}
-                </button>
+                <div style="display: flex; gap: 5px;">
+                    <button class="call-user-btn" 
+                            onclick="window.callUser('${user.username}')"
+                            ${callDisabled ? 'disabled' : ''}>
+                        📞 ${buttonText}
+                    </button>
+                    <button class="chat-user-btn" 
+                            onclick="window.startChat('${user.username}')"
+                            ${!CONFIG.myUsername ? 'disabled' : ''}>
+                        💬 Chat
+                    </button>
+                </div>
             </div>
         `;
     });
     window.dom.usersContainer.innerHTML = html;
 }
-
 
 window.debugUsers = async function() {
     console.log('=== DEBUG USERS ===');
