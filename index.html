@@ -279,6 +279,12 @@
             word-wrap: break-word;
         }
 
+        .message-text a {
+            color: #0066cc;
+            text-decoration: underline;
+            word-break: break-all;
+        }
+
         .message-time {
             font-size: 10px;
             color: #999;
@@ -1069,29 +1075,7 @@
                         <div id="users-container"></div>
                     </div>
                     
-                    <!-- Android Background Listener Panel (middle) -->
-                    <div class="apk-panel">
-                        <div class="apk-header">
-                            <span>📱</span>
-                            <h4>Android Background Listener</h4>
-                        </div>
-                        <div class="apk-description">
-                            Start the background service to receive notifications when browser is closed.
-                        </div>
-                        <div class="apk-buttons">
-                            <button id="startApkBtn" onclick="startApkListener()" class="apk-start-btn">
-                                ▶️ Start Listener
-                            </button>
-                            <button onclick="stopApkListener()" class="apk-stop-btn">
-                                ⏹️ Stop
-                            </button>
-                        </div>
-                        <div id="apkStatus" class="apk-status">
-                            ℹ️ Not running
-                        </div>
-                    </div>
-                    
-                    <!-- Chat Section (bottom) -->
+                    <!-- Chat Section (middle) -->
                     <div class="chat-section">
                         <div class="chat-layout">
                             <!-- Left sidebar - Chats list -->
@@ -1121,6 +1105,28 @@
                                 </div>
                                 <input type="hidden" id="current-chat-id">
                             </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Android Background Listener Panel (bottom) -->
+                    <div class="apk-panel">
+                        <div class="apk-header">
+                            <span>📱</span>
+                            <h4>Android Background Listener</h4>
+                        </div>
+                        <div class="apk-description">
+                            Start the background service to receive notifications when browser is closed.
+                        </div>
+                        <div class="apk-buttons">
+                            <button id="startApkBtn" onclick="startApkListener()" class="apk-start-btn">
+                                ▶️ Start Listener
+                            </button>
+                            <button onclick="stopApkListener()" class="apk-stop-btn">
+                                ⏹️ Stop
+                            </button>
+                        </div>
+                        <div id="apkStatus" class="apk-status">
+                            ℹ️ Not running
                         </div>
                     </div>
                 </div>
