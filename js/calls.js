@@ -106,84 +106,6 @@ window.cleanupStaleCalls = async function() {
     }
 };
 
-// ==================== EXPONENTIAL BACKOFF RECONNECTION ====================
-async function attemptReconnection() {
-    if (!CONFIG.currentCallId || !CONFIG.isInCall) {
-        console.log('No active call to reconnect');
-        return;
-    }
-    
-    if (CONFIG.reconnectionAttempts >= CONFIG.MAX_RECONNECTION_ATTEMPTS) {
-        console.log('❌ Max reconnection attempts reached, ending call');
-        window.showConnectionStatusMessage('❌ Connection lost, call ended', 'error');
-        setTimeout(() => {
-            if (window.hangup) window.hangup('reconnection_failed');
-        }, 2000);
-        return;
-    }
-    
-    const delay = Math.min(
-        CONFIG.RECONNECTION_BASE_DELAY * Math.pow(2, CONFIG.reconnectionAttempts),
-        CONFIG.RECONNECTION_MAX_DELAY
-    );
-    
-    console.log(`🔄 Reconnection attempt ${CONFIG.reconnectionAttempts + 1}/${CONFIG.MAX_RECONNECTION_ATTEMPTS} in ${delay}ms`);
-    window.showConnectionStatusMessage(`🔄 Reconnecting (attempt ${CONFIG.reconnectionAttempts + 1})...`, 'info');
-    
-    CONFIG.reconnectionTimeout = setTimeout(async () => {
-        try {
-            // Check if call still exists
-            const callDoc = await db.collection('calls').doc(CONFIG.currentCallId).get();
-            if (!callDoc.exists) {
-                console.log('Call no longer exists, aborting reconnection');
-                window.clearConnectionStatusMessage();
-                return;
-            }
-            
-            const callData = callDoc.data();
-            
-            // Try to restore connection
-            if (callData.answer && CONFIG.peerConnection) {
-                console.log('Attempting to restore peer connection...');
-                
-                try {
-                    // Create new offer with ICE restart
-                    const offer = await CONFIG.peerConnection.createOffer({ iceRestart: true });
-                    await CONFIG.peerConnection.setLocalDescription(offer);
-                    
-                    // Update call in Firestore with new offer
-                    await db.collection('calls').doc(CONFIG.currentCallId).update({
-                        offer: {
-                            type: offer.type,
-                            sdp: offer.sdp
-                        },
-                        restartAttempt: (callData.restartAttempt || 0) + 1,
-                        lastReconnectAttempt: firebase.firestore.FieldValue.serverTimestamp()
-                    });
-                    
-                    console.log('✅ Reconnection offer sent');
-                    CONFIG.reconnectionAttempts = 0;
-                    window.clearConnectionStatusMessage();
-                    
-                } catch (peerError) {
-                    console.error('Failed to restart ICE:', peerError);
-                    CONFIG.reconnectionAttempts++;
-                    attemptReconnection();
-                }
-            } else {
-                console.log('No answer available, waiting...');
-                CONFIG.reconnectionAttempts++;
-                attemptReconnection();
-            }
-            
-        } catch (error) {
-            console.error('Reconnection failed:', error);
-            CONFIG.reconnectionAttempts++;
-            attemptReconnection();
-        }
-    }, delay);
-}
-
 // ==================== CALL FUNCTIONS ====================
 window.callUser = async function(targetUsername) {
     if (!CONFIG.localStream) {
@@ -204,7 +126,6 @@ window.callUser = async function(targetUsername) {
         CONFIG.currentCallPartner = targetUsername;
         CONFIG.callStartTime = Date.now();
         CONFIG.callTimeout = null;
-        CONFIG.reconnectionAttempts = 0;
         
         // Enable hangup button immediately so user can cancel
         if (window.dom && window.dom.hangupBtn) {
@@ -266,7 +187,6 @@ window.callUser = async function(targetUsername) {
                 }
                 
                 updateAllCallButtons(targetUsername, 'incall');
-                window.clearConnectionStatusMessage();
                 
                 CONFIG.peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer))
                     .catch(err => console.log(`❌ Error setting remote description: ${err.message}`));
@@ -324,7 +244,6 @@ window.answerCall = async function(callId, callerId, offer) {
         CONFIG.isInCall = true;
         CONFIG.currentCallId = callId;
         CONFIG.currentCallPartner = callerId;
-        CONFIG.reconnectionAttempts = 0;
         
         await window.createPeerConnection(callerId, false);
         
@@ -379,7 +298,6 @@ function updateAllCallButtons(partnerUsername, state) {
     const buttons = document.querySelectorAll('.call-user-btn');
     
     buttons.forEach(button => {
-        // Extract username from the onclick attribute
         const onclickAttr = button.getAttribute('onclick');
         if (!onclickAttr) return;
         
@@ -389,7 +307,6 @@ function updateAllCallButtons(partnerUsername, state) {
         const buttonUsername = match[1];
         
         if (buttonUsername === partnerUsername) {
-            // This is the call partner
             button.disabled = true;
             if (state === 'calling') {
                 button.textContent = 'Calling...';
@@ -397,7 +314,6 @@ function updateAllCallButtons(partnerUsername, state) {
                 button.textContent = 'In call';
             }
         } else {
-            // Other users - disabled but with no special text
             button.disabled = true;
         }
     });
@@ -591,148 +507,6 @@ window.cleanupOrphanedIceCandidates = async function() {
     }
 };
 
-// ==================== ONE-TIME HISTORICAL CLEANUP ====================
-window.historicalIceCleanup = async function() {
-    if (!CONFIG.myUsername) {
-        console.log('❌ Please log in first');
-        return;
-    }
-    
-    console.log('🧹 ===== STARTING HISTORICAL ICE-CANDIDATES CLEANUP =====');
-    console.log('This will delete ALL ice-candidates except those from the most recent call with each user');
-    
-    try {
-        // Get ALL ice-candidates where this user is the sender
-        const candidatesSnapshot = await db.collection('ice-candidates')
-            .where('fromUserId', '==', CONFIG.myUsername)
-            .get();
-        
-        console.log(`📊 Found ${candidatesSnapshot.size} total historical ice-candidates`);
-        
-        if (candidatesSnapshot.empty) {
-            console.log('📭 No ice-candidates to clean up');
-            return;
-        }
-        
-        // Group candidates by the other user
-        const candidatesByUser = {};
-        const callIdToCandidates = {};
-        
-        candidatesSnapshot.forEach(doc => {
-            const data = doc.data();
-            const otherUser = data.toUserId;
-            const callId = data.callId;
-            
-            if (!candidatesByUser[otherUser]) {
-                candidatesByUser[otherUser] = [];
-            }
-            
-            // Get timestamp
-            let timestamp = 0;
-            if (data.timestamp) {
-                timestamp = data.timestamp.toMillis?.() || 
-                           data.timestamp._seconds * 1000 || 
-                           data.timestamp;
-            }
-            
-            const candidateInfo = {
-                id: doc.id,
-                timestamp: timestamp,
-                ref: doc.ref,
-                callId: callId
-            };
-            
-            candidatesByUser[otherUser].push(candidateInfo);
-            
-            if (!callIdToCandidates[callId]) {
-                callIdToCandidates[callId] = [];
-            }
-            callIdToCandidates[callId].push(candidateInfo);
-        });
-        
-        console.log(`👥 Found conversations with: ${Object.keys(candidatesByUser).join(', ')}`);
-        
-        // For each user, find their most recent call
-        const batch = db.batch();
-        let deletedCount = 0;
-        let keptCount = 0;
-        
-        for (const otherUser of Object.keys(candidatesByUser)) {
-            console.log(`\n🔍 Processing user ${otherUser}:`);
-            const userCandidates = candidatesByUser[otherUser];
-            
-            // Get all calls between current user and this other user
-            const callsBetween = await db.collection('calls')
-                .where('callerId', 'in', [CONFIG.myUsername, otherUser])
-                .where('calleeId', 'in', [CONFIG.myUsername, otherUser])
-                .get();
-            
-            console.log(`   Found ${callsBetween.size} calls with this user`);
-            
-            if (callsBetween.empty) {
-                // No calls exist - delete ALL candidates for this user
-                console.log(`   ❌ No calls found - deleting all ${userCandidates.length} candidates`);
-                userCandidates.forEach(candidate => {
-                    batch.delete(candidate.ref);
-                    deletedCount++;
-                });
-                continue;
-            }
-            
-            // Find the most recent call
-            let latestCallId = null;
-            let latestTimestamp = 0;
-            
-            callsBetween.forEach(doc => {
-                const callData = doc.data();
-                let callTime = 0;
-                if (callData.timestamp) {
-                    callTime = callData.timestamp.toMillis?.() || 
-                               callData.timestamp._seconds * 1000 || 
-                               callData.timestamp;
-                }
-                
-                if (callTime > latestTimestamp) {
-                    latestTimestamp = callTime;
-                    latestCallId = doc.id;
-                }
-            });
-            
-            console.log(`   ✅ Most recent call: ${latestCallId}`);
-            
-            // Keep only candidates from the most recent call
-            userCandidates.forEach(candidate => {
-                if (candidate.callId === latestCallId) {
-                    keptCount++;
-                    console.log(`   ✅ Keeping candidate ${candidate.id} from latest call`);
-                } else {
-                    batch.delete(candidate.ref);
-                    deletedCount++;
-                    console.log(`   🗑️ Deleting candidate ${candidate.id} from call ${candidate.callId}`);
-                }
-            });
-        }
-        
-        console.log(`\n📊 Summary: keeping ${keptCount}, deleting ${deletedCount}`);
-        
-        if (deletedCount > 0) {
-            await batch.commit();
-            console.log(`✅ Historical cleanup complete: deleted ${deletedCount} old ice-candidates`);
-        } else {
-            console.log(`📭 No historical ice-candidates to delete`);
-        }
-        
-        // Final count
-        const finalSnapshot = await db.collection('ice-candidates')
-            .where('fromUserId', '==', CONFIG.myUsername)
-            .get();
-        console.log(`📊 Final ice-candidate count: ${finalSnapshot.size}`);
-        
-    } catch (error) {
-        console.log(`❌ Error during historical cleanup:`, error);
-    }
-};
-
 // ==================== HANGUP FUNCTION ====================
 window.hangup = async function(reason = 'user_initiated') {
     console.log(`📞 Call ended - reason: ${reason}`);
@@ -740,19 +514,9 @@ window.hangup = async function(reason = 'user_initiated') {
     if (window.stopRingtone) window.stopRingtone();
     stopRingbackTone();
     
-    // Stop all monitoring
-    if (window.stopAllMonitoring) {
-        window.stopAllMonitoring();
-    }
-    
     if (CONFIG.callTimeout) {
         clearTimeout(CONFIG.callTimeout);
         CONFIG.callTimeout = null;
-    }
-    
-    if (CONFIG.reconnectionTimeout) {
-        clearTimeout(CONFIG.reconnectionTimeout);
-        CONFIG.reconnectionTimeout = null;
     }
     
     if (CONFIG.currentCallId) {
@@ -796,7 +560,6 @@ window.hangup = async function(reason = 'user_initiated') {
     CONFIG.currentCallId = null;
     CONFIG.currentCallPartner = null;
     CONFIG.iceRestartAttempts = 0;
-    CONFIG.reconnectionAttempts = 0;
     
     if (window.dom && window.dom.remoteVideo) {
         window.dom.remoteVideo.srcObject = null;
@@ -814,130 +577,14 @@ window.hangup = async function(reason = 'user_initiated') {
     setTimeout(async () => {
         console.log('🧹 Running post-call cleanups...');
         
-        // Clean up old calls first (keep only latest per user)
         if (window.cleanupOldCallsKeepLatest) {
             await window.cleanupOldCallsKeepLatest();
         }
         
-        // Then clean up orphaned ice-candidates (delete any without a call)
         if (window.cleanupOrphanedIceCandidates) {
             await window.cleanupOrphanedIceCandidates();
         }
     }, 3000);
-};
-
-// ==================== AGGRESSIVE ICE-CANDIDATES CLEANUP ====================
-window.aggressiveIceCleanup = async function() {
-    if (!CONFIG.myUsername) {
-        console.log('❌ Please log in first');
-        return;
-    }
-    
-    console.log('🧹 ===== STARTING AGGRESSIVE ICE-CANDIDATES CLEANUP =====');
-    console.log('This will keep only the 3 most recent ice-candidates per call');
-    
-    try {
-        // Get ALL ice-candidates where this user is the sender
-        const candidatesSnapshot = await db.collection('ice-candidates')
-            .where('fromUserId', '==', CONFIG.myUsername)
-            .get();
-        
-        console.log(`📊 Found ${candidatesSnapshot.size} total ice-candidates`);
-        
-        if (candidatesSnapshot.empty) {
-            console.log('📭 No ice-candidates to clean up');
-            return;
-        }
-        
-        // Group candidates by callId
-        const candidatesByCall = {};
-        
-        candidatesSnapshot.forEach(doc => {
-            const data = doc.data();
-            const callId = data.callId;
-            
-            if (!candidatesByCall[callId]) {
-                candidatesByCall[callId] = [];
-            }
-            
-            // Get timestamp
-            let timestamp = 0;
-            if (data.timestamp) {
-                timestamp = data.timestamp.toMillis?.() || 
-                           data.timestamp._seconds * 1000 || 
-                           data.timestamp;
-            }
-            
-            candidatesByCall[callId].push({
-                id: doc.id,
-                timestamp: timestamp,
-                ref: doc.ref,
-                data: data
-            });
-        });
-        
-        console.log(`📞 Found ${Object.keys(candidatesByCall).length} unique calls with ice-candidates`);
-        
-        const batch = db.batch();
-        let totalDeleted = 0;
-        let totalKept = 0;
-        
-        // For each call, keep only the 3 most recent candidates
-        for (const [callId, candidates] of Object.entries(candidatesByCall)) {
-            console.log(`\n🔍 Processing call ${callId}:`);
-            console.log(`   Found ${candidates.length} ice-candidates`);
-            
-            // Sort by timestamp (newest first)
-            candidates.sort((a, b) => b.timestamp - a.timestamp);
-            
-            // Keep only the first 3 (most recent)
-            const keepCount = Math.min(3, candidates.length);
-            
-            candidates.forEach((candidate, index) => {
-                if (index < keepCount) {
-                    totalKept++;
-                    console.log(`   ✅ Keeping candidate ${index + 1}/${keepCount}`);
-                } else {
-                    batch.delete(candidate.ref);
-                    totalDeleted++;
-                    console.log(`   🗑️ Deleting excess candidate ${index + 1}/${candidates.length}`);
-                }
-            });
-        }
-        
-        console.log(`\n📊 Summary: keeping ${totalKept}, deleting ${totalDeleted}`);
-        
-        if (totalDeleted > 0) {
-            await batch.commit();
-            console.log(`✅ Aggressive cleanup complete: deleted ${totalDeleted} excess ice-candidates`);
-        } else {
-            console.log(`📭 No excess ice-candidates to delete`);
-        }
-        
-        // Final count
-        const finalSnapshot = await db.collection('ice-candidates')
-            .where('fromUserId', '==', CONFIG.myUsername)
-            .get();
-        console.log(`📊 Final ice-candidate count: ${finalSnapshot.size}`);
-        
-    } catch (error) {
-        console.log(`❌ Error during aggressive cleanup:`, error);
-    }
-};
-
-// ==================== MANUAL CLEANUP FUNCTION ====================
-window.cleanupAll = async function() {
-    console.log('🧹 Running full manual cleanup...');
-    
-    if (window.cleanupOldCallsKeepLatest) {
-        await window.cleanupOldCallsKeepLatest();
-    }
-    
-    if (window.cleanupOrphanedIceCandidates) {
-        await window.cleanupOrphanedIceCandidates();
-    }
-    
-    console.log('✅ Full manual cleanup complete');
 };
 
 // ==================== ATTACH HANGUP BUTTON LISTENER ====================
