@@ -46,6 +46,46 @@ window.loadTurnServers = async function() {
     }
 };
 
+// ==================== RESTART ICE (DEFINED FIRST) ====================
+async function restartIce() {
+    if (!CONFIG.peerConnection) {
+        console.log('❌ No peer connection to restart');
+        return;
+    }
+    
+    if (CONFIG.iceRestartAttempts >= CONFIG.MAX_ICE_RESTART_ATTEMPTS) {
+        console.log('❌ Max ICE restart attempts reached');
+        if (window.showConnectionStatus) {
+            window.showConnectionStatus('❌ Cannot recover connection, call may end', 'error');
+        }
+        return;
+    }
+    
+    CONFIG.iceRestartAttempts++;
+    console.log(`🔄 ICE restart attempt ${CONFIG.iceRestartAttempts}/${CONFIG.MAX_ICE_RESTART_ATTEMPTS}`);
+    
+    try {
+        const offer = await CONFIG.peerConnection.createOffer({ iceRestart: true });
+        await CONFIG.peerConnection.setLocalDescription(offer);
+        
+        if (CONFIG.currentCallId) {
+            await db.collection('calls').doc(CONFIG.currentCallId).update({
+                offer: {
+                    type: offer.type,
+                    sdp: offer.sdp
+                },
+                restartAttempt: CONFIG.iceRestartAttempts,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        }
+        
+        console.log('📤 ICE restart offer sent');
+        
+    } catch (error) {
+        console.log(`❌ ICE restart failed: ${error.message}`);
+    }
+}
+
 // ==================== PEER CONNECTION CREATION ====================
 window.createPeerConnection = async function(targetUsername, isCaller = true) {
     console.log(`🔧 Creating peer connection with ${targetUsername} (${isCaller ? 'caller' : 'callee'})`);
@@ -53,8 +93,6 @@ window.createPeerConnection = async function(targetUsername, isCaller = true) {
     CONFIG.targetUsername = targetUsername;
     CONFIG.isCaller = isCaller;
     CONFIG.iceRestartAttempts = 0;
-    CONFIG.reconnectionAttempts = 0;
-    CONFIG.currentQualityReduced = false;  // Track if quality was reduced
     
     // Load TURN servers
     const turnServers = await window.loadTurnServers();
@@ -111,15 +149,9 @@ window.createPeerConnection = async function(targetUsername, isCaller = true) {
         
         switch(state) {
             case 'checking':
-                if (window.showConnectionStatus) {
-                    window.showConnectionStatus('🔄 Connecting...', 'info');
-                }
                 CONFIG.connectionTimeout = setTimeout(() => {
                     if (CONFIG.peerConnection?.iceConnectionState === 'checking') {
                         console.log('⏰ ICE checking timeout - attempting restart');
-                        if (window.showConnectionStatus) {
-                            window.showConnectionStatus('🔄 Connection slow, retrying...', 'info');
-                        }
                         restartIce();
                     }
                 }, CONFIG.ICE_TIMEOUT);
@@ -128,19 +160,12 @@ window.createPeerConnection = async function(targetUsername, isCaller = true) {
             case 'connected':
             case 'completed':
                 console.log('✅ ICE connection established');
-                if (window.clearConnectionStatus) {
-                    window.clearConnectionStatus();
-                }
                 clearTimeout(CONFIG.connectionTimeout);
                 CONFIG.iceRestartAttempts = 0;
-                CONFIG.reconnectionAttempts = 0;
                 break;
                 
             case 'disconnected':
                 console.log('⚠️ ICE disconnected - attempting recovery');
-                if (window.showConnectionStatus) {
-                    window.showConnectionStatus('⚠️ Connection lost, reconnecting...', 'info');
-                }
                 setTimeout(() => {
                     if (CONFIG.peerConnection?.iceConnectionState === 'disconnected') {
                         restartIce();
@@ -150,9 +175,6 @@ window.createPeerConnection = async function(targetUsername, isCaller = true) {
                 
             case 'failed':
                 console.log('❌ ICE failed');
-                if (window.showConnectionStatus) {
-                    window.showConnectionStatus('❌ Connection failed, reconnecting...', 'error');
-                }
                 restartIce();
                 break;
         }
@@ -165,29 +187,18 @@ window.createPeerConnection = async function(targetUsername, isCaller = true) {
         if (state === 'connected') {
             CONFIG.isInCall = true;
             clearTimeout(CONFIG.connectionTimeout);
-            if (window.clearConnectionStatus) {
-                window.clearConnectionStatus();
-            }
             
-            // Start enhanced monitoring when connected
-            startICEMonitoring();
+            // Start network monitoring when connected
             startNetworkMonitoring();
         } else if (state === 'failed') {
             console.log('❌ Connection failed');
             if (CONFIG.iceRestartAttempts < CONFIG.MAX_ICE_RESTART_ATTEMPTS) {
-                if (window.showConnectionStatus) {
-                    window.showConnectionStatus('🔄 Reconnecting...', 'info');
-                }
                 restartIce();
             } else {
-                if (window.showConnectionStatus) {
-                    window.showConnectionStatus('❌ Call failed - connection lost', 'error');
+                if (window.showStatusModal) {
+                    window.showStatusModal('❌ Call Failed', 'Connection failed after multiple attempts', true);
                 }
                 if (window.hangup) window.hangup('max_restarts_reached');
-            }
-        } else if (state === 'disconnected') {
-            if (window.showConnectionStatus) {
-                window.showConnectionStatus('⚠️ Connection interrupted, reconnecting...', 'info');
             }
         }
     };
@@ -195,60 +206,24 @@ window.createPeerConnection = async function(targetUsername, isCaller = true) {
     return CONFIG.peerConnection;
 };
 
-// ==================== ICE MONITORING ====================
-function startICEMonitoring() {
-    // Clear any existing interval
-    if (CONFIG.iceMonitorInterval) {
-        clearInterval(CONFIG.iceMonitorInterval);
-        CONFIG.iceMonitorInterval = null;
-    }
-    
-    CONFIG.iceMonitorInterval = setInterval(() => {
-        if (!CONFIG.peerConnection || !CONFIG.isInCall) {
-            if (CONFIG.iceMonitorInterval) {
-                clearInterval(CONFIG.iceMonitorInterval);
-                CONFIG.iceMonitorInterval = null;
-            }
-            return;
-        }
-        
-        const iceState = CONFIG.peerConnection.iceConnectionState;
-        const connectionState = CONFIG.peerConnection.connectionState;
-        
-        // Log state every 10th check to reduce noise
-        if (Math.random() < 0.1) {
-            console.log(`📊 ICE Monitor: ${iceState}, Connection: ${connectionState}`);
-        }
-        
-        // If we're in a call but connection seems dead, attempt recovery
-        if ((iceState === 'failed' || iceState === 'disconnected') && 
-            CONFIG.isInCall && 
-            CONFIG.iceRestartAttempts < CONFIG.MAX_ICE_RESTART_ATTEMPTS) {
-            console.warn(`⚠️ ICE Monitor detected ${iceState}, attempting recovery...`);
-            if (window.showConnectionStatus) {
-                window.showConnectionStatus('🔄 Connection unstable, reconnecting...', 'info');
-            }
-            restartIce();
-        }
-    }, CONFIG.ICE_MONITOR_INTERVAL);
-}
-
 // ==================== NETWORK QUALITY MONITORING ====================
-let lastPacketLoss = 0;
+let networkMonitorInterval = null;
+let qualityReduced = false;
+let originalVideoConstraints = null;
 let qualityRestoreTimer = null;
 
 function startNetworkMonitoring() {
     // Clear any existing interval
-    if (CONFIG.networkMonitorInterval) {
-        clearInterval(CONFIG.networkMonitorInterval);
-        CONFIG.networkMonitorInterval = null;
+    if (networkMonitorInterval) {
+        clearInterval(networkMonitorInterval);
+        networkMonitorInterval = null;
     }
     
-    CONFIG.networkMonitorInterval = setInterval(async () => {
+    networkMonitorInterval = setInterval(async () => {
         if (!CONFIG.peerConnection || !CONFIG.isInCall) {
-            if (CONFIG.networkMonitorInterval) {
-                clearInterval(CONFIG.networkMonitorInterval);
-                CONFIG.networkMonitorInterval = null;
+            if (networkMonitorInterval) {
+                clearInterval(networkMonitorInterval);
+                networkMonitorInterval = null;
             }
             return;
         }
@@ -256,66 +231,42 @@ function startNetworkMonitoring() {
         try {
             const stats = await CONFIG.peerConnection.getStats();
             let packetLoss = 0;
-            let currentBitrate = 0;
             
             stats.forEach(report => {
                 if (report.type === 'inbound-rtp' && report.kind === 'video') {
                     packetLoss = report.packetsLost || 0;
                 }
-                if (report.type === 'candidate-pair' && report.nominated === true) {
-                    currentBitrate = report.bytesReceived / 1000;
-                }
             });
             
-            // Log network quality periodically
-            if (Math.random() < 0.05) {
-                console.log(`📊 Network: packet loss=${packetLoss}, bitrate=${currentBitrate}KB/s`);
+            // Log packet loss occasionally
+            if (Math.random() < 0.1) {
+                console.log(`📊 Packet loss: ${packetLoss}`);
             }
             
             // Check if packet loss is high
             if (packetLoss > CONFIG.PACKET_LOSS_THRESHOLD && CONFIG.localStream) {
-                if (!CONFIG.qualityReduced) {
+                if (!qualityReduced) {
                     console.warn(`⚠️ High packet loss: ${packetLoss}%`);
-                    if (window.showConnectionStatus) {
-                        window.showConnectionStatus('⚠️ Poor connection quality, reducing video...', 'info');
-                    }
                     reduceVideoQuality();
-                    CONFIG.qualityReduced = true;
-                    
-                    // Clear the status message after 3 seconds
-                    setTimeout(() => {
-                        if (window.clearConnectionStatus && CONFIG.qualityReduced === true) {
-                            // Don't clear if we're still having issues
-                            if (packetLoss <= CONFIG.PACKET_LOSS_THRESHOLD) {
-                                window.clearConnectionStatus();
-                            }
-                        }
-                    }, 3000);
+                    qualityReduced = true;
                 }
             } 
             // Check if quality should be restored
-            else if (packetLoss <= CONFIG.PACKET_LOSS_THRESHOLD && CONFIG.qualityReduced) {
-                // Clear any pending restore timer
+            else if (packetLoss <= CONFIG.PACKET_LOSS_THRESHOLD && qualityReduced) {
                 if (qualityRestoreTimer) {
                     clearTimeout(qualityRestoreTimer);
                 }
                 
-                // Wait 5 seconds of good connection before restoring
                 qualityRestoreTimer = setTimeout(() => {
                     restoreVideoQuality();
-                    CONFIG.qualityReduced = false;
+                    qualityReduced = false;
                     qualityRestoreTimer = null;
-                    
-                    if (window.showConnectionStatus) {
-                        window.showConnectionStatus('✅ Connection quality restored', 'success');
-                    }
+                    console.log('✅ Video quality restored');
                 }, 5000);
             }
             
-            lastPacketLoss = packetLoss;
-            
         } catch (error) {
-            console.error('Failed to get network stats:', error);
+            // Silently fail - stats collection can error occasionally
         }
     }, 5000);
 }
@@ -329,9 +280,9 @@ async function reduceVideoQuality() {
     
     try {
         // Store original constraints if not already stored
-        if (!CONFIG.originalVideoConstraints) {
+        if (!originalVideoConstraints) {
             const settings = videoTrack.getSettings();
-            CONFIG.originalVideoConstraints = {
+            originalVideoConstraints = {
                 width: settings.width || 1280,
                 height: settings.height || 720,
                 frameRate: settings.frameRate || 30
@@ -359,25 +310,23 @@ async function restoreVideoQuality() {
     if (!videoTrack) return;
     
     try {
-        // Restore original quality
         const constraints = {
-            width: { ideal: CONFIG.originalVideoConstraints?.width || 1280 },
-            height: { ideal: CONFIG.originalVideoConstraints?.height || 720 },
-            frameRate: { ideal: CONFIG.originalVideoConstraints?.frameRate || 30 }
+            width: { ideal: originalVideoConstraints?.width || 1280 },
+            height: { ideal: originalVideoConstraints?.height || 720 },
+            frameRate: { ideal: originalVideoConstraints?.frameRate || 30 }
         };
         
         await videoTrack.applyConstraints(constraints);
-        console.log('📹 Restored video quality - network conditions improved');
+        console.log('📹 Restored video quality');
     } catch (error) {
         console.error('Failed to restore video quality:', error);
     }
 }
 
 // ==================== CAMERA SWITCHING ====================
-let currentFacingMode = 'user'; // 'user' = front camera, 'environment' = rear camera
+let currentFacingMode = 'user';
 let hasMultipleCameras = false;
 
-// Initialize camera detection
 window.initCameraDetection = async function() {
     try {
         console.log('📷 Detecting available cameras...');
@@ -388,7 +337,6 @@ window.initCameraDetection = async function() {
         console.log(`📷 Found ${videoDevices.length} camera(s):`, 
             videoDevices.map(d => d.label || 'Unnamed').join(', '));
         
-        // Update UI if camera switch button exists
         updateCameraButtonVisibility();
         
         return videoDevices;
@@ -398,7 +346,6 @@ window.initCameraDetection = async function() {
     }
 };
 
-// Update camera button visibility
 function updateCameraButtonVisibility() {
     const switchBtn = document.getElementById('switch-camera-btn');
     if (switchBtn) {
@@ -411,7 +358,6 @@ function updateCameraButtonVisibility() {
     }
 }
 
-// Switch between front and rear camera
 window.switchCamera = async function() {
     if (!hasMultipleCameras) {
         alert('No alternate camera available');
@@ -425,18 +371,14 @@ window.switchCamera = async function() {
     
     console.log('🔄 Switching camera from', currentFacingMode);
     
-    // Toggle facing mode
     const newFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
     
     try {
-        // Get current video track settings to preserve resolution
         const videoTrack = CONFIG.localStream.getVideoTracks()[0];
         const settings = videoTrack.getSettings();
         
-        // Stop all tracks in current stream
         CONFIG.localStream.getTracks().forEach(track => track.stop());
         
-        // Request new stream with desired camera
         const constraints = {
             audio: true,
             video: {
@@ -451,15 +393,12 @@ window.switchCamera = async function() {
         
         const newStream = await navigator.mediaDevices.getUserMedia(constraints);
         
-        // Update CONFIG with new stream
         CONFIG.localStream = newStream;
         
-        // Update video element
         if (window.dom && window.dom.localVideo) {
             window.dom.localVideo.srcObject = newStream;
         }
         
-        // If in a call, replace tracks in peer connection
         if (CONFIG.peerConnection && CONFIG.isInCall) {
             console.log('🔄 Updating peer connection with new camera');
             
@@ -487,7 +426,6 @@ window.switchCamera = async function() {
         currentFacingMode = newFacingMode;
         console.log('✅ Camera switched to', currentFacingMode === 'user' ? 'front' : 'rear');
         
-        // Show feedback
         if (window.showStatusModal) {
             window.showStatusModal(
                 '📷 Camera Switched',
@@ -502,7 +440,6 @@ window.switchCamera = async function() {
     } catch (error) {
         console.error('❌ Failed to switch camera:', error);
         
-        // Try to recover original stream
         try {
             console.log('Attempting to recover original camera...');
             const fallbackStream = await navigator.mediaDevices.getUserMedia({
@@ -522,79 +459,18 @@ window.switchCamera = async function() {
     }
 };
 
-async function restartIce() {
-    if (CONFIG.iceRestartAttempts >= CONFIG.MAX_ICE_RESTART_ATTEMPTS) {
-        console.log('❌ Max ICE restart attempts reached');
-        if (window.showConnectionStatus) {
-            window.showConnectionStatus('❌ Cannot recover connection, call may end', 'error');
-        }
-        return;
+// ==================== STOP MONITORING ====================
+window.stopNetworkMonitoring = function() {
+    if (networkMonitorInterval) {
+        clearInterval(networkMonitorInterval);
+        networkMonitorInterval = null;
     }
-    
-    CONFIG.iceRestartAttempts++;
-    console.log(`🔄 ICE restart attempt ${CONFIG.iceRestartAttempts}/${CONFIG.MAX_ICE_RESTART_ATTEMPTS}`);
-    
-    try {
-        const offer = await CONFIG.peerConnection.createOffer({ iceRestart: true });
-        await CONFIG.peerConnection.setLocalDescription(offer);
-        
-        await db.collection('calls').doc(CONFIG.currentCallId).update({
-            offer: {
-                type: offer.type,
-                sdp: offer.sdp
-            },
-            restartAttempt: CONFIG.iceRestartAttempts,
-            timestamp: firebase.firestore.FieldValue.serverTimestamp()
-        });
-        
-        console.log('📤 ICE restart offer sent');
-        
-    } catch (error) {
-        console.log(`❌ ICE restart failed: ${error.message}`);
-    }
-}
-
-// ==================== STOP ALL MONITORING ====================
-window.stopAllMonitoring = function() {
-    console.log('🛑 Stopping all connection monitoring');
-    
-    if (CONFIG.iceMonitorInterval) {
-        clearInterval(CONFIG.iceMonitorInterval);
-        CONFIG.iceMonitorInterval = null;
-    }
-    
-    if (CONFIG.networkMonitorInterval) {
-        clearInterval(CONFIG.networkMonitorInterval);
-        CONFIG.networkMonitorInterval = null;
-    }
-    
-    if (CONFIG.reconnectionTimeout) {
-        clearTimeout(CONFIG.reconnectionTimeout);
-        CONFIG.reconnectionTimeout = null;
-    }
-    
     if (qualityRestoreTimer) {
         clearTimeout(qualityRestoreTimer);
         qualityRestoreTimer = null;
     }
-    
-    if (window.clearConnectionStatus) {
-        window.clearConnectionStatus();
-    }
-    
-    CONFIG.reconnectionAttempts = 0;
-    CONFIG.iceRestartAttempts = 0;
-    CONFIG.qualityReduced = false;
+    qualityReduced = false;
 };
 
 // Make functions available globally
-window.stopAllMonitoring = stopAllMonitoring;
-
-// ==================== CONFIG ADDITIONS ====================
-// Add to CONFIG if not already present
-if (typeof CONFIG.qualityReduced === 'undefined') {
-    CONFIG.qualityReduced = false;
-}
-if (typeof CONFIG.originalVideoConstraints === 'undefined') {
-    CONFIG.originalVideoConstraints = null;
-}
+window.stopNetworkMonitoring = window.stopNetworkMonitoring;
