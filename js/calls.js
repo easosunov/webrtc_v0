@@ -106,6 +106,84 @@ window.cleanupStaleCalls = async function() {
     }
 };
 
+// ==================== EXPONENTIAL BACKOFF RECONNECTION ====================
+async function attemptReconnection() {
+    if (!CONFIG.currentCallId || !CONFIG.isInCall) {
+        console.log('No active call to reconnect');
+        return;
+    }
+    
+    if (CONFIG.reconnectionAttempts >= CONFIG.MAX_RECONNECTION_ATTEMPTS) {
+        console.log('❌ Max reconnection attempts reached, ending call');
+        window.showConnectionStatusMessage('❌ Connection lost, call ended', 'error');
+        setTimeout(() => {
+            if (window.hangup) window.hangup('reconnection_failed');
+        }, 2000);
+        return;
+    }
+    
+    const delay = Math.min(
+        CONFIG.RECONNECTION_BASE_DELAY * Math.pow(2, CONFIG.reconnectionAttempts),
+        CONFIG.RECONNECTION_MAX_DELAY
+    );
+    
+    console.log(`🔄 Reconnection attempt ${CONFIG.reconnectionAttempts + 1}/${CONFIG.MAX_RECONNECTION_ATTEMPTS} in ${delay}ms`);
+    window.showConnectionStatusMessage(`🔄 Reconnecting (attempt ${CONFIG.reconnectionAttempts + 1})...`, 'info');
+    
+    CONFIG.reconnectionTimeout = setTimeout(async () => {
+        try {
+            // Check if call still exists
+            const callDoc = await db.collection('calls').doc(CONFIG.currentCallId).get();
+            if (!callDoc.exists) {
+                console.log('Call no longer exists, aborting reconnection');
+                window.clearConnectionStatusMessage();
+                return;
+            }
+            
+            const callData = callDoc.data();
+            
+            // Try to restore connection
+            if (callData.answer && CONFIG.peerConnection) {
+                console.log('Attempting to restore peer connection...');
+                
+                try {
+                    // Create new offer with ICE restart
+                    const offer = await CONFIG.peerConnection.createOffer({ iceRestart: true });
+                    await CONFIG.peerConnection.setLocalDescription(offer);
+                    
+                    // Update call in Firestore with new offer
+                    await db.collection('calls').doc(CONFIG.currentCallId).update({
+                        offer: {
+                            type: offer.type,
+                            sdp: offer.sdp
+                        },
+                        restartAttempt: (callData.restartAttempt || 0) + 1,
+                        lastReconnectAttempt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    
+                    console.log('✅ Reconnection offer sent');
+                    CONFIG.reconnectionAttempts = 0;
+                    window.clearConnectionStatusMessage();
+                    
+                } catch (peerError) {
+                    console.error('Failed to restart ICE:', peerError);
+                    CONFIG.reconnectionAttempts++;
+                    attemptReconnection();
+                }
+            } else {
+                console.log('No answer available, waiting...');
+                CONFIG.reconnectionAttempts++;
+                attemptReconnection();
+            }
+            
+        } catch (error) {
+            console.error('Reconnection failed:', error);
+            CONFIG.reconnectionAttempts++;
+            attemptReconnection();
+        }
+    }, delay);
+}
+
 // ==================== CALL FUNCTIONS ====================
 window.callUser = async function(targetUsername) {
     if (!CONFIG.localStream) {
@@ -126,6 +204,7 @@ window.callUser = async function(targetUsername) {
         CONFIG.currentCallPartner = targetUsername;
         CONFIG.callStartTime = Date.now();
         CONFIG.callTimeout = null;
+        CONFIG.reconnectionAttempts = 0;
         
         // Enable hangup button immediately so user can cancel
         if (window.dom && window.dom.hangupBtn) {
@@ -187,6 +266,7 @@ window.callUser = async function(targetUsername) {
                 }
                 
                 updateAllCallButtons(targetUsername, 'incall');
+                window.clearConnectionStatusMessage();
                 
                 CONFIG.peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer))
                     .catch(err => console.log(`❌ Error setting remote description: ${err.message}`));
@@ -244,6 +324,7 @@ window.answerCall = async function(callId, callerId, offer) {
         CONFIG.isInCall = true;
         CONFIG.currentCallId = callId;
         CONFIG.currentCallPartner = callerId;
+        CONFIG.reconnectionAttempts = 0;
         
         await window.createPeerConnection(callerId, false);
         
@@ -266,7 +347,6 @@ window.answerCall = async function(callId, callerId, offer) {
         // Update all buttons - disable all and set the caller to "In call"
         updateAllCallButtons(callerId, 'incall');
         
-        // ===== INSERT THE STATUS MODAL CODE HERE =====
         // Show success message briefly
         if (window.showStatusModal) {
             window.showStatusModal('✅ Call Connected', 'You are now connected', false);
@@ -274,7 +354,6 @@ window.answerCall = async function(callId, callerId, offer) {
                 window.hideStatusModal();
             }, 2000);
         }
-        // ===== END OF INSERTED CODE =====
         
         db.collection('ice-candidates')
             .where('callId', '==', callId)
@@ -320,7 +399,6 @@ function updateAllCallButtons(partnerUsername, state) {
         } else {
             // Other users - disabled but with no special text
             button.disabled = true;
-            // Keep original text or set to empty? We'll keep "Call" but disabled
         }
     });
 }
@@ -662,9 +740,19 @@ window.hangup = async function(reason = 'user_initiated') {
     if (window.stopRingtone) window.stopRingtone();
     stopRingbackTone();
     
+    // Stop all monitoring
+    if (window.stopAllMonitoring) {
+        window.stopAllMonitoring();
+    }
+    
     if (CONFIG.callTimeout) {
         clearTimeout(CONFIG.callTimeout);
         CONFIG.callTimeout = null;
+    }
+    
+    if (CONFIG.reconnectionTimeout) {
+        clearTimeout(CONFIG.reconnectionTimeout);
+        CONFIG.reconnectionTimeout = null;
     }
     
     if (CONFIG.currentCallId) {
@@ -708,6 +796,7 @@ window.hangup = async function(reason = 'user_initiated') {
     CONFIG.currentCallId = null;
     CONFIG.currentCallPartner = null;
     CONFIG.iceRestartAttempts = 0;
+    CONFIG.reconnectionAttempts = 0;
     
     if (window.dom && window.dom.remoteVideo) {
         window.dom.remoteVideo.srcObject = null;
@@ -722,21 +811,19 @@ window.hangup = async function(reason = 'user_initiated') {
     
     if (window.loadUsers) window.loadUsers();
     
-setTimeout(async () => {
-    console.log('🧹 Running post-call cleanups...');
-    
-    // Clean up old calls first (keep only latest per user)
-    if (window.cleanupOldCallsKeepLatest) {
-        await window.cleanupOldCallsKeepLatest();
-    }
-    
-    // Then clean up orphaned ice-candidates (delete any without a call)
-    if (window.cleanupOrphanedIceCandidates) {
-        await window.cleanupOrphanedIceCandidates();
-    }
-}, 3000); // Increased to 3 seconds for better timing
-
-
+    setTimeout(async () => {
+        console.log('🧹 Running post-call cleanups...');
+        
+        // Clean up old calls first (keep only latest per user)
+        if (window.cleanupOldCallsKeepLatest) {
+            await window.cleanupOldCallsKeepLatest();
+        }
+        
+        // Then clean up orphaned ice-candidates (delete any without a call)
+        if (window.cleanupOrphanedIceCandidates) {
+            await window.cleanupOrphanedIceCandidates();
+        }
+    }, 3000);
 };
 
 // ==================== AGGRESSIVE ICE-CANDIDATES CLEANUP ====================
