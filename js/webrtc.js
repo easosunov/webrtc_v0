@@ -53,6 +53,7 @@ window.createPeerConnection = async function(targetUsername, isCaller = true) {
     CONFIG.targetUsername = targetUsername;
     CONFIG.isCaller = isCaller;
     CONFIG.iceRestartAttempts = 0;
+    CONFIG.reconnectionAttempts = 0;
     
     // Load TURN servers
     const turnServers = await window.loadTurnServers();
@@ -83,6 +84,9 @@ window.createPeerConnection = async function(targetUsername, isCaller = true) {
         console.log('✅ Remote stream received');
         if (window.dom && window.dom.hangupBtn) window.dom.hangupBtn.disabled = false;
         clearTimeout(CONFIG.connectionTimeout);
+        
+        // Clear any reconnection status when stream is received
+        window.clearConnectionStatusMessage();
     };
     
     CONFIG.peerConnection.onicecandidate = (event) => {
@@ -104,9 +108,11 @@ window.createPeerConnection = async function(targetUsername, isCaller = true) {
         
         switch(state) {
             case 'checking':
+                window.showConnectionStatusMessage('🔄 Connecting...', 'info');
                 CONFIG.connectionTimeout = setTimeout(() => {
                     if (CONFIG.peerConnection?.iceConnectionState === 'checking') {
                         console.log('⏰ ICE checking timeout - attempting restart');
+                        window.showConnectionStatusMessage('🔄 Connection slow, retrying...', 'info');
                         restartIce();
                     }
                 }, CONFIG.ICE_TIMEOUT);
@@ -115,12 +121,15 @@ window.createPeerConnection = async function(targetUsername, isCaller = true) {
             case 'connected':
             case 'completed':
                 console.log('✅ ICE connection established');
+                window.clearConnectionStatusMessage();
                 clearTimeout(CONFIG.connectionTimeout);
                 CONFIG.iceRestartAttempts = 0;
+                CONFIG.reconnectionAttempts = 0;
                 break;
                 
             case 'disconnected':
                 console.log('⚠️ ICE disconnected - attempting recovery');
+                window.showConnectionStatusMessage('⚠️ Connection lost, reconnecting...', 'info');
                 setTimeout(() => {
                     if (CONFIG.peerConnection?.iceConnectionState === 'disconnected') {
                         restartIce();
@@ -130,6 +139,7 @@ window.createPeerConnection = async function(targetUsername, isCaller = true) {
                 
             case 'failed':
                 console.log('❌ ICE failed');
+                window.showConnectionStatusMessage('❌ Connection failed, reconnecting...', 'error');
                 restartIce();
                 break;
         }
@@ -142,21 +152,138 @@ window.createPeerConnection = async function(targetUsername, isCaller = true) {
         if (state === 'connected') {
             CONFIG.isInCall = true;
             clearTimeout(CONFIG.connectionTimeout);
+            window.clearConnectionStatusMessage();
+            
+            // Start enhanced monitoring when connected
+            startICEMonitoring();
+            startNetworkMonitoring();
         } else if (state === 'failed') {
             console.log('❌ Connection failed');
             if (CONFIG.iceRestartAttempts < CONFIG.MAX_ICE_RESTART_ATTEMPTS) {
+                window.showConnectionStatusMessage('🔄 Reconnecting...', 'info');
                 restartIce();
             } else {
-                if (window.showStatusModal) {
-                    window.showStatusModal('❌ Call Failed', 'Connection failed after multiple attempts', true);
-                }
+                window.showConnectionStatusMessage('❌ Call failed - connection lost', 'error');
                 if (window.hangup) window.hangup('max_restarts_reached');
             }
+        } else if (state === 'disconnected') {
+            window.showConnectionStatusMessage('⚠️ Connection interrupted, reconnecting...', 'info');
         }
     };
     
     return CONFIG.peerConnection;
 };
+
+// ==================== ICE MONITORING ====================
+function startICEMonitoring() {
+    // Clear any existing interval
+    if (CONFIG.iceMonitorInterval) {
+        clearInterval(CONFIG.iceMonitorInterval);
+        CONFIG.iceMonitorInterval = null;
+    }
+    
+    CONFIG.iceMonitorInterval = setInterval(() => {
+        if (!CONFIG.peerConnection || !CONFIG.isInCall) {
+            if (CONFIG.iceMonitorInterval) {
+                clearInterval(CONFIG.iceMonitorInterval);
+                CONFIG.iceMonitorInterval = null;
+            }
+            return;
+        }
+        
+        const iceState = CONFIG.peerConnection.iceConnectionState;
+        const connectionState = CONFIG.peerConnection.connectionState;
+        
+        // Log state every 10th check to reduce noise
+        if (Math.random() < 0.1) {
+            console.log(`📊 ICE Monitor: ${iceState}, Connection: ${connectionState}`);
+        }
+        
+        // If we're in a call but connection seems dead, attempt recovery
+        if ((iceState === 'failed' || iceState === 'disconnected') && 
+            CONFIG.isInCall && 
+            CONFIG.iceRestartAttempts < CONFIG.MAX_ICE_RESTART_ATTEMPTS) {
+            console.warn(`⚠️ ICE Monitor detected ${iceState}, attempting recovery...`);
+            window.showConnectionStatusMessage('🔄 Connection unstable, reconnecting...', 'info');
+            restartIce();
+        }
+    }, CONFIG.ICE_MONITOR_INTERVAL);
+}
+
+// ==================== NETWORK QUALITY MONITORING ====================
+function startNetworkMonitoring() {
+    // Clear any existing interval
+    if (CONFIG.networkMonitorInterval) {
+        clearInterval(CONFIG.networkMonitorInterval);
+        CONFIG.networkMonitorInterval = null;
+    }
+    
+    CONFIG.networkMonitorInterval = setInterval(async () => {
+        if (!CONFIG.peerConnection || !CONFIG.isInCall) {
+            if (CONFIG.networkMonitorInterval) {
+                clearInterval(CONFIG.networkMonitorInterval);
+                CONFIG.networkMonitorInterval = null;
+            }
+            return;
+        }
+        
+        try {
+            const stats = await CONFIG.peerConnection.getStats();
+            let packetLoss = 0;
+            let currentBitrate = 0;
+            
+            stats.forEach(report => {
+                if (report.type === 'inbound-rtp' && report.kind === 'video') {
+                    packetLoss = report.packetsLost || 0;
+                }
+                if (report.type === 'candidate-pair' && report.nominated === true) {
+                    currentBitrate = report.bytesReceived / 1000;
+                }
+            });
+            
+            // Log network quality periodically
+            if (Math.random() < 0.05) {
+                console.log(`📊 Network: packet loss=${packetLoss}, bitrate=${currentBitrate}KB/s`);
+            }
+            
+            // If packet loss is high, show warning and try to reduce quality
+            if (packetLoss > CONFIG.PACKET_LOSS_THRESHOLD && CONFIG.localStream) {
+                console.warn(`⚠️ High packet loss: ${packetLoss}%`);
+                window.showConnectionStatusMessage('⚠️ Poor connection quality, reducing video...', 'info');
+                reduceVideoQuality();
+                
+                // Clear the message after 3 seconds
+                setTimeout(() => {
+                    window.clearConnectionStatusMessage();
+                }, 3000);
+            }
+            
+        } catch (error) {
+            console.error('Failed to get network stats:', error);
+        }
+    }, 5000);
+}
+
+// ==================== REDUCE VIDEO QUALITY ====================
+async function reduceVideoQuality() {
+    if (!CONFIG.localStream) return;
+    
+    const videoTrack = CONFIG.localStream.getVideoTracks()[0];
+    if (!videoTrack) return;
+    
+    try {
+        const constraints = {
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+            frameRate: { ideal: 15 }
+        };
+        
+        await videoTrack.applyConstraints(constraints);
+        console.log('📹 Reduced video quality due to network conditions');
+    } catch (error) {
+        console.error('Failed to reduce video quality:', error);
+    }
+}
 
 // ==================== CAMERA SWITCHING ====================
 let currentFacingMode = 'user'; // 'user' = front camera, 'environment' = rear camera
@@ -310,6 +437,7 @@ window.switchCamera = async function() {
 async function restartIce() {
     if (CONFIG.iceRestartAttempts >= CONFIG.MAX_ICE_RESTART_ATTEMPTS) {
         console.log('❌ Max ICE restart attempts reached');
+        window.showConnectionStatusMessage('❌ Cannot recover connection, call may end', 'error');
         return;
     }
     
@@ -335,3 +463,70 @@ async function restartIce() {
         console.log(`❌ ICE restart failed: ${error.message}`);
     }
 }
+
+// ==================== STOP ALL MONITORING ====================
+window.stopAllMonitoring = function() {
+    console.log('🛑 Stopping all connection monitoring');
+    
+    if (CONFIG.iceMonitorInterval) {
+        clearInterval(CONFIG.iceMonitorInterval);
+        CONFIG.iceMonitorInterval = null;
+    }
+    
+    if (CONFIG.networkMonitorInterval) {
+        clearInterval(CONFIG.networkMonitorInterval);
+        CONFIG.networkMonitorInterval = null;
+    }
+    
+    if (CONFIG.reconnectionTimeout) {
+        clearTimeout(CONFIG.reconnectionTimeout);
+        CONFIG.reconnectionTimeout = null;
+    }
+    
+    window.clearConnectionStatusMessage();
+    
+    CONFIG.reconnectionAttempts = 0;
+    CONFIG.iceRestartAttempts = 0;
+};
+
+// ==================== CONNECTION STATUS MESSAGES ====================
+window.showConnectionStatusMessage = function(message, type = 'info') {
+    // Don't show duplicate messages
+    if (CONFIG.lastStatusMessage === message) return;
+    
+    CONFIG.lastStatusMessage = message;
+    
+    // Clear any existing timeout
+    if (CONFIG.statusMessageTimeout) {
+        clearTimeout(CONFIG.statusMessageTimeout);
+    }
+    
+    // Use the existing status message display in users panel
+    const statusDiv = document.getElementById('login-status');
+    if (statusDiv) {
+        statusDiv.textContent = message;
+        statusDiv.className = `status-message ${type}`;
+        statusDiv.style.display = 'block';
+    }
+};
+
+window.clearConnectionStatusMessage = function() {
+    CONFIG.lastStatusMessage = null;
+    
+    const statusDiv = document.getElementById('login-status');
+    if (statusDiv) {
+        statusDiv.textContent = '';
+        statusDiv.className = 'status-message';
+        statusDiv.style.display = 'none';
+    }
+    
+    if (CONFIG.statusMessageTimeout) {
+        clearTimeout(CONFIG.statusMessageTimeout);
+        CONFIG.statusMessageTimeout = null;
+    }
+};
+
+// Make functions available globally
+window.stopAllMonitoring = stopAllMonitoring;
+window.showConnectionStatusMessage = showConnectionStatusMessage;
+window.clearConnectionStatusMessage = clearConnectionStatusMessage;
