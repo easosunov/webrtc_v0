@@ -24,15 +24,42 @@ const CONFIG = {
     isInCall: false,
     currentCallId: null,
     currentCallPartner: null,
-	callTimeout: null,
-	iceRestartAttempts: 0,
+    callTimeout: null,
+    iceRestartAttempts: 0,
     MAX_ICE_RESTART_ATTEMPTS: 3,
     connectionTimeout: null,
     ICE_TIMEOUT: 10000,
     reconnectTimer: null,
     targetUsername: null,
     isCaller: false,
-    currentIncomingCall: null
+    currentIncomingCall: null,
+    
+    // ===== NEW: Connection monitoring constants =====
+    // Monitoring intervals (in milliseconds)
+    ICE_MONITOR_INTERVAL: 3000,      // Check ICE state every 3 seconds
+    HEARTBEAT_INTERVAL: 5000,        // Send heartbeat every 5 seconds
+    HEARTBEAT_TIMEOUT: 10000,        // Consider connection dead after 10 seconds without heartbeat
+    
+    // Reconnection settings
+    MAX_RECONNECTION_ATTEMPTS: 5,     // Maximum reconnection attempts before giving up
+    RECONNECTION_BASE_DELAY: 1000,    // Start with 1 second delay
+    RECONNECTION_MAX_DELAY: 30000,    // Max delay of 30 seconds
+    
+    // Network quality thresholds
+    PACKET_LOSS_THRESHOLD: 10,        // Percentage - reduce quality if packet loss > 10%
+    
+    // Monitoring state flags
+    iceMonitorInterval: null,
+    heartbeatInterval: null,
+    heartbeatChannel: null,
+    lastHeartbeat: null,
+    networkMonitorInterval: null,
+    reconnectionAttempts: 0,
+    reconnectionTimeout: null,
+    
+    // Status message tracking
+    lastStatusMessage: null,
+    statusMessageTimeout: null
 };
 
 const TURN_SERVER_URL = 'https://turn-token.easosunov.workers.dev/ice';
