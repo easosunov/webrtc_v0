@@ -12,6 +12,9 @@ function formatDuration(seconds) {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
+// Track whether call log has been added for current call
+let callLogAdded = false;
+
 async function addCallLogEntry(otherUserId, callerId, wasAnswered, duration, wasRejected = false) {
     if (!CONFIG.myUsername || !otherUserId) {
         console.log('❌ Cannot add call log: missing username or otherUserId');
@@ -30,9 +33,8 @@ async function addCallLogEntry(otherUserId, callerId, wasAnswered, duration, was
         console.log('Could not get display name');
     }
     
-    // Build the message based on outcome
+    // Build the message based on outcome - ONE message per call
     let messageText = '';
-    let callIcon = '';
     
     if (wasRejected) {
         if (isCaller) {
@@ -40,14 +42,12 @@ async function addCallLogEntry(otherUserId, callerId, wasAnswered, duration, was
         } else {
             messageText = `📞 Call from ${otherName} → ❌ Rejected`;
         }
-        callIcon = '❌';
     } else if (wasAnswered) {
         if (isCaller) {
             messageText = `📞 You called ${otherName} → ✅ Connected (${formatDuration(duration)})`;
         } else {
             messageText = `📞 Call from ${otherName} → ✅ Connected (${formatDuration(duration)})`;
         }
-        callIcon = '✅';
     } else {
         // Missed call
         if (isCaller) {
@@ -55,7 +55,6 @@ async function addCallLogEntry(otherUserId, callerId, wasAnswered, duration, was
         } else {
             messageText = `📞 Call from ${otherName} → 🔴 Missed`;
         }
-        callIcon = '🔴';
     }
     
     const logData = {
@@ -239,6 +238,7 @@ window.callUser = async function(targetUsername) {
         CONFIG.callTimeout = null;
         CONFIG.callWasAnswered = false;
         CONFIG.callWasRejected = false;
+        callLogAdded = false; // Reset flag for new call
         
         // Enable hangup button immediately so user can cancel
         if (window.dom && window.dom.hangupBtn) {
@@ -381,6 +381,7 @@ window.answerCall = async function(callId, callerId, offer) {
         CONFIG.callStartTime = Date.now();
         CONFIG.callWasAnswered = true;
         CONFIG.callWasRejected = false;
+        callLogAdded = false; // Reset flag for new call
         
         await window.createPeerConnection(callerId, false);
         
@@ -668,10 +669,12 @@ window.hangup = async function(reason = 'user_initiated') {
         CONFIG.callTimeout = null;
     }
     
-    // Add call log at the end of the call - ONE message per call
-    if (CONFIG.currentCallId && CONFIG.currentCallPartner) {
+    // Add call log at the end of the call - ONLY ONCE
+    if (CONFIG.currentCallId && CONFIG.currentCallPartner && !callLogAdded) {
+        callLogAdded = true;
+        
         const duration = CONFIG.callStartTime ? Math.floor((Date.now() - CONFIG.callStartTime) / 1000) : null;
-        const callerId = CONFIG.currentCallId.split('_')[0]; // Extract caller from callId format "caller_callee_timestamp"
+        const callerId = CONFIG.currentCallId.split('_')[0];
         
         // Determine outcome
         if (reason === 'rejected') {
@@ -730,6 +733,11 @@ window.hangup = async function(reason = 'user_initiated') {
     CONFIG.callStartTime = null;
     CONFIG.callWasAnswered = false;
     CONFIG.callWasRejected = false;
+    
+    // Reset the flag after call is fully cleaned up
+    setTimeout(() => {
+        callLogAdded = false;
+    }, 1000);
     
     if (window.dom && window.dom.remoteVideo) {
         window.dom.remoteVideo.srcObject = null;
