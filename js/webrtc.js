@@ -88,6 +88,7 @@ window.createPeerConnection = async function(targetUsername, isCaller = true) {
         console.log('✅ Remote stream received');
         if (window.dom && window.dom.hangupBtn) window.dom.hangupBtn.disabled = false;
         clearTimeout(CONFIG.connectionTimeout);
+        // Do NOT clear status - keep showing current connection state
     };
     
     CONFIG.peerConnection.onicecandidate = (event) => {
@@ -185,6 +186,16 @@ window.createPeerConnection = async function(targetUsername, isCaller = true) {
                     window.showStatusModal('❌ Call Failed', 'Connection failed after multiple attempts', true);
                 }
                 if (window.hangup) window.hangup('max_restarts_reached');
+            }
+        } else if (state === 'disconnected') {
+            // Show disconnected message
+            if (window.showConnectionStatus) {
+                window.showConnectionStatus('⚠️ Connection lost, reconnecting...', 'warning');
+            }
+        } else if (state === 'closed') {
+            // Call was ended - show ended message
+            if (window.showConnectionStatus) {
+                window.showConnectionStatus('📞 Call ended', 'info');
             }
         }
     };
