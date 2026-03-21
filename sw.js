@@ -47,28 +47,52 @@ self.addEventListener('fetch', event => {
   );
 });
 
+
 // ==================== PUSH NOTIFICATION HANDLER ====================
 self.addEventListener('push', event => {
   console.log('📱 Push notification received:', event);
   
   let data = {};
+  let title = '📞 Incoming Call';
+  let body = 'You have an incoming call';
+  let callId = null;
+  let callerId = null;
+  
   try {
     data = event.data ? event.data.json() : {};
-    console.log('📱 Push data:', data);
+    console.log('📱 Push data received:', JSON.stringify(data));
+    
+    // Handle different payload structures
+    if (data.notification) {
+      title = data.notification.title || title;
+      body = data.notification.body || body;
+    } else if (data.title) {
+      title = data.title;
+      body = data.body || body;
+    }
+    
+    // Extract call data
+    if (data.data) {
+      callId = data.data.callId;
+      callerId = data.data.callerId;
+    } else {
+      callId = data.callId;
+      callerId = data.callerId;
+    }
+    
   } catch (e) {
     console.log('Push data parse error:', e);
   }
   
-  const title = data.title || 'WebRTC Communicator';
   const options = {
-    body: data.body || 'Incoming call',
-    icon: '/data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Crect width="100" height="100" fill="%23667eea"/%3E%3Ctext x="50" y="70" font-size="50" text-anchor="middle" fill="white"%3E📞%3C/text%3E%3C/svg%3E',
-    badge: '/data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Crect width="100" height="100" fill="%23667eea"/%3E%3Ctext x="50" y="70" font-size="50" text-anchor="middle" fill="white"%3E📞%3C/text%3E%3C/svg%3E',
+    body: body,
+    icon: 'https://easosunov.github.io/webrtc_v0/favicon.ico',
+    badge: 'https://easosunov.github.io/webrtc_v0/favicon.ico',
     vibrate: [200, 100, 200],
     data: {
-      callId: data.callId,
-      callerId: data.callerId,
-      url: data.url || '/'
+      callId: callId,
+      callerId: callerId,
+      url: '/webrtc_v0/'
     },
     actions: [
       {
@@ -86,6 +110,7 @@ self.addEventListener('push', event => {
     self.registration.showNotification(title, options)
   );
 });
+
 
 // ==================== NOTIFICATION CLICK HANDLER ====================
 self.addEventListener('notificationclick', event => {
