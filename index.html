@@ -930,6 +930,31 @@
             line-height: 1.4;
         }
 
+        /* Enable Push Button */
+        .enable-push-btn {
+            margin-top: 10px;
+            padding: 8px 12px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+            width: 100%;
+            transition: all 0.2s ease;
+        }
+
+        .enable-push-btn:hover {
+            background: #5a67d8;
+            transform: scale(1.02);
+        }
+
+        .enable-push-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
         .key-hint {
             text-align: center;
             margin-top: 10px;
@@ -1179,6 +1204,7 @@
                     <div class="users-panel">
                         <h3>Available Users</h3>
                         <div id="users-container"></div>
+                        <!-- Enable Push Button will be inserted here dynamically -->
                     </div>
                     
                     <!-- Chat Section -->
@@ -1319,42 +1345,39 @@
     <script src="js/apk.js"></script>
     <script src="js/chat.js"></script>
     
-    <!-- Service Worker Registration -->
+    <!-- Service Worker Registration with Push -->
     <script>
-        // Register service worker for PWA
+        // Register service worker for PWA and push
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('/sw.js')
                 .then(registration => {
                     console.log('✅ Service Worker registered successfully');
+                    
+                    // Store registration globally for push subscription
+                    window.swRegistration = registration;
+                    
+                    // Check if we already have a push subscription
+                    registration.pushManager.getSubscription().then(subscription => {
+                        if (subscription) {
+                            console.log('✅ Push subscription exists');
+                            if (window.CONFIG) {
+                                window.CONFIG.pushSubscription = subscription;
+                            }
+                        } else {
+                            console.log('📱 No push subscription yet');
+                        }
+                    }).catch(err => {
+                        console.log('❌ Error checking push subscription:', err);
+                    });
                 })
                 .catch(error => {
                     console.log('❌ Service Worker registration failed:', error);
                 });
+        } else {
+            console.log('❌ Service Worker not supported in this browser');
         }
     </script>
     
-	<!-- Service Worker Registration with Push -->
-	<script>
-		// Register service worker for PWA and push
-		if ('serviceWorker' in navigator) {
-			navigator.serviceWorker.register('/sw.js')
-				.then(registration => {
-					console.log('✅ Service Worker registered successfully');
-					
-					// Check if we already have a push subscription
-					registration.pushManager.getSubscription().then(subscription => {
-						if (subscription) {
-							console.log('✅ Push subscription exists');
-							CONFIG.pushSubscription = subscription;
-						}
-					});
-				})
-				.catch(error => {
-					console.log('❌ Service Worker registration failed:', error);
-				});
-		}
-	</script>
-	
     <!-- Add to Home Screen JavaScript (Simplified) -->
     <script>
         // ==================== ADD TO HOME SCREEN (Simplified) ====================
@@ -1390,6 +1413,29 @@
                 }
             });
         }
+    </script>
+    
+    <!-- Notification Permission Prompt (for Web Push) -->
+    <script>
+        // Check if browser supports notifications and we're not already subscribed
+        setTimeout(() => {
+            // Only show after user is logged in and if notifications supported
+            if (window.CONFIG && window.CONFIG.myUsername && !window.CONFIG.pushSubscription && window.showEnablePushButton) {
+                // Small delay to let the UI load
+                setTimeout(() => {
+                    window.showEnablePushButton();
+                }, 2000);
+            }
+        }, 3000);
+        
+        // Also check when login is complete (event listener)
+        window.addEventListener('login-complete', () => {
+            if (window.CONFIG && window.CONFIG.myUsername && !window.CONFIG.pushSubscription && window.showEnablePushButton) {
+                setTimeout(() => {
+                    window.showEnablePushButton();
+                }, 1000);
+            }
+        });
     </script>
 </body>
 </html>
