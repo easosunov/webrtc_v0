@@ -162,12 +162,16 @@ window.callUser = async function(targetUsername) {
             
             const data = snapshot.data();
             
+            // Check if call was rejected
             if (data.status === 'rejected') {
                 console.log('❌ Call was rejected');
                 stopRingbackTone();
                 if (CONFIG.callTimeout) {
                     clearTimeout(CONFIG.callTimeout);
                     CONFIG.callTimeout = null;
+                }
+                if (window.showConnectionStatus) {
+                    window.showConnectionStatus('📞 Call rejected', 'info');
                 }
                 if (window.showStatusModal) {
                     window.showStatusModal('📢 Call Rejected', 'The call was rejected by the recipient', true);
@@ -177,6 +181,20 @@ window.callUser = async function(targetUsername) {
                 return;
             }
             
+            // Check if call was ended/cancelled by the other user
+            if (data.status === 'ended' || data.status === 'cancelled') {
+                console.log(`📞 Call was ${data.status} by the other user`);
+                if (window.showConnectionStatus) {
+                    window.showConnectionStatus(`📞 Call ended by other user`, 'info');
+                }
+                setTimeout(() => {
+                    window.hangup('remote_ended');
+                }, 1000);
+                unsubscribe();
+                return;
+            }
+            
+            // Check for answer
             if (data.answer && CONFIG.peerConnection && !CONFIG.peerConnection.currentRemoteDescription) {
                 console.log('📥 Received answer');
                 stopRingbackTone();
@@ -273,6 +291,24 @@ window.answerCall = async function(callId, callerId, offer) {
                 window.hideStatusModal();
             }, 2000);
         }
+        
+        // Listen for call status changes (if caller hangs up)
+        const callListener = db.collection('calls').doc(callId).onSnapshot((snapshot) => {
+            if (!snapshot.exists) return;
+            const data = snapshot.data();
+            
+            // If call ended by caller
+            if (data.status === 'ended' || data.status === 'cancelled') {
+                console.log(`📞 Call was ${data.status} by the caller`);
+                if (window.showConnectionStatus) {
+                    window.showConnectionStatus(`📞 Call ended by other user`, 'info');
+                }
+                callListener();
+                setTimeout(() => {
+                    window.hangup('remote_ended');
+                }, 1000);
+            }
+        });
         
         db.collection('ice-candidates')
             .where('callId', '==', callId)
@@ -514,10 +550,10 @@ window.hangup = async function(reason = 'user_initiated') {
     if (window.stopRingtone) window.stopRingtone();
     stopRingbackTone();
     
-	if (window.clearConnectionStatus) {
+    if (window.clearConnectionStatus) {
         window.clearConnectionStatus();
     }
-	
+    
     if (CONFIG.callTimeout) {
         clearTimeout(CONFIG.callTimeout);
         CONFIG.callTimeout = null;
@@ -529,19 +565,21 @@ window.hangup = async function(reason = 'user_initiated') {
             if (callDoc.exists) {
                 const callData = callDoc.data();
                 
-                if (callData.status === 'ringing') {
+                // Only update status if call is still active (not already ended)
+                if (callData.status === 'ringing' || callData.status === 'answered') {
                     if (callData.callerId === CONFIG.myUsername) {
                         await db.collection('calls').doc(CONFIG.currentCallId).update({
                             status: 'cancelled',
                             endedAt: firebase.firestore.FieldValue.serverTimestamp()
                         });
                         console.log('📞 Call cancelled by caller');
+                    } else {
+                        await db.collection('calls').doc(CONFIG.currentCallId).update({
+                            status: 'ended',
+                            endedAt: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                        console.log('📞 Call ended by callee');
                     }
-                } else {
-                    await db.collection('calls').doc(CONFIG.currentCallId).update({
-                        status: 'ended',
-                        endedAt: firebase.firestore.FieldValue.serverTimestamp()
-                    });
                 }
             }
         } catch (err) {
