@@ -12,44 +12,69 @@ function formatDuration(seconds) {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
-async function addCallLogEntry(otherUserId, type, duration) {
+async function addCallLogEntry(otherUserId, callerId, wasAnswered, duration, wasRejected = false) {
     if (!CONFIG.myUsername || !otherUserId) {
         console.log('❌ Cannot add call log: missing username or otherUserId');
         return;
     }
     
-    console.log(`📝 Adding call log: type=${type}, other=${otherUserId}, duration=${duration}`);
-    
     const chatId = getChatId(CONFIG.myUsername, otherUserId);
+    const isCaller = (callerId === CONFIG.myUsername);
+    
+    // Get the other user's display name
+    let otherName = otherUserId;
+    try {
+        const userDoc = await db.collection('users').doc(otherUserId).get();
+        otherName = userDoc.data()?.displayname || otherUserId;
+    } catch (e) {
+        console.log('Could not get display name');
+    }
+    
+    // Build the message based on outcome
+    let messageText = '';
+    let callIcon = '';
+    
+    if (wasRejected) {
+        if (isCaller) {
+            messageText = `📞 You called ${otherName} → ❌ Rejected`;
+        } else {
+            messageText = `📞 Call from ${otherName} → ❌ Rejected`;
+        }
+        callIcon = '❌';
+    } else if (wasAnswered) {
+        if (isCaller) {
+            messageText = `📞 You called ${otherName} → ✅ Connected (${formatDuration(duration)})`;
+        } else {
+            messageText = `📞 Call from ${otherName} → ✅ Connected (${formatDuration(duration)})`;
+        }
+        callIcon = '✅';
+    } else {
+        // Missed call
+        if (isCaller) {
+            messageText = `📞 You called ${otherName} → 🔴 Missed`;
+        } else {
+            messageText = `📞 Call from ${otherName} → 🔴 Missed`;
+        }
+        callIcon = '🔴';
+    }
     
     const logData = {
         type: 'call_log',
-        callType: type,
+        text: messageText,
         timestamp: firebase.firestore.FieldValue.serverTimestamp(),
         duration: duration,
+        callerId: callerId,
+        wasAnswered: wasAnswered,
+        wasRejected: wasRejected,
         senderId: CONFIG.myUsername,
         senderName: CONFIG.myDisplayName
     };
     
-    // Determine message text for last message preview
-    let messageText = '';
-    switch(type) {
-        case 'initiated': messageText = `📞 Call initiated`; break;
-        case 'answered': messageText = `✅ Call connected`; break;
-        case 'ended': messageText = `⏱️ Call ended (${formatDuration(duration)})`; break;
-        case 'rejected': messageText = `❌ Call rejected`; break;
-        case 'missed': messageText = `🔴 Missed call`; break;
-        case 'cancelled': messageText = `📞 Call cancelled`; break;
-    }
-    
     try {
-        // Get or create chat document
         const chatRef = db.collection('chats').doc(chatId);
         
-        // First, ensure chat document exists with participants
         const chatDoc = await chatRef.get();
         if (!chatDoc.exists) {
-            console.log(`📝 Creating chat document: ${chatId}`);
             const userDoc = await db.collection('users').doc(otherUserId).get();
             const otherDisplayName = userDoc.data()?.displayname || otherUserId;
             
@@ -68,22 +93,19 @@ async function addCallLogEntry(otherUserId, type, duration) {
                     [otherUserId]: 0
                 }
             });
+        } else {
+            await chatRef.update({
+                lastMessage: messageText,
+                lastMessageTime: firebase.firestore.FieldValue.serverTimestamp(),
+                lastMessageSender: CONFIG.myUsername,
+                [`unreadCount.${otherUserId}`]: firebase.firestore.FieldValue.increment(1)
+            });
         }
         
-        // Add to messages subcollection - this will create the subcollection
         const messagesRef = chatRef.collection('messages');
-        const newMessageRef = await messagesRef.add(logData);
-        console.log(`✅ Call log added to messages: ${newMessageRef.id}`);
+        await messagesRef.add(logData);
         
-        // Update chat last message
-        await chatRef.update({
-            lastMessage: messageText,
-            lastMessageTime: firebase.firestore.FieldValue.serverTimestamp(),
-            lastMessageSender: CONFIG.myUsername,
-            [`unreadCount.${otherUserId}`]: firebase.firestore.FieldValue.increment(1)
-        });
-        
-        console.log(`✅ Call log complete: ${type} with ${otherUserId}`);
+        console.log(`✅ Call log added: ${messageText}`);
         
     } catch (error) {
         console.error('❌ Error adding call log:', error);
@@ -215,9 +237,8 @@ window.callUser = async function(targetUsername) {
         CONFIG.currentCallPartner = targetUsername;
         CONFIG.callStartTime = Date.now();
         CONFIG.callTimeout = null;
-        
-        // Add call log entry - call initiated
-        await addCallLogEntry(targetUsername, 'initiated', null);
+        CONFIG.callWasAnswered = false;
+        CONFIG.callWasRejected = false;
         
         // Enable hangup button immediately so user can cancel
         if (window.dom && window.dom.hangupBtn) {
@@ -263,7 +284,7 @@ window.callUser = async function(targetUsername) {
                     clearTimeout(CONFIG.callTimeout);
                     CONFIG.callTimeout = null;
                 }
-                addCallLogEntry(targetUsername, 'rejected', null);
+                CONFIG.callWasRejected = true;
                 if (window.showConnectionStatus) {
                     window.showConnectionStatus('📞 Call rejected', 'info');
                 }
@@ -278,8 +299,6 @@ window.callUser = async function(targetUsername) {
             // Check if call was ended/cancelled by the other user
             if (data.status === 'ended' || data.status === 'cancelled') {
                 console.log(`📞 Call was ${data.status} by the other user`);
-                const duration = CONFIG.callStartTime ? Math.floor((Date.now() - CONFIG.callStartTime) / 1000) : null;
-                addCallLogEntry(targetUsername, data.status === 'cancelled' ? 'cancelled' : 'ended', duration);
                 if (window.showConnectionStatus) {
                     window.showConnectionStatus(`📞 Call ended by other user`, 'info');
                 }
@@ -300,7 +319,7 @@ window.callUser = async function(targetUsername) {
                     CONFIG.callTimeout = null;
                 }
                 
-                addCallLogEntry(targetUsername, 'answered', null);
+                CONFIG.callWasAnswered = true;
                 
                 updateAllCallButtons(targetUsername, 'incall');
                 
@@ -327,7 +346,6 @@ window.callUser = async function(targetUsername) {
             if (CONFIG.isInCall && !CONFIG.peerConnection?.currentRemoteDescription) {
                 console.log('⏰ Call timeout - no answer received');
                 stopRingbackTone();
-                addCallLogEntry(targetUsername, 'missed', null);
                 if (window.showStatusModal) {
                     window.showStatusModal('⏰ Call Timeout', 'No answer - call timed out', true);
                 }
@@ -361,6 +379,8 @@ window.answerCall = async function(callId, callerId, offer) {
         CONFIG.currentCallId = callId;
         CONFIG.currentCallPartner = callerId;
         CONFIG.callStartTime = Date.now();
+        CONFIG.callWasAnswered = true;
+        CONFIG.callWasRejected = false;
         
         await window.createPeerConnection(callerId, false);
         
@@ -380,8 +400,6 @@ window.answerCall = async function(callId, callerId, offer) {
         
         console.log('📤 Answer sent');
         
-        await addCallLogEntry(callerId, 'answered', null);
-        
         updateAllCallButtons(callerId, 'incall');
         
         if (window.showStatusModal) {
@@ -397,8 +415,6 @@ window.answerCall = async function(callId, callerId, offer) {
             
             if (data.status === 'ended' || data.status === 'cancelled') {
                 console.log(`📞 Call was ${data.status} by the caller`);
-                const duration = CONFIG.callStartTime ? Math.floor((Date.now() - CONFIG.callStartTime) / 1000) : null;
-                addCallLogEntry(callerId, data.status === 'cancelled' ? 'cancelled' : 'ended', duration);
                 if (window.showConnectionStatus) {
                     window.showConnectionStatus(`📞 Call ended by other user`, 'info');
                 }
@@ -652,11 +668,22 @@ window.hangup = async function(reason = 'user_initiated') {
         CONFIG.callTimeout = null;
     }
     
-    if (CONFIG.currentCallId) {
+    // Add call log at the end of the call - ONE message per call
+    if (CONFIG.currentCallId && CONFIG.currentCallPartner) {
         const duration = CONFIG.callStartTime ? Math.floor((Date.now() - CONFIG.callStartTime) / 1000) : null;
+        const callerId = CONFIG.currentCallId.split('_')[0]; // Extract caller from callId format "caller_callee_timestamp"
         
-        if (CONFIG.currentCallPartner && duration !== null && reason !== 'rejected' && reason !== 'cancelled' && reason !== 'timeout' && reason !== 'remote_ended') {
-            await addCallLogEntry(CONFIG.currentCallPartner, 'ended', duration);
+        // Determine outcome
+        if (reason === 'rejected') {
+            await addCallLogEntry(CONFIG.currentCallPartner, callerId, false, null, true);
+        } else if (reason === 'timeout' || (reason === 'remote_ended' && !CONFIG.callWasAnswered)) {
+            await addCallLogEntry(CONFIG.currentCallPartner, callerId, false, null, false);
+        } else if (reason === 'remote_ended' && CONFIG.callWasAnswered) {
+            await addCallLogEntry(CONFIG.currentCallPartner, callerId, true, duration, false);
+        } else if (reason === 'user_initiated' && CONFIG.callWasAnswered) {
+            await addCallLogEntry(CONFIG.currentCallPartner, callerId, true, duration, false);
+        } else if (reason === 'user_initiated' && !CONFIG.callWasAnswered && !CONFIG.callWasRejected) {
+            await addCallLogEntry(CONFIG.currentCallPartner, callerId, false, null, false);
         }
         
         try {
@@ -701,6 +728,8 @@ window.hangup = async function(reason = 'user_initiated') {
     CONFIG.currentCallPartner = null;
     CONFIG.iceRestartAttempts = 0;
     CONFIG.callStartTime = null;
+    CONFIG.callWasAnswered = false;
+    CONFIG.callWasRejected = false;
     
     if (window.dom && window.dom.remoteVideo) {
         window.dom.remoteVideo.srcObject = null;
