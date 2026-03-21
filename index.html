@@ -924,9 +924,10 @@
 
         .install-status {
             margin-top: 10px;
-            font-size: 11px;
+            font-size: 12px;
             text-align: center;
-            color: rgba(255,255,255,0.8);
+            color: rgba(255,255,255,0.9);
+            line-height: 1.4;
         }
 
         .key-hint {
@@ -1236,7 +1237,7 @@
                     </div>
                     
                     <!-- Add to Home Screen Panel (Android) -->
-                    <div class="install-panel" id="install-panel" style="display: none;">
+                    <div class="install-panel" id="install-panel">
                         <div class="install-header">
                             <span>📱</span>
                             <h4>Add to Home Screen</h4>
@@ -1245,7 +1246,7 @@
                             Install this app on your home screen for easy access.
                         </div>
                         <button id="install-btn" class="install-btn">
-                            ➕ Add to Home Screen
+                            ➕ How to Install
                         </button>
                         <div id="install-status" class="install-status"></div>
                     </div>
@@ -1332,78 +1333,41 @@
         }
     </script>
     
-    <!-- Add to Home Screen JavaScript -->
+    <!-- Add to Home Screen JavaScript (Simplified) -->
     <script>
-        // ==================== ADD TO HOME SCREEN (PWA) ====================
-        let deferredPrompt = null;
-        
+        // ==================== ADD TO HOME SCREEN (Simplified) ====================
+        const installBtn = document.getElementById('install-btn');
+        const installPanel = document.getElementById('install-panel');
+        const installStatus = document.getElementById('install-status');
+
         // Check if app is already installed
         const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
         if (isStandalone) {
             // Already installed - hide panel
-            const installPanel = document.getElementById('install-panel');
             if (installPanel) installPanel.style.display = 'none';
             console.log('📱 App already installed');
         } else {
-            // Not installed - show panel
-            const installPanel = document.getElementById('install-panel');
+            // Not installed - show panel with instructions
             if (installPanel) installPanel.style.display = 'block';
-            console.log('📱 App not installed - showing install panel');
+            if (installStatus) {
+                installStatus.innerHTML = '📱 Tap the menu (⋮) → "Install app" or "Add to Home screen"';
+                installStatus.style.color = '#ffd966';
+            }
+            console.log('📱 App not installed - showing instructions');
         }
-        
-        // Listen for beforeinstallprompt
-        window.addEventListener('beforeinstallprompt', (e) => {
-            e.preventDefault();
-            deferredPrompt = e;
-            console.log('📱 Install prompt available');
-            
-            // Show panel if not already visible
-            const installPanel = document.getElementById('install-panel');
-            if (installPanel) installPanel.style.display = 'block';
-        });
-        
-        // Handle install button click
-        const installBtn = document.getElementById('install-btn');
+
+        // Button click shows reminder
         if (installBtn) {
-            installBtn.addEventListener('click', async () => {
-                if (deferredPrompt) {
-                    // Use the native prompt
-                    deferredPrompt.prompt();
-                    const { outcome } = await deferredPrompt.userChoice;
-                    console.log(`📱 Install result: ${outcome}`);
-                    deferredPrompt = null;
-                    
-                    const statusDiv = document.getElementById('install-status');
-                    if (statusDiv) {
-                        if (outcome === 'accepted') {
-                            statusDiv.textContent = '✅ App installed!';
-                            statusDiv.style.color = '#90EE90';
-                            setTimeout(() => {
-                                const panel = document.getElementById('install-panel');
-                                if (panel) panel.style.display = 'none';
-                            }, 3000);
-                        }
-                    }
-                } else {
-                    // No native prompt, show instructions
-                    const statusDiv = document.getElementById('install-status');
-                    if (statusDiv) {
-                        statusDiv.textContent = '📱 Tap the menu (⋮) and select "Add to Home screen"';
-                        statusDiv.style.color = '#ffd966';
-                        setTimeout(() => {
-                            statusDiv.textContent = '';
-                        }, 5000);
-                    }
+            installBtn.addEventListener('click', () => {
+                if (installStatus) {
+                    installStatus.innerHTML = '📱 Tap the menu (⋮) → "Install app" or "Add to Home screen"';
+                    installStatus.style.color = '#ffd966';
+                    setTimeout(() => {
+                        installStatus.innerHTML = '';
+                    }, 5000);
                 }
             });
         }
-        
-        // If app gets installed
-        window.addEventListener('appinstalled', () => {
-            console.log('📱 App installed successfully');
-            const panel = document.getElementById('install-panel');
-            if (panel) panel.style.display = 'none';
-        });
     </script>
 </body>
 </html>
