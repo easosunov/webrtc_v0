@@ -660,7 +660,7 @@
             border-radius: 10px;
             padding: 20px;
             height: fit-content;
-            max-height: 250px;
+            max-height: 300px;
             overflow-y: auto;
         }
 
@@ -673,6 +673,41 @@
             position: sticky;
             top: 0;
             background: #f9f9f9;
+        }
+
+        /* Call Status Area */
+        #call-status-area {
+            margin-bottom: 12px;
+            padding: 8px 12px;
+            border-radius: 8px;
+            display: none;
+            transition: all 0.3s ease;
+        }
+
+        #call-status-area.info {
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+        }
+
+        #call-status-area.warning {
+            background: #fff3e0;
+            border-left: 4px solid #ff9800;
+        }
+
+        #call-status-area.error {
+            background: #ffebee;
+            border-left: 4px solid #f44336;
+        }
+
+        #call-status-area.success {
+            background: #e8f5e9;
+            border-left: 4px solid #4caf50;
+        }
+
+        #call-status-text {
+            font-size: 13px;
+            font-weight: 500;
+            color: #333;
         }
 
         .user-item {
@@ -950,7 +985,7 @@
             }
             
             .users-panel {
-                max-height: 200px;
+                max-height: 250px;
             }
             
             /* Stack videos vertically on mobile */
@@ -1069,13 +1104,17 @@
                 
                 <!-- Right side: All panels stacked vertically -->
                 <div class="right-panels">
-                    <!-- Available Users Panel (top) -->
+                    <!-- Available Users Panel -->
                     <div class="users-panel">
                         <h3>Available Users</h3>
+                        <!-- Connection Status Area - visible during calls -->
+                        <div id="call-status-area">
+                            <span id="call-status-text"></span>
+                        </div>
                         <div id="users-container"></div>
                     </div>
                     
-                    <!-- Chat Section (middle) -->
+                    <!-- Chat Section -->
                     <div class="chat-section">
                         <div class="chat-layout">
                             <!-- Left sidebar - Chats list -->
@@ -1108,7 +1147,7 @@
                         </div>
                     </div>
                     
-                    <!-- Android Background Listener Panel (bottom) -->
+                    <!-- Android Background Listener Panel -->
                     <div class="apk-panel">
                         <div class="apk-header">
                             <span>📱</span>
@@ -1143,6 +1182,14 @@
             <button class="modal-btn accept" id="accept-call">Accept</button>
             <button class="modal-btn reject" id="reject-call">Reject</button>
         </div>
+    </div>
+
+    <!-- Status Modal (for alerts) -->
+    <div id="status-modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 3000;"></div>
+    <div id="status-modal" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 20px; border-radius: 10px; z-index: 3001; min-width: 250px; text-align: center;">
+        <h3 id="status-modal-title" style="margin-bottom: 10px;">Status</h3>
+        <p id="status-modal-message" style="margin-bottom: 15px;"></p>
+        <button id="status-modal-ok" style="padding: 8px 20px; background: #667eea; color: white; border: none; border-radius: 5px; cursor: pointer;">OK</button>
     </div>
 
     <!-- Firebase SDK -->
