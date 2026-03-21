@@ -184,41 +184,57 @@ window.hideStatusModal = function() {
     dom.statusModal.style.display = 'none';
 };
 
-// ==================== CONNECTION STATUS MESSAGES (for users panel) ====================
-// This uses the existing login-status div that already shows status messages
+// ==================== CONNECTION STATUS MESSAGES (for call screen) ====================
 window.showConnectionStatus = function(message, type = 'info') {
-    if (!dom.loginStatus) {
-        console.warn('loginStatus element not found');
-        return;
-    }
-    
     // Don't show duplicate messages
     if (CONFIG.lastStatusMessage === message) return;
     
     CONFIG.lastStatusMessage = message;
     
-    dom.loginStatus.textContent = message;
-    dom.loginStatus.className = `status-message ${type}`;
-    dom.loginStatus.style.display = 'block';
+    // Use the call status area (visible during calls)
+    const statusArea = document.getElementById('call-status-area');
+    const statusText = document.getElementById('call-status-text');
     
-    // Auto-clear success messages after 3 seconds
-    if (type === 'success') {
-        if (CONFIG.statusMessageTimeout) {
-            clearTimeout(CONFIG.statusMessageTimeout);
+    if (statusArea && statusText) {
+        statusText.textContent = message;
+        statusArea.className = `call-status-area ${type}`;
+        statusArea.style.display = 'block';
+        
+        // Auto-clear success messages after 3 seconds
+        if (type === 'success') {
+            if (CONFIG.statusMessageTimeout) {
+                clearTimeout(CONFIG.statusMessageTimeout);
+            }
+            CONFIG.statusMessageTimeout = setTimeout(() => {
+                window.clearConnectionStatus();
+            }, 3000);
         }
-        CONFIG.statusMessageTimeout = setTimeout(() => {
-            window.clearConnectionStatus();
-        }, 3000);
+    } else {
+        // Fallback to login-status (for login screen)
+        if (dom.loginStatus) {
+            dom.loginStatus.textContent = message;
+            dom.loginStatus.className = `status-message ${type}`;
+            dom.loginStatus.style.display = 'block';
+        }
     }
 };
 
 window.clearConnectionStatus = function() {
-    if (!dom.loginStatus) return;
-    
     CONFIG.lastStatusMessage = null;
-    dom.loginStatus.textContent = '';
-    dom.loginStatus.className = 'status-message';
-    dom.loginStatus.style.display = 'none';
+    
+    // Clear call status area
+    const statusArea = document.getElementById('call-status-area');
+    if (statusArea) {
+        statusArea.style.display = 'none';
+        statusArea.className = 'call-status-area';
+    }
+    
+    // Also clear login status (for consistency)
+    if (dom.loginStatus) {
+        dom.loginStatus.textContent = '';
+        dom.loginStatus.className = 'status-message';
+        dom.loginStatus.style.display = 'none';
+    }
     
     if (CONFIG.statusMessageTimeout) {
         clearTimeout(CONFIG.statusMessageTimeout);
