@@ -1,14 +1,37 @@
 console.log('✅ chat.js loaded');
 
+// ==================== CHAT HELPERS ====================
+function getChatId(user1, user2) {
+    return [user1, user2].sort().join('_');
+}
+
+function formatDuration(seconds) {
+    if (!seconds) return '';
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+function formatMessageTime(date) {
+    const now = new Date();
+    const diff = now - date;
+    
+    if (diff < 24 * 60 * 60 * 1000) {
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } else if (diff < 7 * 24 * 60 * 60 * 1000) {
+        return date.toLocaleDateString([], { weekday: 'short' });
+    } else {
+        return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    }
+}
+
 // ==================== URL DETECTION ====================
 function makeLinksClickable(text) {
     if (!text) return text;
     
-    // Regular expression to match URLs
     const urlRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)/gi;
     
     return text.replace(urlRegex, function(url) {
-        // Add https:// if missing
         let fullUrl = url;
         if (url.startsWith('www')) {
             fullUrl = 'https://' + url;
@@ -19,13 +42,13 @@ function makeLinksClickable(text) {
     });
 }
 
-// ==================== CHAT HELPERS ====================
-function getChatId(user1, user2) {
-    // Sort to ensure same ID regardless of order
-    return [user1, user2].sort().join('_');
-}
+// ==================== SHOW USERS FOR NEW CHAT ====================
+window.showUsersForChat = function() {
+    document.getElementById('chats-view').style.display = 'block';
+    document.getElementById('chat-view').style.display = 'none';
+};
 
-// ==================== DELETE A CHAT ====================
+// ==================== DELETE CHAT ====================
 window.deleteChat = async function(chatId) {
     if (!confirm('Are you sure you want to delete this chat? All messages will be permanently deleted.')) {
         return;
@@ -34,39 +57,22 @@ window.deleteChat = async function(chatId) {
     try {
         console.log('🗑️ Deleting chat:', chatId);
         
-        // First, delete all messages in the subcollection
         const messagesSnapshot = await db.collection('chats').doc(chatId)
             .collection('messages')
             .get();
         
-        // Delete messages in batches of 500
         const batch = db.batch();
-        let count = 0;
-        
-        for (const doc of messagesSnapshot.docs) {
+        messagesSnapshot.forEach(doc => {
             batch.delete(doc.ref);
-            count++;
-            
-            if (count === 500) {
-                await batch.commit();
-                count = 0;
-            }
-        }
+        });
+        await batch.commit();
         
-        // Commit final batch if any
-        if (count > 0) {
-            await batch.commit();
-        }
-        
-        // Finally, delete the chat document itself
         await db.collection('chats').doc(chatId).delete();
         
         console.log('✅ Chat deleted successfully');
         
-        // Refresh chats list
         await window.loadChats();
         
-        // Close chat view if it was open
         if (document.getElementById('current-chat-id').value === chatId) {
             window.closeChat();
         }
@@ -77,11 +83,39 @@ window.deleteChat = async function(chatId) {
     }
 };
 
-// ==================== SHOW USERS FOR NEW CHAT ====================
-window.showUsersForChat = function() {
-    // Simply show the users panel - users are already there
-    document.getElementById('chats-view').style.display = 'block';
-    document.getElementById('chat-view').style.display = 'none';
+// ==================== DELETE CURRENT CHAT ====================
+window.deleteCurrentChat = async function() {
+    const chatId = document.getElementById('current-chat-id').value;
+    if (!chatId) {
+        alert('No chat selected');
+        return;
+    }
+    
+    if (!confirm('⚠️ Are you sure you want to delete this chat? All messages will be permanently deleted.')) {
+        return;
+    }
+    
+    try {
+        console.log('🗑️ Deleting current chat:', chatId);
+        
+        const messagesSnapshot = await db.collection('chats').doc(chatId)
+            .collection('messages')
+            .get();
+        
+        for (const doc of messagesSnapshot.docs) {
+            await doc.ref.delete();
+        }
+        
+        await db.collection('chats').doc(chatId).delete();
+        console.log('✅ Chat deleted successfully');
+        
+        window.closeChat();
+        await window.loadChats();
+        
+    } catch (error) {
+        console.error('❌ Error deleting chat:', error);
+        alert('Failed to delete chat: ' + error.message);
+    }
 };
 
 // ==================== START NEW CHAT WITH USER ====================
@@ -97,16 +131,13 @@ window.startChat = async function(otherUsername) {
     console.log('Chat ID:', chatId);
     
     try {
-        // Get other user's display name
         const userDoc = await db.collection('users').doc(otherUsername).get();
         const otherDisplayName = userDoc.data()?.displayname || otherUsername;
         
-        // Check if chat exists
         const chatDoc = await db.collection('chats').doc(chatId).get();
         
         if (!chatDoc.exists) {
             console.log('Creating new chat...');
-            // Create new chat
             await db.collection('chats').doc(chatId).set({
                 participants: [CONFIG.myUsername, otherUsername],
                 participantNames: {
@@ -123,7 +154,6 @@ window.startChat = async function(otherUsername) {
             });
         }
         
-        // Open the chat
         openChat(chatId);
         
     } catch (error) {
@@ -136,32 +166,23 @@ window.startChat = async function(otherUsername) {
 window.openChat = async function(chatId) {
     console.log('💬 Opening chat:', chatId);
     
-    // Show chat view, hide chats list
     document.getElementById('chats-view').style.display = 'none';
     document.getElementById('chat-view').style.display = 'flex';
     
-    // Store current chat ID
     document.getElementById('current-chat-id').value = chatId;
     
     try {
-        // Load chat details
         const chatDoc = await db.collection('chats').doc(chatId).get();
         if (!chatDoc.exists) return;
         
         const chatData = chatDoc.data();
         const otherParticipants = chatData.participants.filter(p => p !== CONFIG.myUsername);
         
-        // Set chat header
         const otherNames = otherParticipants.map(id => chatData.participantNames?.[id] || id).join(', ');
         document.getElementById('current-chat-name').textContent = otherNames;
         
-        // Mark messages as read
         await markChatAsRead(chatId);
-        
-        // Load messages
         await loadMessages(chatId);
-        
-        // Listen for new messages
         listenForMessages(chatId);
         
     } catch (error) {
@@ -201,28 +222,58 @@ async function loadMessages(chatId) {
             const msgDate = msg.timestamp?.toDate() || new Date();
             const dateStr = msgDate.toLocaleDateString();
             
-            // Add date separator if new day
             if (dateStr !== lastDate) {
                 html += `<div class="message-date-separator">${msgDate.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}</div>`;
                 lastDate = dateStr;
                 lastSender = null;
             }
             
+            // Check if this is a call log message
+            if (msg.type === 'call_log') {
+                let callIcon = '';
+                let callText = '';
+                switch(msg.callType) {
+                    case 'initiated': callIcon = '📞'; callText = 'Call initiated'; break;
+                    case 'answered': callIcon = '✅'; callText = 'Call connected'; break;
+                    case 'ended': 
+                        callIcon = '⏱️'; 
+                        callText = `Call ended (${formatDuration(msg.duration)})`;
+                        break;
+                    case 'rejected': callIcon = '❌'; callText = 'Call rejected'; break;
+                    case 'missed': callIcon = '🔴'; callText = 'Missed call'; break;
+                    case 'cancelled': callIcon = '📞'; callText = 'Call cancelled'; break;
+                    default: callIcon = '📞'; callText = 'Call'; break;
+                }
+                
+                html += `
+                    <div class="message call-log-message">
+                        <div class="call-log-bubble">
+                            <span class="call-log-icon">${callIcon}</span>
+                            <span class="call-log-text">${callText}</span>
+                            <span class="call-log-time">${msgDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                        </div>
+                    </div>
+                `;
+                lastSender = null;
+                return;
+            }
+            
+            // Regular text message
             const isMe = msg.senderId === CONFIG.myUsername;
             const showSender = !isMe && msg.senderId !== lastSender;
             
-			html += `
-				<div class="message ${isMe ? 'message-me' : 'message-other'}">
-					${showSender ? `<div class="message-sender">${msg.senderName || msg.senderId}</div>` : ''}
-					<div class="message-bubble">
-						<div class="message-text">${makeLinksClickable(msg.text)}</div>
-						<div class="message-time">
-							${msgDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-							${isMe ? (msg.readBy?.includes(CONFIG.myUsername) ? ' ✓✓' : ' ✓') : ''}
-						</div>
-					</div>
-				</div>
-			`;    
+            html += `
+                <div class="message ${isMe ? 'message-me' : 'message-other'}">
+                    ${showSender ? `<div class="message-sender">${msg.senderName || msg.senderId}</div>` : ''}
+                    <div class="message-bubble">
+                        <div class="message-text">${makeLinksClickable(msg.text)}</div>
+                        <div class="message-time">
+                            ${msgDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            ${isMe ? (msg.readBy?.includes(CONFIG.myUsername) ? ' ✓✓' : ' ✓') : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
             
             lastSender = msg.senderId;
         });
@@ -251,13 +302,11 @@ window.sendMessage = async function() {
     input.value = '';
     
     try {
-        // Get chat to know participants
         const chatDoc = await db.collection('chats').doc(chatId).get();
         if (!chatDoc.exists) return;
         
         const chatData = chatDoc.data();
         
-        // Add message to subcollection
         await db.collection('chats').doc(chatId)
             .collection('messages')
             .add({
@@ -269,13 +318,11 @@ window.sendMessage = async function() {
                 readBy: [CONFIG.myUsername]
             });
         
-        // Update chat metadata
         await db.collection('chats').doc(chatId).update({
             lastMessage: text,
             lastMessageTime: firebase.firestore.FieldValue.serverTimestamp(),
             lastMessageSender: CONFIG.myUsername,
             [`unreadCount.${CONFIG.myUsername}`]: 0,
-            // Increment unread for others
             ...Object.fromEntries(
                 chatData.participants
                     .filter(p => p !== CONFIG.myUsername)
@@ -308,7 +355,6 @@ function listenForMessages(chatId) {
         .onSnapshot(snapshot => {
             snapshot.docChanges().forEach(change => {
                 if (change.type === 'added') {
-                    // Reload messages when new one arrives
                     loadMessages(chatId);
                 }
             });
@@ -351,18 +397,25 @@ window.loadChats = async function() {
             const timeStr = formatMessageTime(lastMessageTime);
             const unread = data.unreadCount?.[CONFIG.myUsername] || 0;
             
-            // Updated HTML with delete button
+            // Check if last message is a call log
+            let lastMessageDisplay = data.lastMessage || 'No messages';
+            if (lastMessageDisplay.includes('📞') || lastMessageDisplay.includes('✅') || 
+                lastMessageDisplay.includes('⏱️') || lastMessageDisplay.includes('❌') || 
+                lastMessageDisplay.includes('🔴')) {
+                lastMessageDisplay = `<span style="opacity: 0.7;">${lastMessageDisplay}</span>`;
+            }
+            
             html += `
                 <div class="chat-item" style="display: flex; align-items: center; padding: 10px; border-bottom: 1px solid #eee;">
                     <div onclick="openChat('${doc.id}')" style="display: flex; flex: 1; cursor: pointer;">
                         <div class="chat-avatar">${chatName.substring(0,2).toUpperCase()}</div>
                         <div class="chat-info">
                             <div class="chat-header">
-                                <span class="chat-name">${chatName}</span>
+                                <span class="chat-name">${escapeHtml(chatName)}</span>
                                 <span class="chat-time">${timeStr}</span>
                             </div>
                             <div class="chat-preview">
-                                <span class="chat-message">${data.lastMessage || 'No messages'}</span>
+                                <span class="chat-message">${lastMessageDisplay}</span>
                                 ${unread > 0 ? `<span class="unread-badge">${unread}</span>` : ''}
                             </div>
                         </div>
@@ -385,62 +438,14 @@ window.loadChats = async function() {
     }
 };
 
-// ==================== DELETE CURRENT CHAT ====================
-window.deleteCurrentChat = async function() {
-    const chatId = document.getElementById('current-chat-id').value;
-    if (!chatId) {
-        alert('No chat selected');
-        return;
-    }
-    
-    if (!confirm('⚠️ Are you sure you want to delete this chat? All messages will be permanently deleted.')) {
-        return;
-    }
-    
-    try {
-        console.log('🗑️ Deleting current chat:', chatId);
-        
-        // First, get all messages
-        const messagesSnapshot = await db.collection('chats').doc(chatId)
-            .collection('messages')
-            .get();
-        
-        console.log(`📊 Found ${messagesSnapshot.size} messages to delete`);
-        
-        // Delete messages one by one (more reliable for permissions)
-        for (const doc of messagesSnapshot.docs) {
-            await doc.ref.delete();
-            console.log('✅ Deleted message:', doc.id);
-        }
-        
-        // Finally, delete the chat document itself
-        await db.collection('chats').doc(chatId).delete();
-        console.log('✅ Chat deleted successfully');
-        
-        // Close chat view and refresh list
-        window.closeChat();
-        await window.loadChats();
-        
-        alert('Chat deleted successfully');
-        
-    } catch (error) {
-        console.error('❌ Error deleting chat:', error);
-        alert('Failed to delete chat: ' + error.message);
-    }
-};
-
-
-function formatMessageTime(date) {
-    const now = new Date();
-    const diff = now - date;
-    
-    if (diff < 24 * 60 * 60 * 1000) {
-        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } else if (diff < 7 * 24 * 60 * 60 * 1000) {
-        return date.toLocaleDateString([], { weekday: 'short' });
-    } else {
-        return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
-    }
+function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/[&<>]/g, function(m) {
+        if (m === '&') return '&amp;';
+        if (m === '<') return '&lt;';
+        if (m === '>') return '&gt;';
+        return m;
+    });
 }
 
 // Load chats when user logs in
