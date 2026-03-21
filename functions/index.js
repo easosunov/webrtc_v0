@@ -1,8 +1,3 @@
-/**
- * Firebase Cloud Functions for WebRTC Communicator (Gen 1)
- * Sends push notifications when incoming calls are created
- */
-
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 
@@ -16,6 +11,8 @@ exports.onCallCreated = functions.firestore
         const callId = context.params.callId;
         
         console.log(`📞 New call created: ${callId}`);
+        console.log(`   Caller: ${call.callerId}`);
+        console.log(`   Callee: ${call.calleeId}`);
         
         if (call.status !== 'ringing') return null;
         if (call.callerId === call.calleeId) return null;
@@ -44,23 +41,11 @@ exports.onCallCreated = functions.firestore
                     callerId: call.callerId,
                     callerName: callerName
                 },
-                token: subscription.endpoint,
-                webpush: {
-                    notification: {
-                        icon: 'https://easosunov.github.io/webrtc_v0/favicon.ico',
-                        badge: 'https://easosunov.github.io/webrtc_v0/favicon.ico',
-                        vibrate: [200, 100, 200],
-                        requireInteraction: true,
-                        actions: [
-                            { action: 'answer', title: 'Answer Call' },
-                            { action: 'dismiss', title: 'Dismiss' }
-                        ]
-                    }
-                }
+                token: subscription.endpoint
             };
             
             const response = await admin.messaging().send(payload);
-            console.log(`✅ Push sent to ${call.calleeId}:`, response);
+            console.log(`✅ Push sent: ${response}`);
             
             await db.collection('notifications').add({
                 userId: call.calleeId,
@@ -81,13 +66,12 @@ exports.onCallCreated = functions.firestore
                 status: 'failed',
                 error: error.message
             });
-            
-            if (error.code === 'messaging/invalid-registration-token') {
-                await db.collection('users').doc(call.calleeId).update({
-                    pushSubscription: admin.firestore.FieldValue.delete()
-                });
-            }
         }
         
         return null;
     });
+
+// Keep healthCheck for testing
+exports.healthCheck = functions.https.onRequest((req, res) => {
+    res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});
