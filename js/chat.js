@@ -230,25 +230,12 @@ async function loadMessages(chatId) {
             
             // Check if this is a call log message
             if (msg.type === 'call_log') {
-                let callIcon = '';
-                let callText = '';
-                switch(msg.callType) {
-                    case 'initiated': callIcon = '📞'; callText = 'Call initiated'; break;
-                    case 'answered': callIcon = '✅'; callText = 'Call connected'; break;
-                    case 'ended': 
-                        callIcon = '⏱️'; 
-                        callText = `Call ended (${formatDuration(msg.duration)})`;
-                        break;
-                    case 'rejected': callIcon = '❌'; callText = 'Call rejected'; break;
-                    case 'missed': callIcon = '🔴'; callText = 'Missed call'; break;
-                    case 'cancelled': callIcon = '📞'; callText = 'Call cancelled'; break;
-                    default: callIcon = '📞'; callText = 'Call'; break;
-                }
+                // Use the pre-formatted text from the call log
+                const callText = msg.text || '📞 Call';
                 
                 html += `
                     <div class="message call-log-message">
                         <div class="call-log-bubble">
-                            <span class="call-log-icon">${callIcon}</span>
                             <span class="call-log-text">${callText}</span>
                             <span class="call-log-time">${msgDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                         </div>
@@ -397,13 +384,8 @@ window.loadChats = async function() {
             const timeStr = formatMessageTime(lastMessageTime);
             const unread = data.unreadCount?.[CONFIG.myUsername] || 0;
             
-            // Check if last message is a call log
+            // Display last message (could be call log or text)
             let lastMessageDisplay = data.lastMessage || 'No messages';
-            if (lastMessageDisplay.includes('📞') || lastMessageDisplay.includes('✅') || 
-                lastMessageDisplay.includes('⏱️') || lastMessageDisplay.includes('❌') || 
-                lastMessageDisplay.includes('🔴')) {
-                lastMessageDisplay = `<span style="opacity: 0.7;">${lastMessageDisplay}</span>`;
-            }
             
             html += `
                 <div class="chat-item" style="display: flex; align-items: center; padding: 10px; border-bottom: 1px solid #eee;">
