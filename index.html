@@ -8,12 +8,11 @@
     <!-- PWA Manifest -->
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#667eea">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="WebRTC Chat">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23667eea'/%3E%3Ctext x='50' y='70' font-size='50' text-anchor='middle' fill='white'%3E📞%3C/text%3E%3C/svg%3E">
     
-	<meta name="apple-mobile-web-app-capable" content="yes">
-	<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-	<meta name="apple-mobile-web-app-title" content="WebRTC Chat">
-	<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23667eea'/%3E%3Ctext x='50' y='70' font-size='50' text-anchor='middle' fill='white'%3E📞%3C/text%3E%3C/svg%3E">
-	
     <!-- Styles -->
     <style>
         * {
@@ -1243,7 +1242,7 @@
                             <h4>Add to Home Screen</h4>
                         </div>
                         <div class="install-description">
-                            Install this app on your home screen for easy access. Works offline!
+                            Install this app on your home screen for easy access.
                         </div>
                         <button id="install-btn" class="install-btn">
                             ➕ Add to Home Screen
@@ -1337,90 +1336,74 @@
     <script>
         // ==================== ADD TO HOME SCREEN (PWA) ====================
         let deferredPrompt = null;
-
-        // Detect if the app can be installed
-        window.addEventListener('beforeinstallprompt', (e) => {
-            // Prevent Chrome from automatically showing the prompt
-            e.preventDefault();
-            // Stash the event so it can be triggered later
-            deferredPrompt = e;
-            // Show the install button
+        
+        // Check if app is already installed
+        const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+        if (isStandalone) {
+            // Already installed - hide panel
             const installPanel = document.getElementById('install-panel');
-            if (installPanel) {
-                installPanel.style.display = 'block';
-            }
-            console.log('📱 App can be installed - showing install button');
+            if (installPanel) installPanel.style.display = 'none';
+            console.log('📱 App already installed');
+        } else {
+            // Not installed - show panel
+            const installPanel = document.getElementById('install-panel');
+            if (installPanel) installPanel.style.display = 'block';
+            console.log('📱 App not installed - showing install panel');
+        }
+        
+        // Listen for beforeinstallprompt
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            console.log('📱 Install prompt available');
+            
+            // Show panel if not already visible
+            const installPanel = document.getElementById('install-panel');
+            if (installPanel) installPanel.style.display = 'block';
         });
-
+        
         // Handle install button click
         const installBtn = document.getElementById('install-btn');
         if (installBtn) {
             installBtn.addEventListener('click', async () => {
-                if (!deferredPrompt) {
-                    // If no deferred prompt, show instructions
+                if (deferredPrompt) {
+                    // Use the native prompt
+                    deferredPrompt.prompt();
+                    const { outcome } = await deferredPrompt.userChoice;
+                    console.log(`📱 Install result: ${outcome}`);
+                    deferredPrompt = null;
+                    
                     const statusDiv = document.getElementById('install-status');
                     if (statusDiv) {
-                        statusDiv.textContent = 'ℹ️ Tap the menu (⋮) and select "Add to Home screen"';
+                        if (outcome === 'accepted') {
+                            statusDiv.textContent = '✅ App installed!';
+                            statusDiv.style.color = '#90EE90';
+                            setTimeout(() => {
+                                const panel = document.getElementById('install-panel');
+                                if (panel) panel.style.display = 'none';
+                            }, 3000);
+                        }
+                    }
+                } else {
+                    // No native prompt, show instructions
+                    const statusDiv = document.getElementById('install-status');
+                    if (statusDiv) {
+                        statusDiv.textContent = '📱 Tap the menu (⋮) and select "Add to Home screen"';
                         statusDiv.style.color = '#ffd966';
                         setTimeout(() => {
                             statusDiv.textContent = '';
                         }, 5000);
                     }
-                    return;
-                }
-                
-                // Show the install prompt
-                deferredPrompt.prompt();
-                
-                // Wait for the user to respond to the prompt
-                const { outcome } = await deferredPrompt.userChoice;
-                console.log(`📱 User response to install prompt: ${outcome}`);
-                
-                // We've used the prompt, and can't use it again, discard it
-                deferredPrompt = null;
-                
-                // Update status
-                const statusDiv = document.getElementById('install-status');
-                if (statusDiv) {
-                    if (outcome === 'accepted') {
-                        statusDiv.textContent = '✅ App installed! You can now find it on your home screen.';
-                        statusDiv.style.color = '#90EE90';
-                        // Hide the panel after successful installation
-                        setTimeout(() => {
-                            const installPanel = document.getElementById('install-panel');
-                            if (installPanel) installPanel.style.display = 'none';
-                        }, 3000);
-                    } else {
-                        statusDiv.textContent = '❌ Installation cancelled. You can try again later.';
-                        statusDiv.style.color = '#ffaaaa';
-                        setTimeout(() => {
-                            statusDiv.textContent = '';
-                        }, 3000);
-                    }
                 }
             });
         }
-
-        // Also check if app is already installed
+        
+        // If app gets installed
         window.addEventListener('appinstalled', () => {
-            console.log('📱 App was installed successfully');
-            const statusDiv = document.getElementById('install-status');
-            if (statusDiv) {
-                statusDiv.textContent = '✅ App installed! Find it on your home screen.';
-                statusDiv.style.color = '#90EE90';
-                setTimeout(() => {
-                    const installPanel = document.getElementById('install-panel');
-                    if (installPanel) installPanel.style.display = 'none';
-                }, 3000);
-            }
+            console.log('📱 App installed successfully');
+            const panel = document.getElementById('install-panel');
+            if (panel) panel.style.display = 'none';
         });
-
-        // Hide install panel if not applicable (already installed or not supported)
-        if (window.matchMedia('(display-mode: standalone)').matches) {
-            // App is already running as installed app
-            const installPanel = document.getElementById('install-panel');
-            if (installPanel) installPanel.style.display = 'none';
-        }
     </script>
 </body>
 </html>
