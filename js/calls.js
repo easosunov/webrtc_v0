@@ -14,6 +14,7 @@ function formatDuration(seconds) {
 
 // Track whether call log has been added for current call
 let callLogAdded = false;
+let currentCallIdForLog = null;
 
 async function addCallLogEntry(otherUserId, callerId, wasAnswered, duration, wasRejected = false) {
     if (!CONFIG.myUsername || !otherUserId) {
@@ -238,7 +239,10 @@ window.callUser = async function(targetUsername) {
         CONFIG.callTimeout = null;
         CONFIG.callWasAnswered = false;
         CONFIG.callWasRejected = false;
-        callLogAdded = false; // Reset flag for new call
+        
+        // Reset flags for new call
+        callLogAdded = false;
+        currentCallIdForLog = null;
         
         // Enable hangup button immediately so user can cancel
         if (window.dom && window.dom.hangupBtn) {
@@ -381,7 +385,10 @@ window.answerCall = async function(callId, callerId, offer) {
         CONFIG.callStartTime = Date.now();
         CONFIG.callWasAnswered = true;
         CONFIG.callWasRejected = false;
-        callLogAdded = false; // Reset flag for new call
+        
+        // Reset flags for new call
+        callLogAdded = false;
+        currentCallIdForLog = null;
         
         await window.createPeerConnection(callerId, false);
         
@@ -669,8 +676,11 @@ window.hangup = async function(reason = 'user_initiated') {
         CONFIG.callTimeout = null;
     }
     
-    // Add call log at the end of the call - ONLY ONCE
-    if (CONFIG.currentCallId && CONFIG.currentCallPartner && !callLogAdded) {
+    // Add call log at the end of the call - ONLY ONCE per call ID
+    if (CONFIG.currentCallId && CONFIG.currentCallPartner && 
+        !callLogAdded && currentCallIdForLog !== CONFIG.currentCallId) {
+        
+        currentCallIdForLog = CONFIG.currentCallId;
         callLogAdded = true;
         
         const duration = CONFIG.callStartTime ? Math.floor((Date.now() - CONFIG.callStartTime) / 1000) : null;
@@ -737,7 +747,8 @@ window.hangup = async function(reason = 'user_initiated') {
     // Reset the flag after call is fully cleaned up
     setTimeout(() => {
         callLogAdded = false;
-    }, 1000);
+        currentCallIdForLog = null;
+    }, 2000);
     
     if (window.dom && window.dom.remoteVideo) {
         window.dom.remoteVideo.srcObject = null;
