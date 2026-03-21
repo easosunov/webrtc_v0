@@ -547,6 +547,40 @@
             transition: all 0.3s ease;
         }
 
+		/* Call log message styling */
+		.call-log-message {
+			display: flex;
+			justify-content: center;
+			margin: 12px 0;
+		}
+
+		.call-log-bubble {
+			background: rgba(0, 0, 0, 0.08);
+			padding: 8px 16px;
+			border-radius: 20px;
+			display: inline-flex;
+			align-items: center;
+			gap: 8px;
+			font-size: 12px;
+			color: #666;
+			backdrop-filter: blur(2px);
+		}
+
+		.call-log-icon {
+			font-size: 14px;
+		}
+
+		.call-log-text {
+			font-weight: 500;
+		}
+
+		.call-log-time {
+			font-size: 10px;
+			color: #888;
+			margin-left: 6px;
+		}
+
+
         /* Fullscreen mode styles */
         .video-container.fullscreen-mode {
             display: block;
