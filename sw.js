@@ -1,18 +1,21 @@
 // Service Worker with Push Notification Support
 const CACHE_NAME = 'webrtc-communicator-v2';
+
 const urlsToCache = [
-  '/',
-  '/index.html',
-  '/js/config.js',
-  '/js/ui.js',
-  '/js/init.js',
-  '/js/auth.js',
-  '/js/users.js',
-  '/js/webrtc.js',
-  '/js/calls.js',
-  '/js/apk.js',
-  '/js/chat.js'
+  '/webrtc_v0/',
+  '/webrtc_v0/index.html',
+  '/webrtc_v0/js/config.js',
+  '/webrtc_v0/js/ui.js',
+  '/webrtc_v0/js/init.js',
+  '/webrtc_v0/js/auth.js',
+  '/webrtc_v0/js/users.js',
+  '/webrtc_v0/js/webrtc.js',
+  '/webrtc_v0/js/calls.js',
+  '/webrtc_v0/js/apk.js',
+  '/webrtc_v0/js/chat.js'
 ];
+
+
 
 self.addEventListener('install', event => {
   console.log('🔧 Service Worker installing...');
