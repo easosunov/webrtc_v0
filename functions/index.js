@@ -1,5 +1,5 @@
 /**
- * Firebase Cloud Functions for WebRTC Communicator
+ * Firebase Cloud Functions for WebRTC Communicator (Gen 1)
  * Sends push notifications when incoming calls are created
  */
 
@@ -34,7 +34,6 @@ exports.onCallCreated = functions.firestore
             
             const subscription = userDoc.data().pushSubscription;
             
-            // CORRECTED PAYLOAD - icon/badge/vibrate inside webpush
             const payload = {
                 notification: {
                     title: '📞 Incoming Call',
