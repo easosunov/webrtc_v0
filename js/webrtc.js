@@ -54,6 +54,11 @@ window.createPeerConnection = async function(targetUsername, isCaller = true) {
     CONFIG.isCaller = isCaller;
     CONFIG.iceRestartAttempts = 0;
     
+    // Show connecting status when call starts
+    if (window.showConnectionStatus) {
+        window.showConnectionStatus('🔄 Connecting...', 'info');
+    }
+    
     // Load TURN servers
     const turnServers = await window.loadTurnServers();
     
@@ -83,11 +88,6 @@ window.createPeerConnection = async function(targetUsername, isCaller = true) {
         console.log('✅ Remote stream received');
         if (window.dom && window.dom.hangupBtn) window.dom.hangupBtn.disabled = false;
         clearTimeout(CONFIG.connectionTimeout);
-        
-        // Clear any connection status message when stream is received
-        if (window.clearConnectionStatus) {
-            window.clearConnectionStatus();
-        }
     };
     
     CONFIG.peerConnection.onicecandidate = (event) => {
@@ -127,9 +127,9 @@ window.createPeerConnection = async function(targetUsername, isCaller = true) {
             case 'connected':
             case 'completed':
                 console.log('✅ ICE connection established');
-                // Clear status message when connected
-                if (window.clearConnectionStatus) {
-                    window.clearConnectionStatus();
+                // Show connected status - stays visible during call
+                if (window.showConnectionStatus) {
+                    window.showConnectionStatus('✅ Connected', 'success');
                 }
                 clearTimeout(CONFIG.connectionTimeout);
                 CONFIG.iceRestartAttempts = 0;
@@ -137,9 +137,9 @@ window.createPeerConnection = async function(targetUsername, isCaller = true) {
                 
             case 'disconnected':
                 console.log('⚠️ ICE disconnected - attempting recovery');
-                // Show connection lost message
+                // Show lost connection message
                 if (window.showConnectionStatus) {
-                    window.showConnectionStatus('⚠️ Connection lost, reconnecting...', 'info');
+                    window.showConnectionStatus('⚠️ Connection lost, reconnecting...', 'warning');
                 }
                 setTimeout(() => {
                     if (CONFIG.peerConnection?.iceConnectionState === 'disconnected') {
@@ -150,7 +150,7 @@ window.createPeerConnection = async function(targetUsername, isCaller = true) {
                 
             case 'failed':
                 console.log('❌ ICE failed');
-                // Show failure message
+                // Show failed message
                 if (window.showConnectionStatus) {
                     window.showConnectionStatus('❌ Connection failed, reconnecting...', 'error');
                 }
@@ -166,9 +166,9 @@ window.createPeerConnection = async function(targetUsername, isCaller = true) {
         if (state === 'connected') {
             CONFIG.isInCall = true;
             clearTimeout(CONFIG.connectionTimeout);
-            // Clear status when fully connected
-            if (window.clearConnectionStatus) {
-                window.clearConnectionStatus();
+            // Ensure status shows connected
+            if (window.showConnectionStatus) {
+                window.showConnectionStatus('✅ Connected', 'success');
             }
         } else if (state === 'failed') {
             console.log('❌ Connection failed');
@@ -342,7 +342,7 @@ async function restartIce() {
     
     // Show restart attempt status
     if (window.showConnectionStatus) {
-        window.showConnectionStatus(`🔄 Reconnecting (attempt ${CONFIG.iceRestartAttempts}/${CONFIG.MAX_ICE_RESTART_ATTEMPTS})...`, 'info');
+        window.showConnectionStatus(`⚠️ Reconnecting (attempt ${CONFIG.iceRestartAttempts}/${CONFIG.MAX_ICE_RESTART_ATTEMPTS})...`, 'warning');
     }
     
     try {
