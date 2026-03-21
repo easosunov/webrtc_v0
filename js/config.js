@@ -72,7 +72,7 @@ CONFIG.pushSubscription = null;
 CONFIG.pushSupported = false;
 
 console.log('✅ Web Push config ready');
-
+window.VAPID_PUBLIC_KEY = VAPID_PUBLIC_KEY;
 
 const TURN_SERVER_URL = 'https://turn-token.easosunov.workers.dev/ice';
 
