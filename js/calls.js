@@ -16,46 +16,29 @@ function formatDuration(seconds) {
 let callLogAdded = false;
 let currentCallIdForLog = null;
 
-async function addCallLogEntry(otherUserId, callerId, wasAnswered, duration, wasRejected = false) {
+async function addCallLogEntry(otherUserId, callerId, wasAnswered, duration) {
     if (!CONFIG.myUsername || !otherUserId) {
         console.log('❌ Cannot add call log: missing username or otherUserId');
         return;
     }
     
     const chatId = getChatId(CONFIG.myUsername, otherUserId);
-    const isCaller = (callerId === CONFIG.myUsername);
     
-    // Get the other user's display name
-    let otherName = otherUserId;
+    // Get the caller's display name
+    let callerName = callerId;
     try {
-        const userDoc = await db.collection('users').doc(otherUserId).get();
-        otherName = userDoc.data()?.displayname || otherUserId;
+        const userDoc = await db.collection('users').doc(callerId).get();
+        callerName = userDoc.data()?.displayname || callerId;
     } catch (e) {
         console.log('Could not get display name');
     }
     
-    // Build the message based on outcome - ONE message per call
+    // Build the message - neutral format for both sides
     let messageText = '';
-    
-    if (wasRejected) {
-        if (isCaller) {
-            messageText = `📞 You called ${otherName} → ❌ Rejected`;
-        } else {
-            messageText = `📞 Call from ${otherName} → ❌ Rejected`;
-        }
-    } else if (wasAnswered) {
-        if (isCaller) {
-            messageText = `📞 You called ${otherName} → ✅ Connected (${formatDuration(duration)})`;
-        } else {
-            messageText = `📞 Call from ${otherName} → ✅ Connected (${formatDuration(duration)})`;
-        }
+    if (wasAnswered) {
+        messageText = `📞 ${callerName} called → ✅ Connected (${formatDuration(duration)})`;
     } else {
-        // Missed call
-        if (isCaller) {
-            messageText = `📞 You called ${otherName} → 🔴 Missed`;
-        } else {
-            messageText = `📞 Call from ${otherName} → 🔴 Missed`;
-        }
+        messageText = `📞 ${callerName} called → 🔴 Missed`;
     }
     
     const logData = {
@@ -65,7 +48,6 @@ async function addCallLogEntry(otherUserId, callerId, wasAnswered, duration, was
         duration: duration,
         callerId: callerId,
         wasAnswered: wasAnswered,
-        wasRejected: wasRejected,
         senderId: CONFIG.myUsername,
         senderName: CONFIG.myDisplayName
     };
@@ -238,7 +220,6 @@ window.callUser = async function(targetUsername) {
         CONFIG.callStartTime = Date.now();
         CONFIG.callTimeout = null;
         CONFIG.callWasAnswered = false;
-        CONFIG.callWasRejected = false;
         
         // Reset flags for new call
         callLogAdded = false;
@@ -280,7 +261,7 @@ window.callUser = async function(targetUsername) {
             
             const data = snapshot.data();
             
-            // Check if call was rejected
+            // Check if call was rejected - treat as missed
             if (data.status === 'rejected') {
                 console.log('❌ Call was rejected');
                 stopRingbackTone();
@@ -288,7 +269,6 @@ window.callUser = async function(targetUsername) {
                     clearTimeout(CONFIG.callTimeout);
                     CONFIG.callTimeout = null;
                 }
-                CONFIG.callWasRejected = true;
                 if (window.showConnectionStatus) {
                     window.showConnectionStatus('📞 Call rejected', 'info');
                 }
@@ -384,7 +364,6 @@ window.answerCall = async function(callId, callerId, offer) {
         CONFIG.currentCallPartner = callerId;
         CONFIG.callStartTime = Date.now();
         CONFIG.callWasAnswered = true;
-        CONFIG.callWasRejected = false;
         
         // Reset flags for new call
         callLogAdded = false;
@@ -676,27 +655,24 @@ window.hangup = async function(reason = 'user_initiated') {
         CONFIG.callTimeout = null;
     }
     
-    // Add call log at the end of the call - ONLY ONCE per call ID
+    // Add call log at the end of the call - ONLY ONCE per call, ONLY by CALLER
     if (CONFIG.currentCallId && CONFIG.currentCallPartner && 
         !callLogAdded && currentCallIdForLog !== CONFIG.currentCallId) {
         
-        currentCallIdForLog = CONFIG.currentCallId;
-        callLogAdded = true;
-        
-        const duration = CONFIG.callStartTime ? Math.floor((Date.now() - CONFIG.callStartTime) / 1000) : null;
+        // Determine if this user is the caller
         const callerId = CONFIG.currentCallId.split('_')[0];
+        const isCaller = (callerId === CONFIG.myUsername);
         
-        // Determine outcome
-        if (reason === 'rejected') {
-            await addCallLogEntry(CONFIG.currentCallPartner, callerId, false, null, true);
-        } else if (reason === 'timeout' || (reason === 'remote_ended' && !CONFIG.callWasAnswered)) {
-            await addCallLogEntry(CONFIG.currentCallPartner, callerId, false, null, false);
-        } else if (reason === 'remote_ended' && CONFIG.callWasAnswered) {
-            await addCallLogEntry(CONFIG.currentCallPartner, callerId, true, duration, false);
-        } else if (reason === 'user_initiated' && CONFIG.callWasAnswered) {
-            await addCallLogEntry(CONFIG.currentCallPartner, callerId, true, duration, false);
-        } else if (reason === 'user_initiated' && !CONFIG.callWasAnswered && !CONFIG.callWasRejected) {
-            await addCallLogEntry(CONFIG.currentCallPartner, callerId, false, null, false);
+        // ONLY add log if THIS user is the CALLER
+        if (isCaller) {
+            currentCallIdForLog = CONFIG.currentCallId;
+            callLogAdded = true;
+            
+            const duration = CONFIG.callStartTime ? Math.floor((Date.now() - CONFIG.callStartTime) / 1000) : null;
+            const wasAnswered = (CONFIG.callWasAnswered === true);
+            
+            // Add the log - rejected is treated as missed
+            await addCallLogEntry(CONFIG.currentCallPartner, callerId, wasAnswered, duration);
         }
         
         try {
@@ -742,7 +718,6 @@ window.hangup = async function(reason = 'user_initiated') {
     CONFIG.iceRestartAttempts = 0;
     CONFIG.callStartTime = null;
     CONFIG.callWasAnswered = false;
-    CONFIG.callWasRejected = false;
     
     // Reset the flag after call is fully cleaned up
     setTimeout(() => {
