@@ -514,6 +514,10 @@ window.hangup = async function(reason = 'user_initiated') {
     if (window.stopRingtone) window.stopRingtone();
     stopRingbackTone();
     
+	if (window.clearConnectionStatus) {
+        window.clearConnectionStatus();
+    }
+	
     if (CONFIG.callTimeout) {
         clearTimeout(CONFIG.callTimeout);
         CONFIG.callTimeout = null;
