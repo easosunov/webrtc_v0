@@ -122,17 +122,17 @@ self.addEventListener('notificationclick', event => {
   
   if (action === 'answer') {
     // Open the app to answer the call
-    const callUrl = `/?callId=${notificationData.callId}&callerId=${notificationData.callerId}`;
+    const callUrl = `https://easosunov.github.io/webrtc_v0/?callId=${notificationData.callId}&callerId=${notificationData.callerId}`;
     event.waitUntil(
       clients.openWindow(callUrl)
     );
   } else if (action === 'dismiss') {
-    // Just close the notification
     console.log('Notification dismissed');
   } else {
     // Default: open the app
     event.waitUntil(
-      clients.openWindow(notificationData.url || '/')
+      clients.openWindow('https://easosunov.github.io/webrtc_v0/')
     );
   }
 });
+
