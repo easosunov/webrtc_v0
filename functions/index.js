@@ -6,16 +6,9 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 
-// Initialize Firebase Admin SDK
 admin.initializeApp();
-
-// Reference to Firestore
 const db = admin.firestore();
 
-/**
- * Send push notification when a new call is created
- * Triggered when a document is added to the 'calls' collection
- */
 exports.onCallCreated = functions.firestore
     .document('calls/{callId}')
     .onCreate(async (snap, context) => {
@@ -23,48 +16,25 @@ exports.onCallCreated = functions.firestore
         const callId = context.params.callId;
         
         console.log(`📞 New call created: ${callId}`);
-        console.log(`   Caller: ${call.callerId}`);
-        console.log(`   Callee: ${call.calleeId}`);
-        console.log(`   Status: ${call.status}`);
         
-        // Only send notification for ringing calls (incoming)
-        if (call.status !== 'ringing') {
-            console.log(`⚠️ Call status is '${call.status}', not sending push notification`);
-            return null;
-        }
-        
-        // Don't send notification if the caller is the same as callee
-        if (call.callerId === call.calleeId) {
-            console.log(`⚠️ Caller and callee are the same, skipping push`);
-            return null;
-        }
+        if (call.status !== 'ringing') return null;
+        if (call.callerId === call.calleeId) return null;
         
         try {
-            // Get the callee's user document
             const userDoc = await db.collection('users').doc(call.calleeId).get();
-            
-            if (!userDoc.exists) {
-                console.log(`❌ User document not found for callee: ${call.calleeId}`);
+            if (!userDoc.exists || !userDoc.data().pushSubscription) {
+                console.log(`📱 No push subscription for ${call.calleeId}`);
                 return null;
             }
             
-            const userData = userDoc.data();
-            
-            // Check if user has a push subscription
-            if (!userData.pushSubscription) {
-                console.log(`📱 No push subscription found for user: ${call.calleeId}`);
-                return null;
-            }
-            
-            // Get caller's display name
             const callerDoc = await db.collection('users').doc(call.callerId).get();
             const callerName = callerDoc.exists ? 
                 (callerDoc.data().displayname || callerDoc.data().displayName || call.callerId) : 
                 call.callerId;
             
-            const subscription = userData.pushSubscription;
+            const subscription = userDoc.data().pushSubscription;
             
-            // Build the notification payload correctly
+            // CORRECTED PAYLOAD - icon/badge/vibrate inside webpush
             const payload = {
                 notification: {
                     title: '📞 Incoming Call',
@@ -73,9 +43,7 @@ exports.onCallCreated = functions.firestore
                 data: {
                     callId: callId,
                     callerId: call.callerId,
-                    callerName: callerName,
-                    url: 'https://easosunov.github.io/webrtc_v0/',
-                    timestamp: new Date().toISOString()
+                    callerName: callerName
                 },
                 token: subscription.endpoint,
                 webpush: {
@@ -85,51 +53,27 @@ exports.onCallCreated = functions.firestore
                         vibrate: [200, 100, 200],
                         requireInteraction: true,
                         actions: [
-                            {
-                                action: 'answer',
-                                title: 'Answer Call'
-                            },
-                            {
-                                action: 'dismiss',
-                                title: 'Dismiss'
-                            }
+                            { action: 'answer', title: 'Answer Call' },
+                            { action: 'dismiss', title: 'Dismiss' }
                         ]
                     }
                 }
             };
             
-            // Send the push notification
-            console.log(`📤 Sending push notification to ${call.calleeId}...`);
             const response = await admin.messaging().send(payload);
-            console.log(`✅ Push notification sent successfully: ${response}`);
+            console.log(`✅ Push sent to ${call.calleeId}:`, response);
             
-            // Log success in Firestore
             await db.collection('notifications').add({
                 userId: call.calleeId,
                 callId: callId,
                 callerId: call.callerId,
-                callerName: callerName,
                 sentAt: admin.firestore.FieldValue.serverTimestamp(),
-                status: 'sent',
-                response: response
+                status: 'sent'
             });
             
-            return { success: true, messageId: response };
-            
         } catch (error) {
-            console.error(`❌ Error sending push notification:`, error);
+            console.error(`❌ Error:`, error.message);
             
-            // If token is invalid, remove it from the user document
-            if (error.code === 'messaging/invalid-registration-token' ||
-                error.code === 'messaging/registration-token-not-registered') {
-                console.log(`🗑️ Removing invalid push token for ${call.calleeId}`);
-                await db.collection('users').doc(call.calleeId).update({
-                    pushSubscription: admin.firestore.FieldValue.delete(),
-                    pushInvalidAt: admin.firestore.FieldValue.serverTimestamp()
-                });
-            }
-            
-            // Log the error
             await db.collection('notifications').add({
                 userId: call.calleeId,
                 callId: callId,
@@ -139,6 +83,12 @@ exports.onCallCreated = functions.firestore
                 error: error.message
             });
             
-            return null;
+            if (error.code === 'messaging/invalid-registration-token') {
+                await db.collection('users').doc(call.calleeId).update({
+                    pushSubscription: admin.firestore.FieldValue.delete()
+                });
+            }
         }
+        
+        return null;
     });
