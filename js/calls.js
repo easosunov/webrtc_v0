@@ -1,376 +1,624 @@
-// ==================== MEDIA INITIALIZATION ====================
-window.initMedia = async function() {
+console.log('✅ calls.js loaded');
+
+// Audio context for ringback tone (caller hears this)
+let ringbackContext = null;
+let ringbackGain = null;
+let ringbackOscillator = null;
+let ringbackInterval = null;
+
+// ==================== RINGBACK TONE FUNCTIONS (for caller) ====================
+function initRingbackContext() {
+    if (ringbackContext) return ringbackContext;
+    
     try {
-        console.log('📹 Requesting camera and microphone access...');
-        CONFIG.localStream = await navigator.mediaDevices.getUserMedia({
-            audio: true,
-            video: {
-                width: { ideal: 1280 },
-                height: { ideal: 720 }
-            }
-        });
-        
-        if (window.dom && window.dom.localVideo) {
-            window.dom.localVideo.srcObject = CONFIG.localStream;
-        }
-        
-        // Initialize camera detection after stream is obtained
-        await window.initCameraDetection();
-        
-        console.log('✅ Media access granted');
-        
+        ringbackContext = new (window.AudioContext || window.webkitAudioContext)();
+        console.log('🔊 Ringback audio context initialized');
     } catch (error) {
-        console.log(`❌ Media access error: ${error.message}`);
-        alert('Could not access camera/microphone. Please check permissions.');
+        console.error('❌ Failed to create ringback audio context:', error);
     }
-};
+    return ringbackContext;
+}
 
-// ==================== LOAD TURN SERVERS FROM TWILIO ====================
-window.loadTurnServers = async function() {
+function startRingbackTone() {
     try {
-        console.log('🔄 Loading TURN servers from Twilio...');
-        const response = await fetch('https://turn-token.easosunov.workers.dev/ice');
-        if (!response.ok) {
-            throw new Error(`Failed to load TURN servers: ${response.status}`);
-        }
-        const data = await response.json();
-        console.log('✅ TURN servers loaded:', data.iceServers.length);
-        return data.iceServers;
-    } catch (error) {
-        console.log(`❌ Failed to load TURN servers: ${error.message}`);
-        // Fallback to STUN only
-        return [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' }
-        ];
-    }
-};
-
-// ==================== PEER CONNECTION CREATION ====================
-window.createPeerConnection = async function(targetUsername, isCaller = true) {
-    console.log(`🔧 Creating peer connection with ${targetUsername} (${isCaller ? 'caller' : 'callee'})`);
-    
-    CONFIG.targetUsername = targetUsername;
-    CONFIG.isCaller = isCaller;
-    CONFIG.iceRestartAttempts = 0;
-    
-    // Show connecting status when call starts
-    if (window.showConnectionStatus) {
-        console.log('📢 Showing connecting status');
-        window.showConnectionStatus('🔄 Connecting...', 'info');
-    } else {
-        console.log('❌ window.showConnectionStatus not found');
-    }
-    
-    // Load TURN servers
-    const turnServers = await window.loadTurnServers();
-    
-    const config = {
-        iceServers: turnServers,
-        iceCandidatePoolSize: 10,
-        iceTransportPolicy: 'all',
-        bundlePolicy: 'max-bundle',
-        rtcpMuxPolicy: 'require'
-    };
-    
-    CONFIG.peerConnection = new RTCPeerConnection(config);
-    
-    if (CONFIG.localStream) {
-        CONFIG.localStream.getTracks().forEach(track => {
-            CONFIG.peerConnection.addTrack(track, CONFIG.localStream);
-        });
-    }
-    
-    CONFIG.remoteStream = new MediaStream();
-    if (window.dom && window.dom.remoteVideo) window.dom.remoteVideo.srcObject = CONFIG.remoteStream;
-    
-    CONFIG.peerConnection.ontrack = (event) => {
-        event.streams[0].getTracks().forEach(track => {
-            CONFIG.remoteStream.addTrack(track);
-        });
-        console.log('✅ Remote stream received');
-        if (window.dom && window.dom.hangupBtn) window.dom.hangupBtn.disabled = false;
-        clearTimeout(CONFIG.connectionTimeout);
-    };
-    
-    CONFIG.peerConnection.onicecandidate = (event) => {
-        if (event.candidate && CONFIG.currentCallId) {
-            console.log(`🧊 ICE candidate: ${event.candidate.type || 'unknown'}`);
-            db.collection('ice-candidates').add({
-                callId: CONFIG.currentCallId,
-                fromUserId: CONFIG.myUsername,
-                toUserId: targetUsername,
-                candidate: event.candidate.toJSON(),
-                timestamp: firebase.firestore.FieldValue.serverTimestamp()
-            }).catch(err => console.log(`❌ Error storing ICE candidate: ${err.message}`));
-        }
-    };
-    
-    CONFIG.peerConnection.oniceconnectionstatechange = () => {
-        const state = CONFIG.peerConnection.iceConnectionState;
-        console.log(`🧊 ICE state: ${state}`);
+        stopRingbackTone();
         
-        switch(state) {
-            case 'checking':
-                console.log('📢 ICE checking - showing connecting status');
-                if (window.showConnectionStatus) {
-                    window.showConnectionStatus('🔄 Connecting...', 'info');
-                }
-                CONFIG.connectionTimeout = setTimeout(() => {
-                    if (CONFIG.peerConnection?.iceConnectionState === 'checking') {
-                        console.log('⏰ ICE checking timeout - attempting restart');
-                        if (window.showConnectionStatus) {
-                            window.showConnectionStatus('🔄 Connection slow, retrying...', 'info');
-                        }
-                        restartIce();
-                    }
-                }, CONFIG.ICE_TIMEOUT);
-                break;
-                
-            case 'connected':
-            case 'completed':
-                console.log('✅ ICE connection established');
-                console.log('📢 ICE connected - showing connected status');
-                // Show connected status - stays visible during call
-                if (window.showConnectionStatus) {
-                    window.showConnectionStatus('✅ Connected', 'success');
-                } else {
-                    console.log('❌ window.showConnectionStatus not found in ICE connected');
-                }
-                clearTimeout(CONFIG.connectionTimeout);
-                CONFIG.iceRestartAttempts = 0;
-                break;
-                
-            case 'disconnected':
-                console.log('⚠️ ICE disconnected - attempting recovery');
-                console.log('📢 ICE disconnected - showing lost connection');
-                if (window.showConnectionStatus) {
-                    window.showConnectionStatus('⚠️ Connection lost, reconnecting...', 'warning');
-                }
-                setTimeout(() => {
-                    if (CONFIG.peerConnection?.iceConnectionState === 'disconnected') {
-                        restartIce();
-                    }
-                }, 2000);
-                break;
-                
-            case 'failed':
-                console.log('❌ ICE failed');
-                console.log('📢 ICE failed - showing failure');
-                if (window.showConnectionStatus) {
-                    window.showConnectionStatus('❌ Connection failed, reconnecting...', 'error');
-                }
-                restartIce();
-                break;
-        }
-    };
-    
-    CONFIG.peerConnection.onconnectionstatechange = () => {
-        const state = CONFIG.peerConnection.connectionState;
-        console.log(`🔗 Connection state: ${state}`);
+        const ctx = initRingbackContext();
+        if (!ctx) return;
         
-        if (state === 'connected') {
-            CONFIG.isInCall = true;
-            clearTimeout(CONFIG.connectionTimeout);
-            console.log('📢 Connection state connected - ensuring status');
-            if (window.showConnectionStatus) {
-                window.showConnectionStatus('✅ Connected', 'success');
+        if (ctx.state === 'suspended') {
+            ctx.resume();
+        }
+        
+        ringbackGain = ctx.createGain();
+        ringbackGain.gain.value = 0.2;
+        ringbackGain.connect(ctx.destination);
+        
+        ringbackOscillator = ctx.createOscillator();
+        ringbackOscillator.type = 'sine';
+        ringbackOscillator.frequency.value = 440;
+        
+        ringbackOscillator.connect(ringbackGain);
+        ringbackOscillator.start();
+        
+        let isOn = true;
+        ringbackInterval = setInterval(() => {
+            if (ringbackGain) {
+                ringbackGain.gain.value = isOn ? 0.2 : 0;
+                isOn = !isOn;
             }
-        } else if (state === 'failed') {
-            console.log('❌ Connection failed');
-            if (CONFIG.iceRestartAttempts < CONFIG.MAX_ICE_RESTART_ATTEMPTS) {
-                if (window.showConnectionStatus) {
-                    window.showConnectionStatus('🔄 Reconnecting...', 'info');
-                }
-                restartIce();
-            } else {
-                if (window.showConnectionStatus) {
-                    window.showConnectionStatus('❌ Call ended - connection lost', 'error');
-                }
-                if (window.showStatusModal) {
-                    window.showStatusModal('❌ Call Failed', 'Connection failed after multiple attempts', true);
-                }
-                if (window.hangup) window.hangup('max_restarts_reached');
-            }
-        }
-    };
-    
-    return CONFIG.peerConnection;
-};
-
-// ==================== CAMERA SWITCHING ====================
-let currentFacingMode = 'user';
-let hasMultipleCameras = false;
-
-window.initCameraDetection = async function() {
-    try {
-        console.log('📷 Detecting available cameras...');
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const videoDevices = devices.filter(device => device.kind === 'videoinput');
+        }, 2000);
         
-        hasMultipleCameras = videoDevices.length > 1;
-        console.log(`📷 Found ${videoDevices.length} camera(s):`, 
-            videoDevices.map(d => d.label || 'Unnamed').join(', '));
-        
-        updateCameraButtonVisibility();
-        
-        return videoDevices;
+        console.log('🔊 Ringback tone started');
     } catch (error) {
-        console.error('❌ Failed to detect cameras:', error);
-        return [];
-    }
-};
-
-function updateCameraButtonVisibility() {
-    const switchBtn = document.getElementById('switch-camera-btn');
-    if (switchBtn) {
-        if (hasMultipleCameras) {
-            switchBtn.style.display = 'block';
-            switchBtn.disabled = false;
-        } else {
-            switchBtn.style.display = 'none';
-        }
+        console.error('❌ Failed to start ringback tone:', error);
     }
 }
 
-window.switchCamera = async function() {
-    if (!hasMultipleCameras) {
-        alert('No alternate camera available');
-        return false;
+function stopRingbackTone() {
+    if (ringbackInterval) {
+        clearInterval(ringbackInterval);
+        ringbackInterval = null;
     }
     
-    if (!CONFIG.localStream) {
-        alert('No active camera stream');
-        return false;
+    if (ringbackOscillator) {
+        try {
+            ringbackOscillator.stop();
+            ringbackOscillator.disconnect();
+        } catch (error) {}
+        ringbackOscillator = null;
     }
     
-    console.log('🔄 Switching camera from', currentFacingMode);
+    if (ringbackGain) {
+        ringbackGain.disconnect();
+        ringbackGain = null;
+    }
     
-    const newFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
+    console.log('🔇 Ringback tone stopped');
+}
+
+// ==================== CLEANUP STALE CALLS ====================
+window.cleanupStaleCalls = async function() {
+    if (!CONFIG.myUsername) return;
     
     try {
-        const videoTrack = CONFIG.localStream.getVideoTracks()[0];
-        const settings = videoTrack.getSettings();
+        const oldCalls = await db.collection('calls')
+            .where('callerId', '==', CONFIG.myUsername)
+            .where('status', '==', 'ringing')
+            .get();
         
-        CONFIG.localStream.getTracks().forEach(track => track.stop());
+        const twoMinutesAgo = Date.now() - 120000;
         
-        const constraints = {
-            audio: true,
-            video: {
-                facingMode: newFacingMode,
-                width: settings.width ? { ideal: settings.width } : { ideal: 1280 },
-                height: settings.height ? { ideal: settings.height } : { ideal: 720 },
-                frameRate: { ideal: 30 }
+        oldCalls.forEach(doc => {
+            const callData = doc.data();
+            const callTime = callData.timestamp?.toMillis?.() || 0;
+            
+            if (callTime < twoMinutesAgo) {
+                console.log(`🧹 Cleaning up stale call: ${doc.id}`);
+                doc.ref.update({
+                    status: 'ended',
+                    endedAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
             }
-        };
-        
-        console.log('📷 Requesting camera with facingMode:', newFacingMode);
-        
-        const newStream = await navigator.mediaDevices.getUserMedia(constraints);
-        
-        CONFIG.localStream = newStream;
-        
-        if (window.dom && window.dom.localVideo) {
-            window.dom.localVideo.srcObject = newStream;
-        }
-        
-        if (CONFIG.peerConnection && CONFIG.isInCall) {
-            console.log('🔄 Updating peer connection with new camera');
-            
-            const senders = CONFIG.peerConnection.getSenders();
-            const videoSender = senders.find(sender => 
-                sender.track && sender.track.kind === 'video'
-            );
-            
-            if (videoSender) {
-                const newVideoTrack = newStream.getVideoTracks()[0];
-                await videoSender.replaceTrack(newVideoTrack);
-                console.log('✅ Video track replaced in peer connection');
-            }
-            
-            const audioSender = senders.find(sender => 
-                sender.track && sender.track.kind === 'audio'
-            );
-            
-            if (audioSender) {
-                const newAudioTrack = newStream.getAudioTracks()[0];
-                await audioSender.replaceTrack(newAudioTrack);
-            }
-        }
-        
-        currentFacingMode = newFacingMode;
-        console.log('✅ Camera switched to', currentFacingMode === 'user' ? 'front' : 'rear');
-        
-        if (window.showStatusModal) {
-            window.showStatusModal(
-                '📷 Camera Switched',
-                `Now using ${currentFacingMode === 'user' ? 'front' : 'rear'} camera`,
-                false
-            );
-            setTimeout(() => window.hideStatusModal(), 1500);
-        }
-        
-        return true;
-        
+        });
     } catch (error) {
-        console.error('❌ Failed to switch camera:', error);
-        
-        try {
-            console.log('Attempting to recover original camera...');
-            const fallbackStream = await navigator.mediaDevices.getUserMedia({
-                audio: true,
-                video: { facingMode: currentFacingMode }
-            });
-            CONFIG.localStream = fallbackStream;
-            if (window.dom && window.dom.localVideo) {
-                window.dom.localVideo.srcObject = fallbackStream;
-            }
-        } catch (fallbackError) {
-            console.error('Recovery failed:', fallbackError);
-        }
-        
-        alert('Failed to switch camera. Please check permissions.');
-        return false;
+        console.log(`Error cleaning up stale calls: ${error.message}`);
     }
 };
 
-async function restartIce() {
-    if (CONFIG.iceRestartAttempts >= CONFIG.MAX_ICE_RESTART_ATTEMPTS) {
-        console.log('❌ Max ICE restart attempts reached');
-        if (window.showConnectionStatus) {
-            window.showConnectionStatus('❌ Cannot recover connection, call may end', 'error');
-        }
+// ==================== CALL FUNCTIONS ====================
+window.callUser = async function(targetUsername) {
+    if (!CONFIG.localStream) {
+        alert('Please wait for camera access');
         return;
     }
     
-    CONFIG.iceRestartAttempts++;
-    console.log(`🔄 ICE restart attempt ${CONFIG.iceRestartAttempts}/${CONFIG.MAX_ICE_RESTART_ATTEMPTS}`);
-    
-    // Show restart attempt status
-    if (window.showConnectionStatus) {
-        console.log(`📢 Showing reconnect attempt ${CONFIG.iceRestartAttempts}`);
-        window.showConnectionStatus(`⚠️ Reconnecting (attempt ${CONFIG.iceRestartAttempts}/${CONFIG.MAX_ICE_RESTART_ATTEMPTS})...`, 'warning');
+    if (CONFIG.isInCall) {
+        alert('Already in a call');
+        return;
     }
     
+    console.log(`📞 Calling ${targetUsername}...`);
+    
     try {
-        const offer = await CONFIG.peerConnection.createOffer({ iceRestart: true });
+        CONFIG.isInCall = true;
+        CONFIG.currentCallId = `${CONFIG.myUsername}_${targetUsername}_${Date.now()}`;
+        CONFIG.currentCallPartner = targetUsername;
+        CONFIG.callStartTime = Date.now();
+        CONFIG.callTimeout = null;
+        
+        // Enable hangup button immediately so user can cancel
+        if (window.dom && window.dom.hangupBtn) {
+            window.dom.hangupBtn.disabled = false;
+            console.log('✅ Hangup button enabled for cancellation');
+        }
+        
+        // Update all buttons - disable all and set the called user to "Calling..."
+        updateAllCallButtons(targetUsername, 'calling');
+        
+        startRingbackTone();
+        
+        await window.createPeerConnection(targetUsername, true);
+        
+        const offer = await CONFIG.peerConnection.createOffer();
         await CONFIG.peerConnection.setLocalDescription(offer);
         
-        await db.collection('calls').doc(CONFIG.currentCallId).update({
+        await db.collection('calls').doc(CONFIG.currentCallId).set({
+            callerId: CONFIG.myUsername,
+            calleeId: targetUsername,
             offer: {
                 type: offer.type,
                 sdp: offer.sdp
             },
-            restartAttempt: CONFIG.iceRestartAttempts,
-            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            status: 'ringing',
+            timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+            restartAttempt: 0
         });
         
-        console.log('📤 ICE restart offer sent');
+        console.log('📤 Offer sent, waiting for answer...');
+        
+        const unsubscribe = db.collection('calls').doc(CONFIG.currentCallId).onSnapshot((snapshot) => {
+            if (!snapshot.exists) return;
+            
+            const data = snapshot.data();
+            
+            if (data.status === 'rejected') {
+                console.log('❌ Call was rejected');
+                stopRingbackTone();
+                if (CONFIG.callTimeout) {
+                    clearTimeout(CONFIG.callTimeout);
+                    CONFIG.callTimeout = null;
+                }
+                if (window.showStatusModal) {
+                    window.showStatusModal('📢 Call Rejected', 'The call was rejected by the recipient', true);
+                }
+                window.hangup('rejected');
+                unsubscribe();
+                return;
+            }
+            
+            if (data.answer && CONFIG.peerConnection && !CONFIG.peerConnection.currentRemoteDescription) {
+                console.log('📥 Received answer');
+                stopRingbackTone();
+                
+                if (CONFIG.callTimeout) {
+                    clearTimeout(CONFIG.callTimeout);
+                    CONFIG.callTimeout = null;
+                }
+                
+                updateAllCallButtons(targetUsername, 'incall');
+                
+                CONFIG.peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer))
+                    .catch(err => console.log(`❌ Error setting remote description: ${err.message}`));
+                unsubscribe();
+            }
+        });
+        
+        db.collection('ice-candidates')
+            .where('callId', '==', CONFIG.currentCallId)
+            .where('fromUserId', '==', targetUsername)
+            .onSnapshot((snapshot) => {
+                snapshot.docChanges().forEach(change => {
+                    if (change.type === 'added' && CONFIG.peerConnection) {
+                        const data = change.doc.data();
+                        CONFIG.peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate))
+                            .catch(err => console.log(`❌ Error adding ICE candidate: ${err.message}`));
+                        console.log('🧊 Added remote ICE candidate');
+                    }
+                });
+            });
+        
+        CONFIG.callTimeout = setTimeout(() => {
+            if (CONFIG.isInCall && !CONFIG.peerConnection?.currentRemoteDescription) {
+                console.log('⏰ Call timeout - no answer received');
+                stopRingbackTone();
+                if (window.showStatusModal) {
+                    window.showStatusModal('⏰ Call Timeout', 'No answer - call timed out', true);
+                }
+                window.hangup('timeout');
+            }
+        }, 30000);
         
     } catch (error) {
-        console.log(`❌ ICE restart failed: ${error.message}`);
-        if (window.showConnectionStatus) {
-            window.showConnectionStatus(`❌ Reconnection attempt ${CONFIG.iceRestartAttempts} failed`, 'error');
+        console.log(`❌ Call error: ${error.message}`);
+        stopRingbackTone();
+        CONFIG.isInCall = false;
+        CONFIG.currentCallId = null;
+        CONFIG.currentCallPartner = null;
+        if (CONFIG.callTimeout) {
+            clearTimeout(CONFIG.callTimeout);
+            CONFIG.callTimeout = null;
+        }
+        if (window.dom && window.dom.hangupBtn) {
+            window.dom.hangupBtn.disabled = true;
+        }
+        if (window.loadUsers) window.loadUsers();
+    }
+};
+
+// ==================== ANSWER FUNCTION ====================
+window.answerCall = async function(callId, callerId, offer) {
+    console.log(`✅ Answering call from ${callerId}`);
+    
+    try {
+        CONFIG.isInCall = true;
+        CONFIG.currentCallId = callId;
+        CONFIG.currentCallPartner = callerId;
+        
+        await window.createPeerConnection(callerId, false);
+        
+        await CONFIG.peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+        
+        const answer = await CONFIG.peerConnection.createAnswer();
+        await CONFIG.peerConnection.setLocalDescription(answer);
+        
+        await db.collection('calls').doc(callId).update({
+            answer: {
+                type: answer.type,
+                sdp: answer.sdp
+            },
+            status: 'answered',
+            answeredAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        
+        console.log('📤 Answer sent');
+        
+        // Update all buttons - disable all and set the caller to "In call"
+        updateAllCallButtons(callerId, 'incall');
+        
+        // Show success message briefly
+        if (window.showStatusModal) {
+            window.showStatusModal('✅ Call Connected', 'You are now connected', false);
+            setTimeout(() => {
+                window.hideStatusModal();
+            }, 2000);
+        }
+        
+        db.collection('ice-candidates')
+            .where('callId', '==', callId)
+            .where('fromUserId', '==', callerId)
+            .onSnapshot((snapshot) => {
+                snapshot.docChanges().forEach(change => {
+                    if (change.type === 'added' && CONFIG.peerConnection) {
+                        const data = change.doc.data();
+                        CONFIG.peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate))
+                            .catch(err => console.log(`❌ Error adding ICE candidate: ${err.message}`));
+                    }
+                });
+            });
+        
+    } catch (error) {
+        console.log(`❌ Error answering call: ${error.message}`);
+        if (window.hangup) window.hangup('answer_error');
+    }
+};
+
+// ==================== UPDATE ALL CALL BUTTONS ====================
+function updateAllCallButtons(partnerUsername, state) {
+    const buttons = document.querySelectorAll('.call-user-btn');
+    
+    buttons.forEach(button => {
+        const onclickAttr = button.getAttribute('onclick');
+        if (!onclickAttr) return;
+        
+        const match = onclickAttr.match(/'([^']+)'/);
+        if (!match) return;
+        
+        const buttonUsername = match[1];
+        
+        if (buttonUsername === partnerUsername) {
+            button.disabled = true;
+            if (state === 'calling') {
+                button.textContent = 'Calling...';
+            } else if (state === 'incall') {
+                button.textContent = 'In call';
+            }
+        } else {
+            button.disabled = true;
+        }
+    });
+}
+
+// ==================== INCOMING CALL LISTENER ====================
+window.listenForIncomingCalls = function() {
+    if (!CONFIG.myUsername) return;
+    
+    console.log(`👂 Listening for incoming calls as ${CONFIG.myUsername}...`);
+    
+    db.collection('calls')
+        .where('calleeId', '==', CONFIG.myUsername)
+        .where('status', '==', 'ringing')
+        .onSnapshot((snapshot) => {
+            snapshot.docChanges().forEach(change => {
+                if (change.type === 'added') {
+                    const callData = change.doc.data();
+                    const callId = change.doc.id;
+                    
+                    if (callData.callerId === CONFIG.myUsername) {
+                        console.log(`⏭️ Ignoring self-initiated call from ${callData.callerId}`);
+                        return;
+                    }
+                    
+                    console.log(`📞 Incoming call from ${callData.callerId}!`);
+                    
+                    if (window.showIncomingCallModal) {
+                        window.showIncomingCallModal(callData.callerId, callId, callData.offer);
+                    }
+                }
+            });
+        }, (error) => {
+            console.log(`❌ Error listening for calls: ${error.message}`);
+        });
+};
+
+// ==================== CLEANUP OLD CALLS (KEEP ONLY LATEST PER USER) ====================
+window.cleanupOldCallsKeepLatest = async function() {
+    if (!CONFIG.myUsername) return;
+    
+    try {
+        console.log('🧹 Starting smart cleanup - keeping only latest call per user...');
+        
+        const [callerCalls, calleeCalls] = await Promise.all([
+            db.collection('calls').where('callerId', '==', CONFIG.myUsername).get(),
+            db.collection('calls').where('calleeId', '==', CONFIG.myUsername).get()
+        ]);
+        
+        const allCalls = [...callerCalls.docs, ...calleeCalls.docs];
+        
+        if (allCalls.length === 0) {
+            console.log('📭 No calls to clean up');
+            return;
+        }
+        
+        console.log(`📊 Found ${allCalls.length} total calls`);
+        
+        const callsByUser = {};
+        
+        allCalls.forEach(doc => {
+            const callData = doc.data();
+            const otherUser = callData.callerId === CONFIG.myUsername ? 
+                callData.calleeId : callData.callerId;
+            
+            if (!callsByUser[otherUser]) {
+                callsByUser[otherUser] = [];
+            }
+            
+            let timestamp = 0;
+            if (callData.timestamp) {
+                timestamp = callData.timestamp.toMillis?.() || 
+                           callData.timestamp._seconds * 1000 || 
+                           callData.timestamp;
+            }
+            
+            callsByUser[otherUser].push({
+                id: doc.id,
+                timestamp: timestamp,
+                ref: doc.ref,
+                data: callData
+            });
+        });
+        
+        const batch = db.batch();
+        let deletedCount = 0;
+        let keptCount = 0;
+        
+        Object.keys(callsByUser).forEach(otherUser => {
+            const userCalls = callsByUser[otherUser];
+            userCalls.sort((a, b) => b.timestamp - a.timestamp);
+            
+            userCalls.forEach((call, index) => {
+                if (index === 0) {
+                    keptCount++;
+                    console.log(`✅ Keeping latest call with ${otherUser}`);
+                } else {
+                    batch.delete(call.ref);
+                    deletedCount++;
+                    console.log(`🗑️ Deleting old call with ${otherUser}`);
+                }
+            });
+        });
+        
+        if (deletedCount > 0) {
+            await batch.commit();
+            console.log(`🧹 Call cleanup complete: kept ${keptCount} calls, deleted ${deletedCount} old calls`);
+        } else {
+            console.log(`📭 No old calls to delete`);
+        }
+        
+    } catch (error) {
+        console.log(`❌ Error during call cleanup: ${error.message}`);
+    }
+};
+
+// ==================== CLEANUP ORPHANED ICE CANDIDATES ====================
+window.cleanupOrphanedIceCandidates = async function() {
+    if (!CONFIG.myUsername) return;
+    
+    try {
+        console.log('🧹 Cleaning up orphaned ice-candidates...');
+        
+        // Get all ice-candidates where this user is the sender
+        const candidatesSnapshot = await db.collection('ice-candidates')
+            .where('fromUserId', '==', CONFIG.myUsername)
+            .get();
+        
+        if (candidatesSnapshot.empty) {
+            console.log('📭 No ice-candidates to check');
+            return;
+        }
+        
+        console.log(`📊 Found ${candidatesSnapshot.size} total ice-candidates`);
+        
+        // Collect all unique callIds from these candidates
+        const callIds = new Set();
+        candidatesSnapshot.forEach(doc => {
+            const callId = doc.data().callId;
+            if (callId) callIds.add(callId);
+        });
+        
+        if (callIds.size === 0) {
+            console.log('⚠️ No callIds found in ice-candidates');
+            return;
+        }
+        
+        console.log(`🔍 Checking ${callIds.size} unique callIds against calls collection`);
+        
+        // Check which callIds still exist in the calls collection
+        // Firestore 'in' queries are limited to 10 values at a time
+        const callIdArray = Array.from(callIds);
+        const existingCallIds = new Set();
+        
+        // Process in batches of 10
+        for (let i = 0; i < callIdArray.length; i += 10) {
+            const batch = callIdArray.slice(i, i + 10);
+            const callsSnapshot = await db.collection('calls')
+                .where('__name__', 'in', batch)
+                .get();
+            
+            callsSnapshot.forEach(doc => {
+                existingCallIds.add(doc.id);
+            });
+        }
+        
+        console.log(`✅ Found ${existingCallIds.size} calls still existing`);
+        
+        // Now delete any ice-candidate whose callId is NOT in existingCallIds
+        const deleteBatch = db.batch();
+        let deletedCount = 0;
+        
+        candidatesSnapshot.forEach(doc => {
+            const callId = doc.data().callId;
+            if (!existingCallIds.has(callId)) {
+                deleteBatch.delete(doc.ref);
+                deletedCount++;
+                console.log(`🗑️ Deleting orphaned ice-candidate for call ${callId}`);
+            }
+        });
+        
+        if (deletedCount > 0) {
+            await deleteBatch.commit();
+            console.log(`🧹 Cleanup complete: deleted ${deletedCount} orphaned ice-candidates`);
+        } else {
+            console.log(`📭 No orphaned ice-candidates to delete`);
+        }
+        
+    } catch (error) {
+        console.log(`❌ Error during ice-candidates cleanup: ${error.message}`);
+    }
+};
+
+// ==================== HANGUP FUNCTION ====================
+window.hangup = async function(reason = 'user_initiated') {
+    console.log(`📞 Call ended - reason: ${reason}`);
+    
+    if (window.stopRingtone) window.stopRingtone();
+    stopRingbackTone();
+    
+	if (window.clearConnectionStatus) {
+        window.clearConnectionStatus();
+    }
+	
+    if (CONFIG.callTimeout) {
+        clearTimeout(CONFIG.callTimeout);
+        CONFIG.callTimeout = null;
+    }
+    
+    if (CONFIG.currentCallId) {
+        try {
+            const callDoc = await db.collection('calls').doc(CONFIG.currentCallId).get();
+            if (callDoc.exists) {
+                const callData = callDoc.data();
+                
+                if (callData.status === 'ringing') {
+                    if (callData.callerId === CONFIG.myUsername) {
+                        await db.collection('calls').doc(CONFIG.currentCallId).update({
+                            status: 'cancelled',
+                            endedAt: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                        console.log('📞 Call cancelled by caller');
+                    }
+                } else {
+                    await db.collection('calls').doc(CONFIG.currentCallId).update({
+                        status: 'ended',
+                        endedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                }
+            }
+        } catch (err) {
+            console.log(`Error updating call status: ${err.message}`);
         }
     }
+    
+    if (CONFIG.peerConnection) {
+        CONFIG.peerConnection.close();
+        CONFIG.peerConnection = null;
+    }
+    
+    if (CONFIG.connectionTimeout) {
+        clearTimeout(CONFIG.connectionTimeout);
+        CONFIG.connectionTimeout = null;
+    }
+    
+    CONFIG.remoteStream = null;
+    CONFIG.isInCall = false;
+    CONFIG.currentCallId = null;
+    CONFIG.currentCallPartner = null;
+    CONFIG.iceRestartAttempts = 0;
+    
+    if (window.dom && window.dom.remoteVideo) {
+        window.dom.remoteVideo.srcObject = null;
+    }
+    if (window.dom && window.dom.hangupBtn) {
+        window.dom.hangupBtn.disabled = true;
+    }
+    
+    if (window.hideIncomingCallModal) window.hideIncomingCallModal();
+    
+    console.log('📞 Call ended');
+    
+    if (window.loadUsers) window.loadUsers();
+    
+    setTimeout(async () => {
+        console.log('🧹 Running post-call cleanups...');
+        
+        if (window.cleanupOldCallsKeepLatest) {
+            await window.cleanupOldCallsKeepLatest();
+        }
+        
+        if (window.cleanupOrphanedIceCandidates) {
+            await window.cleanupOrphanedIceCandidates();
+        }
+    }, 3000);
+};
+
+// ==================== ATTACH HANGUP BUTTON LISTENER ====================
+function attachHangupListener() {
+    if (window.dom && window.dom.hangupBtn) {
+        const oldBtn = window.dom.hangupBtn;
+        const newBtn = oldBtn.cloneNode(true);
+        oldBtn.parentNode.replaceChild(newBtn, oldBtn);
+        window.dom.hangupBtn = newBtn;
+        
+        window.dom.hangupBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            window.hangup('user_initiated');
+        });
+        
+        console.log('✅ Hangup button listener attached');
+    } else {
+        console.warn('Hangup button not found, will retry...');
+        setTimeout(attachHangupListener, 500);
+    }
 }
+
+if (window.dom) {
+    attachHangupListener();
+} else {
+    window.addEventListener('ui-ready', attachHangupListener);
+}
+
+document.addEventListener('click', () => {
+    if (ringbackContext && ringbackContext.state === 'suspended') {
+        ringbackContext.resume();
+    }
+}, { once: false });
