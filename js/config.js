@@ -62,6 +62,18 @@ const CONFIG = {
     statusMessageTimeout: null
 };
 
+// ==================== WEB PUSH CONFIGURATION ====================
+// VAPID Public Key - Generate this at: https://web-push-codelab.glitch.me/
+// Or using: npx web-push generate-vapid-keys
+const VAPID_PUBLIC_KEY = 'YOUR_VAPID_PUBLIC_KEY_HERE';
+
+// Add to CONFIG object
+CONFIG.pushSubscription = null;
+CONFIG.pushSupported = false;
+
+console.log('✅ Web Push config ready');
+
+
 const TURN_SERVER_URL = 'https://turn-token.easosunov.workers.dev/ice';
 
 window.APK_PACKAGE = "com.easosunov.communicator";
