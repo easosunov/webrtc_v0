@@ -157,7 +157,8 @@ window.callUser = async function(targetUsername) {
         
         console.log('📤 Offer sent, waiting for answer...');
         
-        const unsubscribe = db.collection('calls').doc(CONFIG.currentCallId).onSnapshot((snapshot) => {
+        // Keep listener active throughout the call - DO NOT unsubscribe after answer
+        let callListener = db.collection('calls').doc(CONFIG.currentCallId).onSnapshot((snapshot) => {
             if (!snapshot.exists) return;
             
             const data = snapshot.data();
@@ -176,8 +177,8 @@ window.callUser = async function(targetUsername) {
                 if (window.showStatusModal) {
                     window.showStatusModal('📢 Call Rejected', 'The call was rejected by the recipient', true);
                 }
+                callListener();
                 window.hangup('rejected');
-                unsubscribe();
                 return;
             }
             
@@ -187,14 +188,14 @@ window.callUser = async function(targetUsername) {
                 if (window.showConnectionStatus) {
                     window.showConnectionStatus(`📞 Call ended by other user`, 'info');
                 }
+                callListener();
                 setTimeout(() => {
                     window.hangup('remote_ended');
                 }, 1000);
-                unsubscribe();
                 return;
             }
             
-            // Check for answer
+            // Check for answer - only process answer once
             if (data.answer && CONFIG.peerConnection && !CONFIG.peerConnection.currentRemoteDescription) {
                 console.log('📥 Received answer');
                 stopRingbackTone();
@@ -208,7 +209,7 @@ window.callUser = async function(targetUsername) {
                 
                 CONFIG.peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer))
                     .catch(err => console.log(`❌ Error setting remote description: ${err.message}`));
-                unsubscribe();
+                // DO NOT unsubscribe - keep listening for status changes
             }
         });
         
@@ -292,7 +293,7 @@ window.answerCall = async function(callId, callerId, offer) {
             }, 2000);
         }
         
-        // Listen for call status changes (if caller hangs up)
+        // Listen for call status changes (if caller hangs up) - keep active throughout call
         const callListener = db.collection('calls').doc(callId).onSnapshot((snapshot) => {
             if (!snapshot.exists) return;
             const data = snapshot.data();
