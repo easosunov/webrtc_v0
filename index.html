@@ -6,7 +6,7 @@
     <title>WebRTC Communicator</title>
     
     <!-- PWA Manifest -->
-    <link rel="manifest" href="/manifest.json">
+    <link rel="manifest" href="/webrtc_v0/manifest.json">
     <meta name="theme-color" content="#667eea">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1349,7 +1349,7 @@
     <script>
         // Register service worker for PWA and push
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/sw.js')
+            navigator.serviceWorker.register('/webrtc_v0/sw.js')
                 .then(registration => {
                     console.log('✅ Service Worker registered successfully');
                     
