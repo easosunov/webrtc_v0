@@ -280,6 +280,186 @@ window.resetAllCallButtons = function() {
     });
 };
 
+// ==================== WEB PUSH NOTIFICATIONS ====================
+async function requestNotificationPermission() {
+    if (!('Notification' in window)) {
+        console.log('❌ This browser does not support notifications');
+        alert('Your browser does not support notifications');
+        return false;
+    }
+    
+    const permission = await Notification.requestPermission();
+    console.log('📱 Notification permission:', permission);
+    
+    if (permission === 'granted') {
+        await subscribeToPush();
+        return true;
+    }
+    return false;
+}
+
+async function subscribeToPush() {
+    if (!('serviceWorker' in navigator)) {
+        console.log('❌ Service Worker not supported');
+        return false;
+    }
+    
+    if (!window.VAPID_PUBLIC_KEY) {
+        console.error('❌ VAPID_PUBLIC_KEY not configured');
+        return false;
+    }
+    
+    try {
+        const registration = await navigator.serviceWorker.ready;
+        console.log('✅ Service Worker ready');
+        
+        // Check if already subscribed
+        let subscription = await registration.pushManager.getSubscription();
+        
+        if (subscription) {
+            console.log('✅ Already subscribed to push');
+            CONFIG.pushSubscription = subscription;
+            await savePushSubscription(subscription);
+            return true;
+        }
+        
+        // Convert VAPID public key from base64 to Uint8Array
+        const vapidPublicKey = window.VAPID_PUBLIC_KEY;
+        const base64ToUint8Array = (base64String) => {
+            const padding = '='.repeat((4 - base64String.length % 4) % 4);
+            const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+            const rawData = window.atob(base64);
+            const outputArray = new Uint8Array(rawData.length);
+            for (let i = 0; i < rawData.length; ++i) {
+                outputArray[i] = rawData.charCodeAt(i);
+            }
+            return outputArray;
+        };
+        
+        const applicationServerKey = base64ToUint8Array(vapidPublicKey);
+        
+        // Create new subscription
+        subscription = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: applicationServerKey
+        });
+        
+        console.log('✅ Push subscription created');
+        CONFIG.pushSubscription = subscription;
+        await savePushSubscription(subscription);
+        return true;
+        
+    } catch (error) {
+        console.error('❌ Failed to subscribe to push:', error);
+        return false;
+    }
+}
+
+async function savePushSubscription(subscription) {
+    if (!CONFIG.myUsername) {
+        console.log('⏳ Not logged in yet, will save later');
+        // Store temporarily to save after login
+        window.pendingPushSubscription = subscription;
+        return;
+    }
+    
+    try {
+        // Convert subscription to plain object for Firestore
+        const subscriptionData = {
+            endpoint: subscription.endpoint,
+            expirationTime: subscription.expirationTime,
+            keys: {
+                p256dh: btoa(String.fromCharCode.apply(null, new Uint8Array(subscription.getKey('p256dh')))),
+                auth: btoa(String.fromCharCode.apply(null, new Uint8Array(subscription.getKey('auth'))))
+            }
+        };
+        
+        await db.collection('users').doc(CONFIG.myUsername).update({
+            pushSubscription: subscriptionData,
+            pushEnabled: true,
+            pushLastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        
+        console.log('✅ Push subscription saved to Firestore');
+        
+    } catch (error) {
+        console.error('❌ Failed to save push subscription:', error);
+    }
+}
+
+function showEnablePushButton() {
+    // Check if push is already enabled
+    if (CONFIG.pushSubscription) {
+        console.log('Push already enabled');
+        return;
+    }
+    
+    // Check if we already have a button
+    if (document.getElementById('enable-push-btn')) {
+        return;
+    }
+    
+    // Check if VAPID key is configured
+    if (!window.VAPID_PUBLIC_KEY || window.VAPID_PUBLIC_KEY === 'YOUR_VAPID_PUBLIC_KEY_HERE') {
+        console.log('⚠️ VAPID key not configured, skipping push button');
+        return;
+    }
+    
+    // Create enable push button
+    const pushButton = document.createElement('button');
+    pushButton.id = 'enable-push-btn';
+    pushButton.className = 'enable-push-btn';
+    pushButton.textContent = '🔔 Enable Notifications';
+    
+    pushButton.onclick = async () => {
+        pushButton.disabled = true;
+        pushButton.textContent = 'Requesting permission...';
+        const granted = await requestNotificationPermission();
+        if (granted) {
+            pushButton.textContent = '✅ Notifications enabled';
+            setTimeout(() => {
+                pushButton.remove();
+            }, 3000);
+        } else {
+            pushButton.textContent = '❌ Permission denied';
+            setTimeout(() => {
+                pushButton.textContent = '🔔 Enable Notifications';
+                pushButton.disabled = false;
+            }, 3000);
+        }
+    };
+    
+    // Add to users panel
+    const usersPanel = document.querySelector('.users-panel');
+    if (usersPanel && usersPanel.querySelector('#enable-push-btn') === null) {
+        // Add after the users container
+        usersPanel.appendChild(pushButton);
+        console.log('✅ Enable push button added to UI');
+    }
+}
+
+// Check for pending subscription after login
+function checkPendingPushSubscription() {
+    if (window.pendingPushSubscription && CONFIG.myUsername) {
+        console.log('📱 Saving pending push subscription');
+        savePushSubscription(window.pendingPushSubscription);
+        window.pendingPushSubscription = null;
+    }
+}
+
+// Expose functions globally
+window.startRingtone = startRingtone;
+window.stopRingtone = stopRingtone;
+window.showConnectionStatus = showConnectionStatus;
+window.clearConnectionStatus = clearConnectionStatus;
+window.updateCallButtonState = updateCallButtonState;
+window.resetAllCallButtons = resetAllCallButtons;
+window.requestNotificationPermission = requestNotificationPermission;
+window.subscribeToPush = subscribeToPush;
+window.savePushSubscription = savePushSubscription;
+window.showEnablePushButton = showEnablePushButton;
+window.checkPendingPushSubscription = checkPendingPushSubscription;
+
 // Initialize everything when DOM is ready
 document.addEventListener('DOMContentLoaded', function() {
     console.log('DOM Content Loaded');
@@ -349,7 +529,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         uiInitialized = true;
-        console.log('🚀 UI loaded with ringtone and connection status support');
+        console.log('🚀 UI loaded with ringtone, connection status, and push notification support');
         
         window.dispatchEvent(new Event('ui-ready'));
     }
@@ -361,153 +541,3 @@ document.addEventListener('click', () => {
         audioContext.resume();
     }
 }, { once: false });
-
-// ==================== WEB PUSH NOTIFICATIONS ====================
-async function requestNotificationPermission() {
-  if (!('Notification' in window)) {
-    console.log('❌ This browser does not support notifications');
-    return false;
-  }
-  
-  const permission = await Notification.requestPermission();
-  console.log('📱 Notification permission:', permission);
-  
-  if (permission === 'granted') {
-    await subscribeToPush();
-    return true;
-  }
-  return false;
-}
-
-async function subscribeToPush() {
-  if (!('serviceWorker' in navigator)) {
-    console.log('❌ Service Worker not supported');
-    return false;
-  }
-  
-  try {
-    const registration = await navigator.serviceWorker.ready;
-    console.log('✅ Service Worker ready');
-    
-    // Check if already subscribed
-    let subscription = await registration.pushManager.getSubscription();
-    
-    if (subscription) {
-      console.log('✅ Already subscribed to push');
-      CONFIG.pushSubscription = subscription;
-      await savePushSubscription(subscription);
-      return true;
-    }
-    
-    // Create new subscription
-    subscription = await registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: new Uint8Array(atob(VAPID_PUBLIC_KEY).split('').map(c => c.charCodeAt(0)))
-    });
-    
-    console.log('✅ Push subscription created');
-    CONFIG.pushSubscription = subscription;
-    await savePushSubscription(subscription);
-    return true;
-    
-  } catch (error) {
-    console.error('❌ Failed to subscribe to push:', error);
-    return false;
-  }
-}
-
-async function savePushSubscription(subscription) {
-  if (!CONFIG.myUsername) {
-    console.log('⏳ Not logged in yet, will save later');
-    return;
-  }
-  
-  try {
-    const subscriptionData = {
-      endpoint: subscription.endpoint,
-      expirationTime: subscription.expirationTime,
-      keys: {
-        p256dh: btoa(String.fromCharCode.apply(null, new Uint8Array(subscription.getKey('p256dh')))),
-        auth: btoa(String.fromCharCode.apply(null, new Uint8Array(subscription.getKey('auth'))))
-      }
-    };
-    
-    await db.collection('users').doc(CONFIG.myUsername).update({
-      pushSubscription: subscriptionData,
-      pushEnabled: true,
-      pushLastUpdated: firebase.firestore.FieldValue.serverTimestamp()
-    });
-    
-    console.log('✅ Push subscription saved to Firestore');
-    
-  } catch (error) {
-    console.error('❌ Failed to save push subscription:', error);
-  }
-}
-
-function showEnablePushButton() {
-  // Check if push is already enabled
-  if (CONFIG.pushSubscription) {
-    console.log('Push already enabled');
-    return;
-  }
-  
-  // Check if we already have a button
-  if (document.getElementById('enable-push-btn')) {
-    return;
-  }
-  
-  // Create enable push button
-  const pushButton = document.createElement('button');
-  pushButton.id = 'enable-push-btn';
-  pushButton.textContent = '🔔 Enable Notifications';
-  pushButton.style.cssText = `
-    margin-top: 10px;
-    padding: 8px 12px;
-    background: #667eea;
-    color: white;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-    font-size: 12px;
-    width: 100%;
-  `;
-  pushButton.onclick = async () => {
-    pushButton.disabled = true;
-    pushButton.textContent = 'Requesting permission...';
-    const granted = await requestNotificationPermission();
-    if (granted) {
-      pushButton.textContent = '✅ Notifications enabled';
-      setTimeout(() => {
-        pushButton.remove();
-      }, 3000);
-    } else {
-      pushButton.textContent = '❌ Permission denied';
-      setTimeout(() => {
-        pushButton.textContent = '🔔 Enable Notifications';
-        pushButton.disabled = false;
-      }, 3000);
-    }
-  };
-  
-  // Add to users panel
-  const usersPanel = document.querySelector('.users-panel');
-  if (usersPanel && usersPanel.querySelector('#enable-push-btn') === null) {
-    usersPanel.appendChild(pushButton);
-  }
-}
-
-// Expose functions globally
-window.requestNotificationPermission = requestNotificationPermission;
-window.subscribeToPush = subscribeToPush;
-window.savePushSubscription = savePushSubscription;
-window.showEnablePushButton = showEnablePushButton;
-
-
-// Make functions available globally
-window.startRingtone = startRingtone;
-window.stopRingtone = stopRingtone;
-window.showConnectionStatus = showConnectionStatus;
-window.clearConnectionStatus = clearConnectionStatus;
-window.updateCallButtonState = updateCallButtonState;
-window.resetAllCallButtons = resetAllCallButtons;
