@@ -547,40 +547,6 @@
             transition: all 0.3s ease;
         }
 
-		/* Call log message styling */
-		.call-log-message {
-			display: flex;
-			justify-content: center;
-			margin: 12px 0;
-		}
-
-		.call-log-bubble {
-			background: rgba(0, 0, 0, 0.08);
-			padding: 8px 16px;
-			border-radius: 20px;
-			display: inline-flex;
-			align-items: center;
-			gap: 8px;
-			font-size: 12px;
-			color: #666;
-			backdrop-filter: blur(2px);
-		}
-
-		.call-log-icon {
-			font-size: 14px;
-		}
-
-		.call-log-text {
-			font-weight: 500;
-		}
-
-		.call-log-time {
-			font-size: 10px;
-			color: #888;
-			margin-left: 6px;
-		}
-
-
         /* Fullscreen mode styles */
         .video-container.fullscreen-mode {
             display: block;
@@ -694,7 +660,7 @@
             border-radius: 10px;
             padding: 20px;
             height: fit-content;
-            max-height: 300px;
+            max-height: 250px;
             overflow-y: auto;
         }
 
@@ -898,6 +864,63 @@
             color: #495057;
         }
 
+        /* Install Panel */
+        .install-panel {
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 20%, #764ba2 100%);
+            border-radius: 10px;
+            border: none;
+            color: white;
+        }
+
+        .install-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .install-header span {
+            font-size: 24px;
+        }
+
+        .install-header h4 {
+            margin: 0;
+            color: white;
+            font-size: 16px;
+        }
+
+        .install-description {
+            font-size: 12px;
+            color: rgba(255,255,255,0.9);
+            margin-bottom: 15px;
+        }
+
+        .install-btn {
+            width: 100%;
+            padding: 12px;
+            background: white;
+            color: #667eea;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .install-btn:hover {
+            transform: scale(1.02);
+            background: #f0f0f0;
+        }
+
+        .install-status {
+            margin-top: 10px;
+            font-size: 11px;
+            text-align: center;
+            color: rgba(255,255,255,0.8);
+        }
+
         .key-hint {
             text-align: center;
             margin-top: 10px;
@@ -1019,7 +1042,7 @@
             }
             
             .users-panel {
-                max-height: 250px;
+                max-height: 200px;
             }
             
             /* Stack videos vertically on mobile */
@@ -1137,18 +1160,18 @@
                 </div>
                 
                 <!-- Right side: All panels stacked vertically -->
+                <div class="right-panels">
+                    <!-- Connection Status Area - above Available Users panel -->
+                    <div id="call-status-area">
+                        <span id="call-status-text"></span>
+                    </div>
+                    
                     <!-- Available Users Panel -->
-					<!-- Connection Status Area - above Available Users panel -->
-					<div id="call-status-area">
-						<span id="call-status-text"></span>
-					</div>
-
-					<!-- Available Users Panel -->
-					<div class="users-panel">
-						<h3>Available Users</h3>
-						<div id="users-container"></div>
-					</div>
-
+                    <div class="users-panel">
+                        <h3>Available Users</h3>
+                        <div id="users-container"></div>
+                    </div>
+                    
                     <!-- Chat Section -->
                     <div class="chat-section">
                         <div class="chat-layout">
@@ -1202,6 +1225,21 @@
                         <div id="apkStatus" class="apk-status">
                             ℹ️ Not running
                         </div>
+                    </div>
+                    
+                    <!-- Add to Home Screen Panel (Android) -->
+                    <div class="install-panel" id="install-panel" style="display: none;">
+                        <div class="install-header">
+                            <span>📱</span>
+                            <h4>Add to Home Screen</h4>
+                        </div>
+                        <div class="install-description">
+                            Install this app on your home screen for easy access. Works offline!
+                        </div>
+                        <button id="install-btn" class="install-btn">
+                            ➕ Add to Home Screen
+                        </button>
+                        <div id="install-status" class="install-status"></div>
                     </div>
                 </div>
             </div>
@@ -1268,8 +1306,98 @@
     <script src="js/auth.js"></script>
     <script src="js/users.js"></script>
     <script src="js/webrtc.js"></script>
-    <script src="js/calls.js?v=2"></script>
+    <script src="js/calls.js"></script>
     <script src="js/apk.js"></script>
     <script src="js/chat.js"></script>
+    
+    <!-- Add to Home Screen JavaScript -->
+    <script>
+        // ==================== ADD TO HOME SCREEN (PWA) ====================
+        let deferredPrompt = null;
+
+        // Detect if the app can be installed
+        window.addEventListener('beforeinstallprompt', (e) => {
+            // Prevent Chrome 67 and earlier from automatically showing the prompt
+            e.preventDefault();
+            // Stash the event so it can be triggered later
+            deferredPrompt = e;
+            // Show the install button
+            const installPanel = document.getElementById('install-panel');
+            if (installPanel) {
+                installPanel.style.display = 'block';
+            }
+            console.log('📱 App can be installed - showing install button');
+        });
+
+        // Handle install button click
+        const installBtn = document.getElementById('install-btn');
+        if (installBtn) {
+            installBtn.addEventListener('click', async () => {
+                if (!deferredPrompt) {
+                    // If no deferred prompt, show instructions
+                    const statusDiv = document.getElementById('install-status');
+                    if (statusDiv) {
+                        statusDiv.textContent = 'ℹ️ Tap the menu (⋮) and select "Add to Home screen"';
+                        statusDiv.style.color = '#ffd966';
+                        setTimeout(() => {
+                            statusDiv.textContent = '';
+                        }, 5000);
+                    }
+                    return;
+                }
+                
+                // Show the install prompt
+                deferredPrompt.prompt();
+                
+                // Wait for the user to respond to the prompt
+                const { outcome } = await deferredPrompt.userChoice;
+                console.log(`📱 User response to install prompt: ${outcome}`);
+                
+                // We've used the prompt, and can't use it again, discard it
+                deferredPrompt = null;
+                
+                // Update status
+                const statusDiv = document.getElementById('install-status');
+                if (statusDiv) {
+                    if (outcome === 'accepted') {
+                        statusDiv.textContent = '✅ App installed! You can now find it on your home screen.';
+                        statusDiv.style.color = '#90EE90';
+                        // Hide the panel after successful installation
+                        setTimeout(() => {
+                            const installPanel = document.getElementById('install-panel');
+                            if (installPanel) installPanel.style.display = 'none';
+                        }, 3000);
+                    } else {
+                        statusDiv.textContent = '❌ Installation cancelled. You can try again later.';
+                        statusDiv.style.color = '#ffaaaa';
+                        setTimeout(() => {
+                            statusDiv.textContent = '';
+                        }, 3000);
+                    }
+                }
+            });
+        }
+
+        // Also check if app is already installed
+        window.addEventListener('appinstalled', () => {
+            console.log('📱 App was installed successfully');
+            const statusDiv = document.getElementById('install-status');
+            if (statusDiv) {
+                statusDiv.textContent = '✅ App installed! Find it on your home screen.';
+                statusDiv.style.color = '#90EE90';
+                setTimeout(() => {
+                    const installPanel = document.getElementById('install-panel');
+                    if (installPanel) installPanel.style.display = 'none';
+                }, 3000);
+            }
+        });
+
+        // Hide install panel if not applicable (already installed or not supported)
+        if (window.matchMedia('(display-mode: standalone)').matches) {
+            // App is already running as installed app
+            const installPanel = document.getElementById('install-panel');
+            if (installPanel) installPanel.style.display = 'none';
+        }
+    </script>
 </body>
 </html>
