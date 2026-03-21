@@ -1333,6 +1333,28 @@
         }
     </script>
     
+	<!-- Service Worker Registration with Push -->
+	<script>
+		// Register service worker for PWA and push
+		if ('serviceWorker' in navigator) {
+			navigator.serviceWorker.register('/sw.js')
+				.then(registration => {
+					console.log('✅ Service Worker registered successfully');
+					
+					// Check if we already have a push subscription
+					registration.pushManager.getSubscription().then(subscription => {
+						if (subscription) {
+							console.log('✅ Push subscription exists');
+							CONFIG.pushSubscription = subscription;
+						}
+					});
+				})
+				.catch(error => {
+					console.log('❌ Service Worker registration failed:', error);
+				});
+		}
+	</script>
+	
     <!-- Add to Home Screen JavaScript (Simplified) -->
     <script>
         // ==================== ADD TO HOME SCREEN (Simplified) ====================
