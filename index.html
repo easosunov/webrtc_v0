@@ -9,29 +9,15 @@
     <link rel="manifest" href="/webrtc_v0/manifest.json">
     <meta name="theme-color" content="#667eea">
     <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="WebRTC Chat">
     <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23667eea'/%3E%3Ctext x='50' y='70' font-size='50' text-anchor='middle' fill='white'%3E📞%3C/text%3E%3C/svg%3E">
     
     <!-- Main Styles -->
     <link rel="stylesheet" href="/webrtc_v0/css/styles.css">
-	<link rel="manifest" href="/webrtc_v0/manifest.json">
-	<meta name="apple-mobile-web-app-capable" content="yes">
-	<meta name="mobile-web-app-capable" content="yes">
-	
 </head>
 <body>
-
-	<script>
-		alert('Page loaded on Android!');
-		console.log('Page loaded');
-		setTimeout(function() {
-			alert('Checking login screen...');
-			var loginScreen = document.getElementById('login-screen');
-			alert('Login screen exists: ' + (loginScreen ? 'YES' : 'NO'));
-		}, 1000);
-	</script>
-
     <div class="container">
         <!-- Login Screen -->
         <div id="login-screen">
@@ -108,32 +94,8 @@
                     <div class="users-panel">
                         <h3>Available Users</h3>
                         <div id="users-container"></div>
-						
-						<!-- BIG VISIBLE TEST BUTTON FOR ANDROID -->
-					<div style="background: #4CAF50; padding: 15px; margin: 10px 0; border-radius: 10px; text-align: center;">
-						<button onclick="testPush()" style="background: white; color: #4CAF50; padding: 12px 20px; font-size: 16px; font-weight: bold; border: none; border-radius: 8px; width: 100%;">
-							📱 TEST PUSH NOTIFICATION
-						</button>
-						<div id="android-status" style="color: white; margin-top: 8px; font-size: 12px;"></div>
-					</div>
-                        
-                        <!-- Debug Panel -->
-                        <div class="debug-panel-simple" id="debug-panel-simple">
-                            <strong>🔍 DEBUG INFO</strong><br>
-                            <span id="debug-status-simple">Loading...</span>
-                        </div>
                     </div>
-
-					<div style="background: #4CAF50; padding: 10px; margin-bottom: 10px; border-radius: 5px; text-align: center;">
-						<span style="color: white; font-weight: bold;">📱 Android: Scroll down for debug info</span>
-					</div>
-
-					<!-- SIMPLE DEBUG PANEL - ALWAYS VISIBLE -->
-					<div style="background: #ffeb3b; padding: 12px; margin: 10px 0; border-radius: 8px; border: 2px solid red; font-size: 12px;">
-						<strong>🔍 DEBUG</strong><br>
-						<span id="debug-simple">Loading...</span>
-					</div>
-										
+                    
                     <!-- Chat Section -->
                     <div class="chat-section">
                         <div class="chat-layout">
@@ -190,7 +152,7 @@
                             <h4>Add to Home Screen</h4>
                         </div>
                         <div class="install-description">
-                            Install this app on your home screen for easy access.
+                            Install this app on your home screen for easy access and notifications.
                         </div>
                         <button id="install-btn" class="install-btn">
                             ➕ How to Install
@@ -220,9 +182,10 @@
         <button id="status-modal-ok" style="padding: 8px 20px; background: #667eea; color: white; border: none; border-radius: 5px; cursor: pointer;">OK</button>
     </div>
 
-    <!-- Firebase SDK -->
+    <!-- Firebase SDKs -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging-compat.js"></script>
 
     <!-- Video toggle -->
     <script>
@@ -256,12 +219,26 @@
     <script src="/webrtc_v0/js/apk.js"></script>
     <script src="/webrtc_v0/js/chat.js"></script>
     
-    <!-- Service Worker -->
+    <!-- FCM Service Worker Registration -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/webrtc_v0/firebase-messaging-sw.js')
+                .then(registration => {
+                    console.log('✅ FCM Service Worker registered');
+                    if (window.messaging) {
+                        window.messaging.useServiceWorker(registration);
+                    }
+                })
+                .catch(err => console.log('❌ FCM SW failed:', err));
+        }
+    </script>
+    
+    <!-- Standard Service Worker (for Web Push) -->
     <script>
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('/webrtc_v0/sw.js')
-                .then(reg => console.log('✅ Service Worker registered'))
-                .catch(err => console.log('❌ Service Worker failed:', err));
+                .then(reg => console.log('✅ Web Push Service Worker registered'))
+                .catch(err => console.log('❌ Web Push SW failed:', err));
         }
     </script>
     
@@ -281,99 +258,5 @@
             });
         }
     </script>
-    
-	<button onclick="testAndroid()" style="background: #4CAF50; color: white; padding: 10px; margin: 10px 0; border: none; border-radius: 5px; width: 100%;">
-    📱 TEST ANDROID
-</button>
-	
-	
-    <!-- Debug Panel -->
-    <script>
-	
-        async function updateDebugStatus() {
-            const el = document.getElementById('debug-status-simple');
-            if (!el) return;
-            let info = [];
-            info.push(`VAPID: ${window.VAPID_PUBLIC_KEY ? '✅' : '❌'}`);
-            const reg = await navigator.serviceWorker.getRegistration();
-            info.push(`SW: ${reg ? '✅' : '❌'}`);
-            info.push(`Notification: ${Notification.permission}`);
-            info.push(`Logged in: ${window.CONFIG?.myUsername || '❌'}`);
-            if (window.CONFIG?.myUsername) {
-                const doc = await db.collection('users').doc(window.CONFIG.myUsername).get();
-                info.push(`Push sub: ${doc.data()?.pushSubscription ? '✅' : '❌'}`);
-            }
-            el.innerHTML = info.join('<br>');
-        }
-        window.addEventListener('login-complete', () => setTimeout(updateDebugStatus, 2000));
-        setTimeout(updateDebugStatus, 3000);
-    </script>
-	
-	<script>
-    async function showDebug() {
-        const el = document.getElementById('debug-simple');
-        if (!el) return;
-        
-        let info = [];
-        info.push(`VAPID: ${window.VAPID_PUBLIC_KEY ? '✅' : '❌'}`);
-        
-        const reg = await navigator.serviceWorker.getRegistration();
-        info.push(`SW: ${reg ? '✅' : '❌'}`);
-        
-        info.push(`Notify: ${Notification.permission}`);
-        
-        info.push(`Logged: ${window.CONFIG?.myUsername || '❌'}`);
-        
-        if (window.CONFIG?.myUsername) {
-            const doc = await db.collection('users').doc(window.CONFIG.myUsername).get();
-            info.push(`Push: ${doc.data()?.pushSubscription ? '✅' : '❌'}`);
-        }
-        
-        el.innerHTML = info.join(' · ');
-    }
-    
-    window.addEventListener('login-complete', () => setTimeout(showDebug, 1000));
-    setTimeout(showDebug, 3000);
-</script>
-
-<script>
-    async function showDebug() {
-        const el = document.getElementById('debug-simple');
-        if (!el) return;
-        
-        let info = [];
-        info.push(`VAPID: ${window.VAPID_PUBLIC_KEY ? '✅' : '❌'}`);
-        
-        const reg = await navigator.serviceWorker.getRegistration();
-        info.push(`SW: ${reg ? '✅' : '❌'}`);
-        
-        info.push(`Notify: ${Notification.permission}`);
-        
-        info.push(`Logged: ${window.CONFIG?.myUsername || '❌'}`);
-        
-        if (window.CONFIG?.myUsername) {
-            const doc = await db.collection('users').doc(window.CONFIG.myUsername).get();
-            info.push(`Push: ${doc.data()?.pushSubscription ? '✅' : '❌'}`);
-        }
-        
-        el.innerHTML = info.join(' · ');
-    }
-    
-    window.addEventListener('login-complete', () => setTimeout(showDebug, 1000));
-    setTimeout(showDebug, 3000);
-</script>
-
-<script>
-window.testAndroid = function() {
-    var msg = '';
-    msg += 'VAPID: ' + (window.VAPID_PUBLIC_KEY ? 'YES' : 'NO') + '\n';
-    msg += 'Service Worker: ' + (navigator.serviceWorker ? 'YES' : 'NO') + '\n';
-    msg += 'Notification: ' + Notification.permission + '\n';
-    msg += 'Logged in: ' + (window.CONFIG?.myUsername || 'NO') + '\n';
-    alert(msg);
-}
-</script>
-
-	
 </body>
 </html>
