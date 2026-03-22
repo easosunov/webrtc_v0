@@ -432,11 +432,44 @@ function showEnablePushButton() {
     // Add to users panel
     const usersPanel = document.querySelector('.users-panel');
     if (usersPanel && usersPanel.querySelector('#enable-push-btn') === null) {
-        // Add after the users container
         usersPanel.appendChild(pushButton);
         console.log('✅ Enable push button added to UI');
     }
 }
+
+// ==================== AUTO-SUBSCRIBE TO PUSH ====================
+window.autoSubscribeToPush = async function() {
+    if (!CONFIG.myUsername) {
+        console.log('⏳ Not logged in, skipping auto-subscribe');
+        return;
+    }
+    
+    // Check if already subscribed in browser
+    const registration = await navigator.serviceWorker.ready;
+    let subscription = await registration.pushManager.getSubscription();
+    
+    if (subscription) {
+        console.log('✅ Already subscribed to push');
+        CONFIG.pushSubscription = subscription;
+        return;
+    }
+    
+    // Check permission
+    const permission = Notification.permission;
+    
+    if (permission === 'granted') {
+        // Already granted, just subscribe
+        console.log('🔔 Permission already granted, auto-subscribing...');
+        await subscribeToPush();
+    } else if (permission === 'default') {
+        // Ask for permission
+        console.log('🔔 Asking for notification permission...');
+        await requestNotificationPermission();
+    } else if (permission === 'denied') {
+        console.log('❌ Notifications denied by user');
+        // Optionally show a message explaining how to enable
+    }
+};
 
 // Check for pending subscription after login
 function checkPendingPushSubscription() {
@@ -446,71 +479,6 @@ function checkPendingPushSubscription() {
         window.pendingPushSubscription = null;
     }
 }
-
-// Auto-restore push subscription on page load
-async function restorePushSubscription() {
-    if (!CONFIG.myUsername) return;
-    
-    // Check if browser already has a subscription
-    const registration = await navigator.serviceWorker.ready;
-    let subscription = await registration.pushManager.getSubscription();
-    
-    if (subscription) {
-        console.log('✅ Browser already has subscription');
-        return;
-    }
-    
-    // No subscription in browser - restore from Firestore
-    const userDoc = await db.collection('users').doc(CONFIG.myUsername).get();
-    const savedSub = userDoc.data()?.pushSubscription;
-    
-    if (!savedSub) {
-        console.log('📱 No saved subscription found, showing enable button');
-        if (window.showEnablePushButton) window.showEnablePushButton();
-        return;
-    }
-    
-    console.log('🔄 Restoring push subscription from Firestore...');
-    
-    try {
-        // Convert saved subscription to format needed for subscribe()
-        const applicationServerKey = new Uint8Array(
-            atob(window.VAPID_PUBLIC_KEY.replace(/-/g, '+').replace(/_/g, '/'))
-                .split('').map(c => c.charCodeAt(0))
-        );
-        
-        subscription = await registration.pushManager.subscribe({
-            userVisibleOnly: true,
-            applicationServerKey: applicationServerKey
-        });
-        
-        console.log('✅ Subscription restored!');
-        
-        // Update Firestore with any new endpoint (in case it changed)
-        const newSubData = {
-            endpoint: subscription.endpoint,
-            expirationTime: subscription.expirationTime,
-            keys: {
-                p256dh: btoa(String.fromCharCode.apply(null, new Uint8Array(subscription.getKey('p256dh')))),
-                auth: btoa(String.fromCharCode.apply(null, new Uint8Array(subscription.getKey('auth'))))
-            }
-        };
-        
-        await db.collection('users').doc(CONFIG.myUsername).update({
-            pushSubscription: newSubData,
-            pushLastUpdated: firebase.firestore.FieldValue.serverTimestamp()
-        });
-        
-    } catch (error) {
-        console.error('❌ Failed to restore subscription:', error);
-        // If restore fails, show enable button
-        if (window.showEnablePushButton) window.showEnablePushButton();
-    }
-}
-
-// Call this after login
-window.addEventListener('login-complete', restorePushSubscription);
-
 
 // Expose functions globally
 window.startRingtone = startRingtone;
@@ -524,6 +492,7 @@ window.subscribeToPush = subscribeToPush;
 window.savePushSubscription = savePushSubscription;
 window.showEnablePushButton = showEnablePushButton;
 window.checkPendingPushSubscription = checkPendingPushSubscription;
+window.autoSubscribeToPush = autoSubscribeToPush;
 
 // Initialize everything when DOM is ready
 document.addEventListener('DOMContentLoaded', function() {
@@ -599,6 +568,22 @@ document.addEventListener('DOMContentLoaded', function() {
         window.dispatchEvent(new Event('ui-ready'));
     }
 });
+
+// ==================== LOGIN COMPLETE EVENT HANDLER ====================
+window.addEventListener('login-complete', () => {
+    console.log('📱 Login complete, checking push subscription...');
+    setTimeout(() => {
+        window.autoSubscribeToPush();
+    }, 1000);
+});
+
+// ==================== CHECK FOR EXISTING SUBSCRIPTION ON PAGE LOAD ====================
+setTimeout(() => {
+    if (CONFIG && CONFIG.myUsername) {
+        console.log('📱 User already logged in, checking push subscription...');
+        window.autoSubscribeToPush();
+    }
+}, 2000);
 
 // Ensure audio context is resumed on user interaction
 document.addEventListener('click', () => {
