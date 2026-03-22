@@ -668,7 +668,7 @@
             border-radius: 10px;
             padding: 20px;
             height: fit-content;
-            max-height: 250px;
+            max-height: 300px;
             overflow-y: auto;
         }
 
@@ -930,7 +930,27 @@
             line-height: 1.4;
         }
 
-        /* Enable Push Button */
+        /* Debug Panel */
+        .debug-panel {
+            background: #f0f0f0;
+            padding: 10px;
+            margin-top: 10px;
+            font-size: 12px;
+            border-radius: 5px;
+            border-left: 4px solid #667eea;
+            color: #333;
+        }
+
+        .debug-panel strong {
+            color: #667eea;
+        }
+
+        .debug-status {
+            margin-top: 5px;
+            font-family: monospace;
+            font-size: 11px;
+        }
+
         .enable-push-btn {
             margin-top: 10px;
             padding: 8px 12px;
@@ -1076,7 +1096,7 @@
             }
             
             .users-panel {
-                max-height: 200px;
+                max-height: 250px;
             }
             
             /* Stack videos vertically on mobile */
@@ -1207,6 +1227,12 @@
                         <!-- Enable Push Button will be inserted here dynamically -->
                     </div>
                     
+                    <!-- Debug Panel -->
+                    <div class="debug-panel" id="debug-panel">
+                        <strong>🔍 Push Debug Info</strong>
+                        <div id="debug-status" class="debug-status">Loading...</div>
+                    </div>
+                    
                     <!-- Chat Section -->
                     <div class="chat-section">
                         <div class="chat-layout">
@@ -1335,7 +1361,7 @@
     </script>
 
     <!-- Our modular JavaScript files - in correct order -->
-    <script src="js/config.js?v=2"></script>
+    <script src="js/config.js"></script>
     <script src="js/ui.js"></script>
     <script src="js/init.js"></script>
     <script src="js/auth.js"></script>
@@ -1436,6 +1462,67 @@
                 }, 1000);
             }
         });
+    </script>
+    
+    <!-- Debug Panel Script -->
+    <script>
+        // Debug function to show status on Android
+        async function updateDebugStatus() {
+            const debugDiv = document.getElementById('debug-status');
+            if (!debugDiv) return;
+            
+            let status = [];
+            
+            // Check VAPID key
+            if (window.VAPID_PUBLIC_KEY) {
+                status.push('✅ VAPID key loaded');
+            } else {
+                status.push('❌ VAPID key missing');
+            }
+            
+            // Check service worker
+            if ('serviceWorker' in navigator) {
+                const registration = await navigator.serviceWorker.getRegistration();
+                if (registration) {
+                    status.push('✅ Service worker registered');
+                } else {
+                    status.push('❌ Service worker not registered');
+                }
+            } else {
+                status.push('❌ Service worker not supported');
+            }
+            
+            // Check notification permission
+            if ('Notification' in window) {
+                status.push(`🔔 Notification: ${Notification.permission}`);
+            }
+            
+            // Check push subscription
+            if ('serviceWorker' in navigator) {
+                try {
+                    const registration = await navigator.serviceWorker.ready;
+                    const subscription = await registration.pushManager.getSubscription();
+                    if (subscription) {
+                        status.push('✅ Push subscription exists');
+                    } else {
+                        status.push('❌ No push subscription');
+                    }
+                } catch (e) {
+                    status.push('❌ Error checking subscription');
+                }
+            }
+            
+            debugDiv.innerHTML = status.join('<br>');
+            console.log('Debug:', status);
+        }
+        
+        // Run debug after login
+        window.addEventListener('login-complete', () => {
+            setTimeout(updateDebugStatus, 2000);
+        });
+        
+        // Also run on page load
+        setTimeout(updateDebugStatus, 3000);
     </script>
 </body>
 </html>
