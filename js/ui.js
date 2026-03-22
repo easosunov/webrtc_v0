@@ -447,6 +447,71 @@ function checkPendingPushSubscription() {
     }
 }
 
+// Auto-restore push subscription on page load
+async function restorePushSubscription() {
+    if (!CONFIG.myUsername) return;
+    
+    // Check if browser already has a subscription
+    const registration = await navigator.serviceWorker.ready;
+    let subscription = await registration.pushManager.getSubscription();
+    
+    if (subscription) {
+        console.log('✅ Browser already has subscription');
+        return;
+    }
+    
+    // No subscription in browser - restore from Firestore
+    const userDoc = await db.collection('users').doc(CONFIG.myUsername).get();
+    const savedSub = userDoc.data()?.pushSubscription;
+    
+    if (!savedSub) {
+        console.log('📱 No saved subscription found, showing enable button');
+        if (window.showEnablePushButton) window.showEnablePushButton();
+        return;
+    }
+    
+    console.log('🔄 Restoring push subscription from Firestore...');
+    
+    try {
+        // Convert saved subscription to format needed for subscribe()
+        const applicationServerKey = new Uint8Array(
+            atob(window.VAPID_PUBLIC_KEY.replace(/-/g, '+').replace(/_/g, '/'))
+                .split('').map(c => c.charCodeAt(0))
+        );
+        
+        subscription = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: applicationServerKey
+        });
+        
+        console.log('✅ Subscription restored!');
+        
+        // Update Firestore with any new endpoint (in case it changed)
+        const newSubData = {
+            endpoint: subscription.endpoint,
+            expirationTime: subscription.expirationTime,
+            keys: {
+                p256dh: btoa(String.fromCharCode.apply(null, new Uint8Array(subscription.getKey('p256dh')))),
+                auth: btoa(String.fromCharCode.apply(null, new Uint8Array(subscription.getKey('auth'))))
+            }
+        };
+        
+        await db.collection('users').doc(CONFIG.myUsername).update({
+            pushSubscription: newSubData,
+            pushLastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        
+    } catch (error) {
+        console.error('❌ Failed to restore subscription:', error);
+        // If restore fails, show enable button
+        if (window.showEnablePushButton) window.showEnablePushButton();
+    }
+}
+
+// Call this after login
+window.addEventListener('login-complete', restorePushSubscription);
+
+
 // Expose functions globally
 window.startRingtone = startRingtone;
 window.stopRingtone = stopRingtone;
