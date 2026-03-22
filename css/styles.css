@@ -1079,6 +1079,7 @@ body {
 }
 
 @media (max-width: 768px) {
+
     .video-container.fullscreen-mode #local-video {
         width: 120px;
         height: 90px;
@@ -1118,3 +1119,15 @@ body {
         max-width: 200px;
     }
 }
+
+	/* Make users panel taller on mobile */
+	.users-panel {
+		max-height: 450px !important;
+		overflow-y: auto !important;
+	}
+
+	/* Ensure debug panel is always visible */
+	.debug-panel-simple {
+		display: block !important;
+		margin-top: 15px !important;
+	}
