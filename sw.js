@@ -62,7 +62,6 @@ self.addEventListener('push', event => {
     data = event.data ? event.data.json() : {};
     console.log('📱 Push data received:', JSON.stringify(data));
     
-    // Handle different payload structures
     if (data.notification) {
       title = data.notification.title || title;
       body = data.notification.body || body;
@@ -71,7 +70,6 @@ self.addEventListener('push', event => {
       body = data.body || body;
     }
     
-    // Extract call data
     if (data.data) {
       callId = data.data.callId;
       callerId = data.data.callerId;
@@ -89,27 +87,42 @@ self.addEventListener('push', event => {
     icon: 'https://easosunov.github.io/webrtc_v0/favicon.ico',
     badge: 'https://easosunov.github.io/webrtc_v0/favicon.ico',
     vibrate: [200, 100, 200],
+    requireInteraction: true,
+    silent: false,
+    tag: 'incoming-call',           // ADDED: helps group notifications
+    renotify: true,                 // ADDED: forces notification to show
+    timestamp: Date.now(),          // ADDED: ensures fresh notification
     data: {
       callId: callId,
       callerId: callerId,
       url: '/webrtc_v0/'
     },
     actions: [
-      {
-        action: 'answer',
-        title: 'Answer Call'
-      },
-      {
-        action: 'dismiss',
-        title: 'Dismiss'
-      }
+      { action: 'answer', title: 'Answer Call' },
+      { action: 'dismiss', title: 'Dismiss' }
     ]
   };
   
+  console.log('📱 Attempting to show notification with title:', title);
+  
+  // Add a small delay to help with background mode
   event.waitUntil(
-    self.registration.showNotification(title, options)
+    new Promise(resolve => {
+      setTimeout(() => {
+        self.registration.showNotification(title, options)
+          .then(() => {
+            console.log('✅ Notification shown successfully');
+            resolve();
+          })
+          .catch(err => {
+            console.error('❌ Failed to show notification:', err);
+            resolve();
+          });
+      }, 100);
+    })
   );
 });
+
 
 
 // ==================== NOTIFICATION CLICK HANDLER ====================
