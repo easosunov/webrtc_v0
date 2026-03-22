@@ -18,19 +18,30 @@ exports.onCallCreated = onDocumentCreated('calls/{callId}', async (event) => {
     
     try {
         const userDoc = await db.collection('users').doc(call.calleeId).get();
-        if (!userDoc.exists || !userDoc.data().pushSubscription) {
+        if (!userDoc.exists) {
+            logger.log(`❌ User ${call.calleeId} not found`);
+            return null;
+        }
+        
+        const userData = userDoc.data();
+        const subscription = userData.pushSubscription;
+        
+        if (!subscription) {
             logger.log(`📱 No push subscription for ${call.calleeId}`);
             return null;
         }
+        
+        // Debug: Log subscription details
+        logger.log(`🔍 Subscription found for ${call.calleeId}`);
+        logger.log(`🔍 Endpoint: ${subscription.endpoint.substring(0, 60)}...`);
+        logger.log(`🔍 Keys present: ${!!subscription.keys}`);
         
         const callerDoc = await db.collection('users').doc(call.callerId).get();
         const callerName = callerDoc.exists ? 
             (callerDoc.data().displayname || callerDoc.data().displayName || call.callerId) : 
             call.callerId;
         
-        const subscription = userDoc.data().pushSubscription;
-        
-        // CORRECTED PAYLOAD - icon/badge/vibrate go INSIDE webpush, NOT in notification
+        // Use the subscription directly
         const payload = {
             notification: {
                 title: '📞 Incoming Call',
@@ -41,30 +52,20 @@ exports.onCallCreated = onDocumentCreated('calls/{callId}', async (event) => {
                 callerId: call.callerId,
                 callerName: callerName
             },
-            token: subscription.endpoint,
-            webpush: {
-                notification: {
-                    icon: 'https://easosunov.github.io/webrtc_v0/favicon.ico',
-                    badge: 'https://easosunov.github.io/webrtc_v0/favicon.ico',
-                    vibrate: [200, 100, 200],
-                    requireInteraction: true,
-                    actions: [
-                        { action: 'answer', title: 'Answer Call' },
-                        { action: 'dismiss', title: 'Dismiss' }
-                    ]
-                }
-            }
+            token: subscription.endpoint
         };
         
+        logger.log(`📤 Sending push to ${call.calleeId}...`);
         const response = await admin.messaging().send(payload);
-        logger.log(`✅ Push sent: ${response}`);
+        logger.log(`✅ Push sent successfully: ${response}`);
         
         await db.collection('notifications').add({
             userId: call.calleeId,
             callId: callId,
             callerId: call.callerId,
             sentAt: admin.firestore.FieldValue.serverTimestamp(),
-            status: 'sent'
+            status: 'sent',
+            response: response
         });
         
     } catch (error) {
@@ -80,6 +81,7 @@ exports.onCallCreated = onDocumentCreated('calls/{callId}', async (event) => {
         });
         
         if (error.code === 'messaging/invalid-registration-token') {
+            logger.log(`🗑️ Removing invalid token for ${call.calleeId}`);
             await db.collection('users').doc(call.calleeId).update({
                 pushSubscription: admin.firestore.FieldValue.delete()
             });
