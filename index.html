@@ -255,6 +255,11 @@
         }
     </script>
     
+	<button onclick="testAndroid()" style="background: #4CAF50; color: white; padding: 10px; margin: 10px 0; border: none; border-radius: 5px; width: 100%;">
+    📱 TEST ANDROID
+</button>
+	
+	
     <!-- Debug Panel -->
     <script>
 	
@@ -329,6 +334,17 @@
     
     window.addEventListener('login-complete', () => setTimeout(showDebug, 1000));
     setTimeout(showDebug, 3000);
+</script>
+
+<script>
+window.testAndroid = function() {
+    var msg = '';
+    msg += 'VAPID: ' + (window.VAPID_PUBLIC_KEY ? 'YES' : 'NO') + '\n';
+    msg += 'Service Worker: ' + (navigator.serviceWorker ? 'YES' : 'NO') + '\n';
+    msg += 'Notification: ' + Notification.permission + '\n';
+    msg += 'Logged in: ' + (window.CONFIG?.myUsername || 'NO') + '\n';
+    alert(msg);
+}
 </script>
 
 	
