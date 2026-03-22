@@ -274,32 +274,11 @@ async function login() {
         
         console.log('✅ Login complete!');
         
-		// Inside login function, after console.log('✅ Login complete!');
+        // ===== DISPATCH LOGIN COMPLETE EVENT =====
+        window.dispatchEvent(new CustomEvent('login-complete', { 
+            detail: { username: CONFIG.myUsername } 
+        }));
         
-// ===== CHECK FOR PUSH SUBSCRIPTION =====
-try {
-    console.log('🔔 Checking push subscription...');
-    // Check if user has a push subscription saved
-    const userDoc = await db.collection('users').doc(accessCode).get();
-    const userData = userDoc.data();
-    
-    if (userData && userData.pushSubscription) {
-        console.log('✅ User has push subscription saved');
-        CONFIG.pushSubscription = userData.pushSubscription;
-        CONFIG.pushSupported = true;
-    } else {
-        console.log('📱 No push subscription found, showing enable button');
-        if (window.showEnablePushButton) {
-            setTimeout(() => {
-                window.showEnablePushButton();
-            }, 1000);
-        }
-    }
-} catch (e) {
-    console.error('Error checking push subscription:', e);
-}
-		
-		
     } catch (error) {
         console.log(`❌ Login error: ${error.message}`);
         console.error('Full error:', error);
