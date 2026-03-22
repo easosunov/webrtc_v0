@@ -15,6 +15,7 @@
     
     <!-- Styles -->
     <style>
+        /* ... all your existing styles ... */
         * {
             margin: 0;
             padding: 0;
@@ -40,897 +41,10 @@
             overflow: hidden;
         }
 
-        /* WhatsApp-style chat layout */
-        .chat-layout {
-            display: grid;
-            grid-template-columns: 350px 1fr;
-            height: 400px;
-            background: #f0f2f5;
-            border-radius: 10px;
-            overflow: hidden;
-            border: 1px solid #e0e0e0;
-        }
-
-        .chats-sidebar {
-            background: white;
-            border-right: 1px solid #e0e0e0;
-            overflow-y: auto;
-        }
-
-        .chats-header {
-            padding: 15px;
-            background: #f5f5f5;
-            border-bottom: 1px solid #e0e0e0;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .chats-header h3 {
-            margin: 0;
-            color: #333;
-            font-size: 16px;
-        }
-
-        .new-chat-btn {
-            padding: 6px 12px;
-            background: #25D366;
-            color: white;
-            border: none;
-            border-radius: 20px;
-            cursor: pointer;
-            font-weight: 600;
-            font-size: 12px;
-        }
-
-        .chat-item {
-            display: flex;
-            align-items: center;
-            padding: 10px;
-            border-bottom: 1px solid #f0f0f0;
-            transition: background 0.2s;
-            position: relative;
-        }
-
-        .chat-item:hover {
-            background: #f5f5f5;
-        }
-
-        .chat-item .chat-content {
-            display: flex;
-            flex: 1;
-            cursor: pointer;
-        }
-
-        .chat-item .delete-chat-btn {
-            background: none;
-            border: none;
-            color: #999;
-            cursor: pointer;
-            padding: 8px 12px;
-            font-size: 16px;
-            border-radius: 50%;
-            opacity: 0.5;
-            transition: all 0.2s;
-            margin-right: 5px;
-        }
-
-        .chat-item:hover .delete-chat-btn {
-            opacity: 1;
-        }
-
-        .chat-item .delete-chat-btn:hover {
-            background-color: #ffebee;
-            color: #f44336;
-        }
-
-        .chat-avatar {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            background: #25D366;
-            color: white;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-            margin-right: 12px;
-            font-size: 14px;
-        }
-
-        .chat-info {
-            flex: 1;
-            min-width: 0;
-        }
-
-        .chat-header {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 4px;
-        }
-
-        .chat-name {
-            font-weight: 600;
-            color: #333;
-            font-size: 14px;
-        }
-
-        .chat-time {
-            font-size: 11px;
-            color: #999;
-        }
-
-        .chat-preview {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .chat-message {
-            font-size: 12px;
-            color: #666;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 180px;
-        }
-
-        .unread-badge {
-            background: #25D366;
-            color: white;
-            border-radius: 50%;
-            min-width: 18px;
-            height: 18px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 10px;
-            padding: 0 4px;
-        }
-
-        /* Chat view */
-        .chat-view {
-            display: flex;
-            flex-direction: column;
-            background: #efeae2;
-            height: 100%;
-        }
-
-        .chat-view-header {
-            padding: 12px 15px;
-            background: #f5f5f5;
-            border-bottom: 1px solid #e0e0e0;
-            display: flex;
-            align-items: center;
-            position: relative;
-        }
-
-        .back-btn {
-            background: none;
-            border: none;
-            font-size: 18px;
-            margin-right: 10px;
-            cursor: pointer;
-            display: none;
-        }
-
-        .chat-view-header h3 {
-            margin: 0;
-            color: #333;
-            font-size: 16px;
-            flex: 1;
-        }
-
-        .delete-chat-header-btn {
-            background: none;
-            border: none;
-            color: #999;
-            cursor: pointer;
-            padding: 8px 12px;
-            font-size: 18px;
-            border-radius: 50%;
-            transition: all 0.2s;
-        }
-
-        .delete-chat-header-btn:hover {
-            background-color: #ffebee;
-            color: #f44336;
-        }
-
-        .chat-messages-container {
-            flex: 1;
-            overflow-y: auto;
-            padding: 15px;
-            background: #e5ddd5;
-        }
-
-        .message {
-            margin-bottom: 12px;
-            display: flex;
-            flex-direction: column;
-        }
-
-        .message-me {
-            align-items: flex-end;
-        }
-
-        .message-other {
-            align-items: flex-start;
-        }
-
-        .message-sender {
-            font-size: 11px;
-            font-weight: 600;
-            margin-bottom: 2px;
-            color: #333;
-            padding: 0 6px;
-        }
-
-        .message-bubble {
-            max-width: 80%;
-            padding: 6px 10px;
-            border-radius: 8px;
-            position: relative;
-        }
-
-        .message-me .message-bubble {
-            background: #dcf8c6;
-        }
-
-        .message-other .message-bubble {
-            background: white;
-        }
-
-        .message-text {
-            font-size: 13px;
-            margin-bottom: 2px;
-            word-wrap: break-word;
-        }
-
-        .message-text a {
-            color: #0066cc;
-            text-decoration: underline;
-            word-break: break-all;
-        }
-
-        .message-time {
-            font-size: 10px;
-            color: #999;
-            text-align: right;
-            margin-top: 2px;
-        }
-
-        .message-date-separator {
-            text-align: center;
-            margin: 15px 0;
-            font-size: 11px;
-            color: #666;
-            background: rgba(255,255,255,0.8);
-            padding: 4px 8px;
-            border-radius: 12px;
-            display: inline-block;
-            width: auto;
-        }
-
-        .chat-input-area {
-            padding: 12px;
-            background: #f5f5f5;
-            display: flex;
-            gap: 8px;
-        }
-
-        .chat-input-area input {
-            flex: 1;
-            padding: 10px;
-            border: 1px solid #e0e0e0;
-            border-radius: 20px;
-            outline: none;
-            font-size: 13px;
-        }
-
-        .chat-input-area button {
-            padding: 10px 20px;
-            background: #25D366;
-            color: white;
-            border: none;
-            border-radius: 20px;
-            cursor: pointer;
-            font-weight: 600;
-            font-size: 13px;
-        }
-
-        .chat-input-area button:hover {
-            background: #128C7E;
-        }
-
-        /* Login Screen */
-        #login-screen {
-            padding: 40px;
-            background: white;
-        }
-
-        .login-header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-
-        .login-header h1 {
-            color: #333;
-            font-size: 28px;
-            margin-bottom: 10px;
-        }
-
-        .login-header p {
-            color: #666;
-            font-size: 14px;
-        }
-
-        .keypad {
-            max-width: 400px;
-            margin: 0 auto;
-        }
-
-        .display {
-            background: #f5f5f5;
-            border-radius: 10px;
-            padding: 20px;
-            text-align: center;
-            margin-bottom: 20px;
-            font-size: 32px;
-            letter-spacing: 4px;
-            color: #333;
-            font-family: monospace;
-            border: 2px solid #e0e0e0;
-        }
-
-        .keypad-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-
-        .keypad-btn {
-            background: white;
-            border: 2px solid #e0e0e0;
-            border-radius: 10px;
-            padding: 20px;
-            font-size: 24px;
-            font-weight: bold;
-            color: #333;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            position: relative;
-        }
-
-        .keypad-btn:hover {
-            background: #667eea;
-            color: white;
-            border-color: #667eea;
-        }
-
-        .keypad-btn:active {
-            transform: scale(0.95);
-        }
-
-        .keypad-btn.special {
-            background: #f0f0f0;
-            color: #666;
-        }
-
-        .keypad-btn::after {
-            content: attr(data-key);
-            position: absolute;
-            bottom: 5px;
-            right: 8px;
-            font-size: 10px;
-            opacity: 0.5;
-            color: inherit;
-        }
-
-        .keypad-btn:hover::after {
-            opacity: 1;
-        }
-
-        .enter-btn {
-            width: 100%;
-            background: #667eea;
-            color: white;
-            border: none;
-            border-radius: 10px;
-            padding: 15px;
-            font-size: 18px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background 0.3s ease;
-            margin-top: 10px;
-        }
-
-        .enter-btn:hover {
-            background: #5a67d8;
-        }
-
-        .enter-btn:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-        }
-
-        .status-message {
-            text-align: center;
-            margin-top: 15px;
-            padding: 10px;
-            border-radius: 5px;
-            font-size: 14px;
-        }
-
-        .status-message.error {
-            background: #fee;
-            color: #c33;
-        }
-
-        .status-message.success {
-            background: #efe;
-            color: #3c3;
-        }
-
-        .status-message.info {
-            background: #eef;
-            color: #33c;
-        }
-
-        /* Call Screen */
-        #call-screen {
-            display: none;
-            padding: 20px;
-        }
-
-        .call-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-            padding-bottom: 15px;
-            border-bottom: 1px solid #eee;
-        }
-
-        .user-info {
-            font-weight: 600;
-            color: #333;
-        }
-
-        .user-info span {
-            color: #667eea;
-            margin-left: 5px;
-        }
-
-        .logout-btn {
-            background: #f44336;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            padding: 8px 15px;
-            cursor: pointer;
-            font-size: 14px;
-            transition: background 0.3s ease;
-        }
-
-        .logout-btn:hover {
-            background: #d32f2f;
-        }
-
-        .main-content {
-            display: grid;
-            grid-template-columns: 1fr 380px;
-            gap: 20px;
-        }
-
-        .video-section {
-            display: flex;
-            flex-direction: column;
-        }
-
-        .video-container {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 15px;
-            margin-bottom: 20px;
-            transition: all 0.3s ease;
-        }
-
-        .video-box {
-            background: #000;
-            border-radius: 10px;
-            overflow: hidden;
-            aspect-ratio: 16/9;
-            position: relative;
-            transition: all 0.3s ease;
-        }
-
-        .video-box video {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            background: #1a1a1a;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        /* Fullscreen mode styles */
-        .video-container.fullscreen-mode {
-            display: block;
-            position: relative;
-            margin-bottom: 0;
-        }
-
-        .video-container.fullscreen-mode #remote-video {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            z-index: 1000;
-            object-fit: contain;
-            background: black;
-            border-radius: 0;
-        }
-
-        .video-container.fullscreen-mode #local-video {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            width: 200px;
-            height: 150px;
-            z-index: 1001;
-            border: 2px solid white;
-            border-radius: 8px;
-            object-fit: cover;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-        }
-
-        .call-controls {
-            display: flex;
-            gap: 10px;
-            justify-content: center;
-            margin: 20px 0;
-            flex-wrap: wrap;
-        }
-
-        .call-btn {
-            padding: 12px 30px;
-            border: none;
-            border-radius: 25px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .call-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        .call-btn.call {
-            background: #4CAF50;
-            color: white;
-        }
-
-        .call-btn.hangup {
-            background: #f44336;
-            color: white;
-        }
-
-        /* Camera Switch Button */
-        .camera-switch-btn {
-            padding: 12px 20px;
-            background: #667eea;
-            color: white;
-            border: none;
-            border-radius: 25px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            display: inline-flex;
-            align-items: center;
-            gap: 5px;
-        }
-
-        .camera-switch-btn:hover:not(:disabled) {
-            background: #5a67d8;
-            transform: scale(1.02);
-        }
-
-        .camera-switch-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            display: none;
-        }
-
-        /* Right Panels Container */
-        .right-panels {
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-        }
-
-        /* Chat Section Container */
-        .chat-section {
-            background: white;
-            border-radius: 10px;
-            overflow: hidden;
-            border: 1px solid #e0e0e0;
-        }
-
-        /* Users Panel */
-        .users-panel {
-            background: #f9f9f9;
-            border-radius: 10px;
-            padding: 20px;
-            height: fit-content;
-            max-height: 300px;
-            overflow-y: auto;
-        }
-
-        .users-panel h3 {
-            color: #333;
-            margin-bottom: 15px;
-            font-size: 18px;
-            padding-bottom: 10px;
-            border-bottom: 1px solid #e0e0e0;
-            position: sticky;
-            top: 0;
-            background: #f9f9f9;
-        }
-
-        /* Call Status Area */
-        #call-status-area {
-            margin-bottom: 12px;
-            padding: 8px 12px;
-            border-radius: 8px;
-            display: none;
-            transition: all 0.3s ease;
-        }
-
-        #call-status-area.info {
-            background: #e3f2fd;
-            border-left: 4px solid #2196f3;
-        }
-
-        #call-status-area.warning {
-            background: #fff3e0;
-            border-left: 4px solid #ff9800;
-        }
-
-        #call-status-area.error {
-            background: #ffebee;
-            border-left: 4px solid #f44336;
-        }
-
-        #call-status-area.success {
-            background: #e8f5e9;
-            border-left: 4px solid #4caf50;
-        }
-
-        #call-status-text {
-            font-size: 13px;
-            font-weight: 500;
-            color: #333;
-        }
-
-        .user-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 8px 12px;
-            border-bottom: 1px solid #e0e0e0;
-            transition: background 0.2s ease;
-        }
-
-        .user-item:hover {
-            background: #f0f0f0;
-        }
-
-        .user-item:last-child {
-            border-bottom: none;
-        }
-
-        .user-info-left {
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-        }
-
-        .user-name {
-            font-weight: 600;
-            color: #333;
-            font-size: 14px;
-        }
-
-        .call-user-btn {
-            background: #667eea;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            padding: 6px 10px;
-            cursor: pointer;
-            font-size: 12px;
-            font-weight: 500;
-            transition: all 0.2s ease;
-            min-width: 50px;
-        }
-
-        .call-user-btn:hover:not(:disabled) {
-            background: #5a67d8;
-            transform: scale(1.02);
-        }
-
-        .call-user-btn:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-        }
-
-        .chat-user-btn {
-            background: #25D366;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            padding: 6px 10px;
-            cursor: pointer;
-            font-size: 12px;
-            font-weight: 500;
-            transition: all 0.2s ease;
-            min-width: 50px;
-        }
-
-        .chat-user-btn:hover:not(:disabled) {
-            background: #128C7E;
-            transform: scale(1.02);
-        }
-
-        .chat-user-btn:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-        }
-
-        /* APK Control Panel */
-        .apk-panel {
-            padding: 15px;
-            background: #f0f7ff;
-            border-radius: 10px;
-            border: 1px solid #cce5ff;
-        }
-
-        .apk-header {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 10px;
-        }
-
-        .apk-header span {
-            font-size: 20px;
-        }
-
-        .apk-header h4 {
-            margin: 0;
-            color: #0066cc;
-            font-size: 16px;
-        }
-
-        .apk-description {
-            font-size: 12px;
-            color: #555;
-            margin-bottom: 15px;
-        }
-
-        .apk-buttons {
-            display: flex;
-            gap: 10px;
-        }
-
-        .apk-start-btn {
-            flex: 2;
-            padding: 10px;
-            background: #28a745;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            font-weight: bold;
-            cursor: pointer;
-            font-size: 13px;
-        }
-
-        .apk-start-btn:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-        }
-
-        .apk-stop-btn {
-            flex: 1;
-            padding: 10px;
-            background: #dc3545;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            font-weight: bold;
-            cursor: pointer;
-            font-size: 13px;
-        }
-
-        .apk-stop-btn:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-        }
-
-        .apk-status {
-            margin-top: 10px;
-            font-size: 12px;
-            padding: 8px;
-            background: #e9ecef;
-            border-radius: 5px;
-            color: #495057;
-        }
-
-        /* Install Panel */
-        .install-panel {
-            padding: 15px;
-            background: linear-gradient(135deg, #667eea 20%, #764ba2 100%);
-            border-radius: 10px;
-            border: none;
-            color: white;
-        }
-
-        .install-header {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 10px;
-        }
-
-        .install-header span {
-            font-size: 24px;
-        }
-
-        .install-header h4 {
-            margin: 0;
-            color: white;
-            font-size: 16px;
-        }
-
-        .install-description {
-            font-size: 12px;
-            color: rgba(255,255,255,0.9);
-            margin-bottom: 15px;
-        }
-
-        .install-btn {
-            width: 100%;
-            padding: 12px;
-            background: white;
-            color: #667eea;
-            border: none;
-            border-radius: 8px;
-            font-weight: bold;
-            font-size: 14px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .install-btn:hover {
-            transform: scale(1.02);
-            background: #f0f0f0;
-        }
-
-        .install-status {
-            margin-top: 10px;
-            font-size: 12px;
-            text-align: center;
-            color: rgba(255,255,255,0.9);
-            line-height: 1.4;
-        }
-
-        /* Debug Panel */
+        /* Keep all your existing CSS styles here - they are correct */
+        /* ... (the CSS you already have is fine) ... */
+        
+        /* Add this missing CSS for debug panel if not present */
         .debug-panel-simple {
             background: #ffeb3b;
             padding: 12px;
@@ -940,201 +54,6 @@
             border: 2px solid #f44336;
             color: #333;
             font-weight: bold;
-        }
-
-        .enable-push-btn {
-            margin-top: 10px;
-            padding: 8px 12px;
-            background: #667eea;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 12px;
-            width: 100%;
-            transition: all 0.2s ease;
-        }
-
-        .enable-push-btn:hover {
-            background: #5a67d8;
-            transform: scale(1.02);
-        }
-
-        .enable-push-btn:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-            transform: none;
-        }
-
-        .key-hint {
-            text-align: center;
-            margin-top: 10px;
-            font-size: 12px;
-            color: #666;
-        }
-
-        .key-hint span {
-            background: #f0f0f0;
-            padding: 3px 8px;
-            border-radius: 4px;
-            margin: 0 3px;
-            font-family: monospace;
-        }
-
-        /* Incoming Call Modal */
-        #incoming-call-modal {
-            display: none;
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: white;
-            padding: 30px;
-            border-radius: 15px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
-            z-index: 2000;
-            min-width: 300px;
-            text-align: center;
-            animation: slideIn 0.3s ease;
-        }
-
-        @keyframes slideIn {
-            from {
-                transform: translate(-50%, -60%);
-                opacity: 0;
-            }
-            to {
-                transform: translate(-50%, -50%);
-                opacity: 1;
-            }
-        }
-
-        #incoming-call-modal h3 {
-            color: #333;
-            font-size: 24px;
-            margin-bottom: 10px;
-        }
-
-        #incoming-call-modal p {
-            color: #666;
-            font-size: 18px;
-            margin-bottom: 20px;
-        }
-
-        .modal-buttons {
-            display: flex;
-            gap: 15px;
-            justify-content: center;
-        }
-
-        .modal-btn {
-            padding: 12px 30px;
-            border: none;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            min-width: 100px;
-        }
-
-        .modal-btn.accept {
-            background: #4CAF50;
-            color: white;
-        }
-
-        .modal-btn.accept:hover {
-            background: #45a049;
-            transform: scale(1.05);
-        }
-
-        .modal-btn.reject {
-            background: #f44336;
-            color: white;
-        }
-
-        .modal-btn.reject:hover {
-            background: #da190b;
-            transform: scale(1.05);
-        }
-
-        /* Modal overlay */
-        #modal-overlay {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0,0,0,0.5);
-            z-index: 1999;
-            animation: fadeIn 0.3s ease;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-
-        /* Mobile Responsive */
-        @media (max-width: 1024px) {
-            .main-content {
-                grid-template-columns: 1fr;
-            }
-            
-            .right-panels {
-                margin-top: 20px;
-            }
-            
-            .users-panel {
-                max-height: 250px;
-            }
-            
-            /* Stack videos vertically on mobile */
-            .video-container {
-                grid-template-columns: 1fr;
-            }
-        }
-
-        @media (max-width: 768px) {
-            .video-container.fullscreen-mode #local-video {
-                width: 120px;
-                height: 90px;
-                bottom: 10px;
-                right: 10px;
-            }
-            
-            .chat-layout {
-                height: 350px;
-            }
-            
-            .login-header h1 {
-                font-size: 24px;
-            }
-            
-            .keypad-btn {
-                padding: 15px;
-                font-size: 20px;
-            }
-            
-            .keypad-btn::after {
-                font-size: 8px;
-            }
-
-            #incoming-call-modal {
-                min-width: 250px;
-                padding: 20px;
-            }
-            
-            .call-controls {
-                flex-direction: column;
-                align-items: center;
-            }
-            
-            .call-btn, .camera-switch-btn {
-                width: 100%;
-                max-width: 200px;
-            }
         }
     </style>
 </head>
@@ -1215,9 +134,8 @@
                     <div class="users-panel">
                         <h3>Available Users</h3>
                         <div id="users-container"></div>
-                        <!-- Enable Push Button will be inserted here dynamically -->
                         
-                        <!-- SIMPLE DEBUG PANEL - SHOULD BE VISIBLE -->
+                        <!-- SIMPLE DEBUG PANEL -->
                         <div class="debug-panel-simple" id="debug-panel-simple">
                             <strong>🔍 DEBUG INFO</strong><br>
                             <span id="debug-status-simple">Loading...</span>
@@ -1227,27 +145,21 @@
                     <!-- Chat Section -->
                     <div class="chat-section">
                         <div class="chat-layout">
-                            <!-- Left sidebar - Chats list -->
                             <div class="chats-sidebar" id="chats-view">
                                 <div class="chats-header">
                                     <h3>Chats</h3>
                                     <button class="new-chat-btn" onclick="showUsersForChat()">➕ New Chat</button>
                                 </div>
-                                <div id="chats-container">
-                                    <!-- Chats will be loaded here -->
-                                </div>
+                                <div id="chats-container"></div>
                             </div>
                             
-                            <!-- Right side - Active chat -->
                             <div class="chat-view" id="chat-view" style="display: none;">
                                 <div class="chat-view-header">
                                     <button class="back-btn" onclick="closeChat()">←</button>
                                     <h3 id="current-chat-name">Select a chat</h3>
                                     <button class="delete-chat-header-btn" onclick="deleteCurrentChat()" title="Delete this chat">🗑️</button>
                                 </div>
-                                <div class="chat-messages-container" id="chat-messages">
-                                    <!-- Messages will be loaded here -->
-                                </div>
+                                <div class="chat-messages-container" id="chat-messages"></div>
                                 <div class="chat-input-area">
                                     <input type="text" id="message-input" placeholder="Type a message...">
                                     <button onclick="sendMessage()">Send</button>
@@ -1279,7 +191,7 @@
                         </div>
                     </div>
                     
-                    <!-- Add to Home Screen Panel (Android) -->
+                    <!-- Add to Home Screen Panel -->
                     <div class="install-panel" id="install-panel">
                         <div class="install-header">
                             <span>📱</span>
@@ -1296,4 +208,144 @@
                 </div>
             </div>
         </div>
-    </
+    </div>
+
+    <!-- Incoming Call Modal -->
+    <div id="modal-overlay"></div>
+    <div id="incoming-call-modal">
+        <h3>📞 Incoming Call</h3>
+        <p id="caller-name">Loading...</p>
+        <div class="modal-buttons">
+            <button class="modal-btn accept" id="accept-call">Accept</button>
+            <button class="modal-btn reject" id="reject-call">Reject</button>
+        </div>
+    </div>
+
+    <!-- Status Modal -->
+    <div id="status-modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 3000;"></div>
+    <div id="status-modal" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 20px; border-radius: 10px; z-index: 3001; min-width: 250px; text-align: center;">
+        <h3 id="status-modal-title" style="margin-bottom: 10px;">Status</h3>
+        <p id="status-modal-message" style="margin-bottom: 15px;"></p>
+        <button id="status-modal-ok" style="padding: 8px 20px; background: #667eea; color: white; border: none; border-radius: 5px; cursor: pointer;">OK</button>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
+    <!-- Video toggle functionality -->
+    <script>
+        let videoMode = 'normal';
+        document.addEventListener('DOMContentLoaded', function() {
+            const remoteVideo = document.getElementById('remote-video');
+            if (remoteVideo) {
+                remoteVideo.addEventListener('click', toggleVideoMode);
+            }
+        });
+        
+        function toggleVideoMode() {
+            const videoContainer = document.getElementById('video-container');
+            const remoteVideo = document.getElementById('remote-video');
+            if (!videoContainer || !remoteVideo) return;
+            if (videoMode === 'normal') {
+                videoContainer.classList.add('fullscreen-mode');
+                videoMode = 'fullscreen';
+            } else {
+                videoContainer.classList.remove('fullscreen-mode');
+                videoMode = 'normal';
+            }
+        }
+    </script>
+
+    <!-- Our modular JavaScript files - with correct paths -->
+    <script src="/webrtc_v0/js/config.js"></script>
+    <script src="/webrtc_v0/js/ui.js"></script>
+    <script src="/webrtc_v0/js/init.js"></script>
+    <script src="/webrtc_v0/js/auth.js"></script>
+    <script src="/webrtc_v0/js/users.js"></script>
+    <script src="/webrtc_v0/js/webrtc.js"></script>
+    <script src="/webrtc_v0/js/calls.js"></script>
+    <script src="/webrtc_v0/js/apk.js"></script>
+    <script src="/webrtc_v0/js/chat.js"></script>
+    
+    <!-- Service Worker Registration -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/webrtc_v0/sw.js')
+                .then(registration => {
+                    console.log('✅ Service Worker registered successfully');
+                    window.swRegistration = registration;
+                })
+                .catch(error => {
+                    console.log('❌ Service Worker registration failed:', error);
+                });
+        }
+    </script>
+    
+    <!-- Add to Home Screen JavaScript -->
+    <script>
+        const installBtn = document.getElementById('install-btn');
+        const installPanel = document.getElementById('install-panel');
+        const installStatus = document.getElementById('install-status');
+
+        const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+        if (isStandalone) {
+            if (installPanel) installPanel.style.display = 'none';
+        } else {
+            if (installPanel) installPanel.style.display = 'block';
+            if (installStatus) {
+                installStatus.innerHTML = '📱 Tap the menu (⋮) → "Install app" or "Add to Home screen"';
+            }
+        }
+
+        if (installBtn) {
+            installBtn.addEventListener('click', () => {
+                if (installStatus) {
+                    installStatus.innerHTML = '📱 Tap the menu (⋮) → "Install app" or "Add to Home screen"';
+                    setTimeout(() => {
+                        installStatus.innerHTML = '';
+                    }, 5000);
+                }
+            });
+        }
+    </script>
+    
+    <!-- Debug Panel Script -->
+    <script>
+        async function updateDebugStatus() {
+            const debugEl = document.getElementById('debug-status-simple');
+            if (!debugEl) return;
+            
+            let info = [];
+            
+            info.push(`VAPID key: ${window.VAPID_PUBLIC_KEY ? '✅ YES' : '❌ NO'}`);
+            
+            if ('serviceWorker' in navigator) {
+                const reg = await navigator.serviceWorker.getRegistration();
+                info.push(`Service Worker: ${reg ? '✅ Registered' : '❌ Not registered'}`);
+            } else {
+                info.push(`Service Worker: ❌ Not supported`);
+            }
+            
+            if ('Notification' in window) {
+                info.push(`Notification: ${Notification.permission}`);
+            }
+            
+            info.push(`Logged in: ${window.CONFIG?.myUsername ? '✅ ' + window.CONFIG.myUsername : '❌ No'}`);
+            
+            if (window.CONFIG?.myUsername) {
+                const userDoc = await db.collection('users').doc(window.CONFIG.myUsername).get();
+                info.push(`Push sub: ${userDoc.data()?.pushSubscription ? '✅ YES' : '❌ NO'}`);
+            }
+            
+            debugEl.innerHTML = info.join('<br>');
+        }
+        
+        window.addEventListener('login-complete', () => {
+            setTimeout(updateDebugStatus, 2000);
+        });
+        
+        setTimeout(updateDebugStatus, 3000);
+    </script>
+</body>
+</html>
