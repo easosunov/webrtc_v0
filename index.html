@@ -100,7 +100,13 @@
                             <span id="debug-status-simple">Loading...</span>
                         </div>
                     </div>
-                    
+
+					<!-- SIMPLE DEBUG PANEL - ALWAYS VISIBLE -->
+					<div style="background: #ffeb3b; padding: 12px; margin: 10px 0; border-radius: 8px; border: 2px solid red; font-size: 12px;">
+						<strong>🔍 DEBUG</strong><br>
+						<span id="debug-simple">Loading...</span>
+					</div>
+										
                     <!-- Chat Section -->
                     <div class="chat-section">
                         <div class="chat-layout">
@@ -251,6 +257,7 @@
     
     <!-- Debug Panel -->
     <script>
+	
         async function updateDebugStatus() {
             const el = document.getElementById('debug-status-simple');
             if (!el) return;
@@ -269,5 +276,40 @@
         window.addEventListener('login-complete', () => setTimeout(updateDebugStatus, 2000));
         setTimeout(updateDebugStatus, 3000);
     </script>
+	
+	<script>
+    async function showDebug() {
+        const el = document.getElementById('debug-simple');
+        if (!el) return;
+        
+        let info = [];
+        info.push(`VAPID: ${window.VAPID_PUBLIC_KEY ? '✅' : '❌'}`);
+        
+        const reg = await navigator.serviceWorker.getRegistration();
+        info.push(`SW: ${reg ? '✅' : '❌'}`);
+        
+        info.push(`Notify: ${Notification.permission}`);
+        
+        info.push(`Logged: ${window.CONFIG?.myUsername || '❌'}`);
+        
+        if (window.CONFIG?.myUsername) {
+            const doc = await db.collection('users').doc(window.CONFIG.myUsername).get();
+            info.push(`Push: ${doc.data()?.pushSubscription ? '✅' : '❌'}`);
+        }
+        
+        el.innerHTML = info.join(' · ');
+    }
+    
+    window.addEventListener('login-complete', () => setTimeout(showDebug, 1000));
+    setTimeout(showDebug, 3000);
+</script>
+
+<!-- SIMPLE DEBUG PANEL - ALWAYS VISIBLE -->
+<div style="background: #ffeb3b; padding: 12px; margin: 10px 0; border-radius: 8px; border: 2px solid red; font-size: 12px;">
+    <strong>🔍 DEBUG</strong><br>
+    <span id="debug-simple">Loading...</span>
+</div>
+
+	
 </body>
 </html>
