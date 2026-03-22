@@ -69,25 +69,29 @@ exports.onCallCreated = onDocumentCreated('calls/{callId}', async (event) => {
             call.callerId;
         
         const payload = JSON.stringify({
-            notification: {
-                title: '📞 Incoming Call',
-                body: `Call from ${callerName}`,
-                icon: 'https://easosunov.github.io/webrtc_v0/favicon.ico',
-                badge: 'https://easosunov.github.io/webrtc_v0/favicon.ico',
-                vibrate: [200, 100, 200],
-                requireInteraction: true,
-                actions: [
-                    { action: 'answer', title: 'Answer Call' },
-                    { action: 'dismiss', title: 'Dismiss' }
-                ]
-            },
-            data: {
-                callId: callId,
-                callerId: call.callerId,
-                callerName: callerName,
-                url: 'https://easosunov.github.io/webrtc_v0/'
-            }
-        });
+			notification: {
+				title: '📞 Incoming Call',
+				body: `Call from ${callerName}`,
+				icon: 'https://easosunov.github.io/webrtc_v0/favicon.ico',
+				badge: 'https://easosunov.github.io/webrtc_v0/favicon.ico',
+				vibrate: [200, 100, 200],
+				requireInteraction: true,
+				silent: false,
+				tag: 'incoming-call',
+				renotify: true,
+				timestamp: Date.now(),
+				actions: [
+					{ action: 'answer', title: 'Answer Call' },
+					{ action: 'dismiss', title: 'Dismiss' }
+				]
+			},
+			data: {
+				callId: callId,
+				callerId: call.callerId,
+				callerName: callerName,
+				url: 'https://easosunov.github.io/webrtc_v0/'
+			}
+		});
         
         logger.log(`📤 Sending push to ${call.calleeId}...`);
         await webpush.sendNotification(subscription, payload);
