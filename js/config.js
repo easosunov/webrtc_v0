@@ -13,6 +13,19 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
+// ==================== FIREBASE MESSAGING (FCM) ====================
+let messaging = null;
+if (firebase.messaging && firebase.messaging.isSupported()) {
+    try {
+        messaging = firebase.messaging();
+        console.log('✅ FCM supported and initialized');
+    } catch (error) {
+        console.log('❌ FCM initialization error:', error);
+    }
+} else {
+    console.log('ℹ️ FCM not supported in this browser');
+}
+
 // ==================== GLOBAL STATE ====================
 const CONFIG = {
     myUsername: null,
@@ -34,19 +47,14 @@ const CONFIG = {
     isCaller: false,
     currentIncomingCall: null,
     
-    // ===== NEW: Connection monitoring constants =====
-    // Monitoring intervals (in milliseconds)
-    ICE_MONITOR_INTERVAL: 3000,      // Check ICE state every 3 seconds
-    HEARTBEAT_INTERVAL: 5000,        // Send heartbeat every 5 seconds
-    HEARTBEAT_TIMEOUT: 10000,        // Consider connection dead after 10 seconds without heartbeat
-    
-    // Reconnection settings
-    MAX_RECONNECTION_ATTEMPTS: 5,     // Maximum reconnection attempts before giving up
-    RECONNECTION_BASE_DELAY: 1000,    // Start with 1 second delay
-    RECONNECTION_MAX_DELAY: 30000,    // Max delay of 30 seconds
-    
-    // Network quality thresholds
-    PACKET_LOSS_THRESHOLD: 10,        // Percentage - reduce quality if packet loss > 10%
+    // Connection monitoring constants
+    ICE_MONITOR_INTERVAL: 3000,
+    HEARTBEAT_INTERVAL: 5000,
+    HEARTBEAT_TIMEOUT: 10000,
+    MAX_RECONNECTION_ATTEMPTS: 5,
+    RECONNECTION_BASE_DELAY: 1000,
+    RECONNECTION_MAX_DELAY: 30000,
+    PACKET_LOSS_THRESHOLD: 10,
     
     // Monitoring state flags
     iceMonitorInterval: null,
@@ -59,28 +67,31 @@ const CONFIG = {
     
     // Status message tracking
     lastStatusMessage: null,
-    statusMessageTimeout: null
+    statusMessageTimeout: null,
+    
+    // Push notification
+    pushSubscription: null,
+    pushSupported: false,
+    qualityReduced: false,
+    originalVideoConstraints: null
 };
 
 // ==================== WEB PUSH CONFIGURATION ====================
-// VAPID Public Key - Generate this at: https://web-push-codelab.glitch.me/
-// Or using: npx web-push generate-vapidc-keys
-
 const VAPID_PUBLIC_KEY = 'BH33WjtMVo0Y_bml_nke0gtVqahGcPd6m-yjh__LBHp6Ahvfq-vN-m25D2MzMB3e1jbTGwQRGt5ufKEhSyj6Yv0';
 
-// Add to CONFIG object
-CONFIG.pushSubscription = null;
-CONFIG.pushSupported = false;
-
-console.log('✅ Web Push config ready');
+// Make VAPID key globally available
 window.VAPID_PUBLIC_KEY = VAPID_PUBLIC_KEY;
 
+// ==================== TURN SERVER CONFIG ====================
 const TURN_SERVER_URL = 'https://turn-token.easosunov.workers.dev/ice';
 
 window.APK_PACKAGE = "com.easosunov.communicator";
 
-// Make CONFIG and db globally available
+// Make CONFIG, db, and messaging globally available
 window.CONFIG = CONFIG;
 window.db = db;
+window.messaging = messaging;
 
 console.log('✅ Config loaded');
+console.log('📱 Web Push VAPID key:', VAPID_PUBLIC_KEY ? '✅ Configured' : '❌ Not configured');
+console.log('📱 FCM:', messaging ? '✅ Available' : '❌ Not available');
