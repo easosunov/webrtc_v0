@@ -184,14 +184,12 @@ window.hideStatusModal = function() {
     dom.statusModal.style.display = 'none';
 };
 
-// ==================== CONNECTION STATUS MESSAGES (for call screen) ====================
+// ==================== CONNECTION STATUS MESSAGES ====================
 window.showConnectionStatus = function(message, type = 'info') {
-    // Don't show duplicate messages
     if (CONFIG.lastStatusMessage === message) return;
     
     CONFIG.lastStatusMessage = message;
     
-    // Use the call status area (visible during calls)
     const statusArea = document.getElementById('call-status-area');
     const statusText = document.getElementById('call-status-text');
     
@@ -200,7 +198,6 @@ window.showConnectionStatus = function(message, type = 'info') {
         statusArea.className = `call-status-area ${type}`;
         statusArea.style.display = 'block';
         
-        // Auto-clear success messages after 3 seconds
         if (type === 'success') {
             if (CONFIG.statusMessageTimeout) {
                 clearTimeout(CONFIG.statusMessageTimeout);
@@ -210,7 +207,6 @@ window.showConnectionStatus = function(message, type = 'info') {
             }, 3000);
         }
     } else {
-        // Fallback to login-status (for login screen)
         if (dom.loginStatus) {
             dom.loginStatus.textContent = message;
             dom.loginStatus.className = `status-message ${type}`;
@@ -222,14 +218,12 @@ window.showConnectionStatus = function(message, type = 'info') {
 window.clearConnectionStatus = function() {
     CONFIG.lastStatusMessage = null;
     
-    // Clear call status area
     const statusArea = document.getElementById('call-status-area');
     if (statusArea) {
         statusArea.style.display = 'none';
         statusArea.className = 'call-status-area';
     }
     
-    // Also clear login status (for consistency)
     if (dom.loginStatus) {
         dom.loginStatus.textContent = '';
         dom.loginStatus.className = 'status-message';
@@ -263,7 +257,6 @@ window.updateCallButtonState = function(partnerUsername, isInCall, isCalling = f
                 button.textContent = 'In call';
             }
         } else if (isInCall || isCalling) {
-            // Disable all other call buttons during a call
             button.disabled = true;
         } else {
             button.disabled = false;
@@ -280,177 +273,196 @@ window.resetAllCallButtons = function() {
     });
 };
 
-// ==================== WEB PUSH NOTIFICATIONS ====================
-async function requestNotificationPermission() {
-    if (!('Notification' in window)) {
-        console.log('❌ This browser does not support notifications');
-        alert('Your browser does not support notifications');
-        return false;
-    }
-    
-    const permission = await Notification.requestPermission();
-    console.log('📱 Notification permission:', permission);
-    
-    if (permission === 'granted') {
-        await subscribeToPush();
-        return true;
-    }
-    return false;
-}
+// ==================== DUAL PUSH SYSTEM ====================
 
-async function subscribeToPush() {
-    if (!('serviceWorker' in navigator)) {
-        console.log('❌ Service Worker not supported');
-        return false;
-    }
-    
-    if (!window.VAPID_PUBLIC_KEY) {
-        console.error('❌ VAPID_PUBLIC_KEY not configured');
-        return false;
-    }
+async function getWebPushSubscription() {
+    if (!('serviceWorker' in navigator)) return null;
     
     try {
         const registration = await navigator.serviceWorker.ready;
-        console.log('✅ Service Worker ready');
-        
-        // Check if already subscribed
         let subscription = await registration.pushManager.getSubscription();
         
-        if (subscription) {
-            console.log('✅ Already subscribed to push');
-            CONFIG.pushSubscription = subscription;
-            await savePushSubscription(subscription);
-            return true;
+        if (subscription) return subscription;
+        
+        // Create new Web Push subscription
+        const vapidKey = window.VAPID_PUBLIC_KEY;
+        if (!vapidKey) {
+            console.log('❌ VAPID key missing');
+            return null;
         }
         
-        // Convert VAPID public key from base64 to Uint8Array
-        const vapidPublicKey = window.VAPID_PUBLIC_KEY;
-        const base64ToUint8Array = (base64String) => {
-            const padding = '='.repeat((4 - base64String.length % 4) % 4);
-            const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-            const rawData = window.atob(base64);
-            const outputArray = new Uint8Array(rawData.length);
-            for (let i = 0; i < rawData.length; ++i) {
-                outputArray[i] = rawData.charCodeAt(i);
-            }
-            return outputArray;
-        };
+        const base64 = vapidKey.replace(/-/g, '+').replace(/_/g, '/');
+        const applicationServerKey = new Uint8Array(atob(base64).split('').map(c => c.charCodeAt(0)));
         
-        const applicationServerKey = base64ToUint8Array(vapidPublicKey);
-        
-        // Create new subscription
         subscription = await registration.pushManager.subscribe({
             userVisibleOnly: true,
-            applicationServerKey: applicationServerKey
+            applicationServerKey
         });
         
-        console.log('✅ Push subscription created');
-        CONFIG.pushSubscription = subscription;
-        await savePushSubscription(subscription);
-        return true;
+        console.log('✅ Web Push subscription created');
+        return subscription;
         
     } catch (error) {
-        console.error('❌ Failed to subscribe to push:', error);
-        return false;
+        console.error('❌ Web Push subscription error:', error);
+        return null;
     }
 }
 
-async function savePushSubscription(subscription) {
-    if (!CONFIG.myUsername) {
-        console.log('⏳ Not logged in yet, will save later');
-        // Store temporarily to save after login
-        window.pendingPushSubscription = subscription;
-        return;
+async function getFCMToken() {
+    if (!window.messaging) {
+        console.log('❌ FCM not available');
+        return null;
     }
     
     try {
-        // Convert subscription to plain object for Firestore
-        const subscriptionData = {
-            endpoint: subscription.endpoint,
-            expirationTime: subscription.expirationTime,
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') {
+            console.log('❌ Notification permission denied');
+            return null;
+        }
+        
+        const token = await window.messaging.getToken({
+            vapidKey: window.VAPID_PUBLIC_KEY
+        });
+        
+        if (token) {
+            console.log('✅ FCM token obtained');
+        } else {
+            console.log('❌ No FCM token returned');
+        }
+        return token;
+        
+    } catch (error) {
+        console.error('❌ FCM token error:', error);
+        return null;
+    }
+}
+
+async function savePushSubscriptions() {
+    if (!CONFIG.myUsername) {
+        console.log('⏳ Not logged in yet');
+        return false;
+    }
+    
+    const updates = {};
+    let hasUpdates = false;
+    
+    // Get Web Push subscription (works on all platforms)
+    const webPushSub = await getWebPushSubscription();
+    if (webPushSub) {
+        updates.webPushSubscription = {
+            endpoint: webPushSub.endpoint,
+            expirationTime: webPushSub.expirationTime,
             keys: {
-                p256dh: btoa(String.fromCharCode.apply(null, new Uint8Array(subscription.getKey('p256dh')))),
-                auth: btoa(String.fromCharCode.apply(null, new Uint8Array(subscription.getKey('auth'))))
+                p256dh: btoa(String.fromCharCode.apply(null, new Uint8Array(webPushSub.getKey('p256dh')))),
+                auth: btoa(String.fromCharCode.apply(null, new Uint8Array(webPushSub.getKey('auth'))))
+            }
+        };
+        updates.webPushEnabled = true;
+        hasUpdates = true;
+        console.log('✅ Web Push subscription saved');
+    }
+    
+    // Try to get FCM token (Android only)
+    const fcmToken = await getFCMToken();
+    if (fcmToken) {
+        updates.fcmToken = fcmToken;
+        updates.fcmEnabled = true;
+        hasUpdates = true;
+        console.log('✅ FCM token saved');
+    }
+    
+    if (hasUpdates) {
+        try {
+            await db.collection('users').doc(CONFIG.myUsername).update(updates);
+            console.log('✅ All push subscriptions saved to Firestore');
+            return true;
+        } catch (error) {
+            console.error('❌ Failed to save subscriptions:', error);
+            return false;
+        }
+    }
+    
+    console.log('⚠️ No push subscriptions created');
+    return false;
+}
+
+window.enablePushNotifications = async function() {
+    console.log('🔔 Enabling push notifications...');
+    
+    // Request permission
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') {
+        alert('Notification permission denied. Please enable in browser settings.');
+        return false;
+    }
+    
+    // Save both types of subscriptions
+    const success = await savePushSubscriptions();
+    
+    if (success) {
+        console.log('✅ Push notifications enabled successfully');
+        return true;
+    } else {
+        console.log('❌ Failed to enable push notifications');
+        return false;
+    }
+};
+
+window.showEnablePushButton = function() {
+    // Check if already have subscriptions
+    const checkExisting = async () => {
+        if (!CONFIG.myUsername) return;
+        
+        const userDoc = await db.collection('users').doc(CONFIG.myUsername).get();
+        const userData = userDoc.data();
+        if (userData?.webPushSubscription || userData?.fcmToken) {
+            console.log('✅ Push already enabled for this user');
+            return;
+        }
+        
+        // Create button if not already present
+        if (document.getElementById('enable-push-btn')) return;
+        
+        const pushButton = document.createElement('button');
+        pushButton.id = 'enable-push-btn';
+        pushButton.className = 'enable-push-btn';
+        pushButton.textContent = '🔔 Enable Notifications';
+        
+        pushButton.onclick = async () => {
+            pushButton.disabled = true;
+            pushButton.textContent = 'Enabling...';
+            
+            const success = await window.enablePushNotifications();
+            if (success) {
+                pushButton.textContent = '✅ Notifications enabled';
+                setTimeout(() => pushButton.remove(), 3000);
+            } else {
+                pushButton.textContent = '❌ Failed. Try again?';
+                pushButton.disabled = false;
             }
         };
         
-        await db.collection('users').doc(CONFIG.myUsername).update({
-            pushSubscription: subscriptionData,
-            pushEnabled: true,
-            pushLastUpdated: firebase.firestore.FieldValue.serverTimestamp()
-        });
-        
-        console.log('✅ Push subscription saved to Firestore');
-        
-    } catch (error) {
-        console.error('❌ Failed to save push subscription:', error);
-    }
-}
-
-function showEnablePushButton() {
-    // Check if push is already enabled
-    if (CONFIG.pushSubscription) {
-        console.log('Push already enabled');
-        return;
-    }
-    
-    // Check if we already have a button
-    if (document.getElementById('enable-push-btn')) {
-        return;
-    }
-    
-    // Check if VAPID key is configured
-    if (!window.VAPID_PUBLIC_KEY || window.VAPID_PUBLIC_KEY === 'YOUR_VAPID_PUBLIC_KEY_HERE') {
-        console.log('⚠️ VAPID key not configured, skipping push button');
-        return;
-    }
-    
-    // Create enable push button
-    const pushButton = document.createElement('button');
-    pushButton.id = 'enable-push-btn';
-    pushButton.className = 'enable-push-btn';
-    pushButton.textContent = '🔔 Enable Notifications';
-    
-    pushButton.onclick = async () => {
-        pushButton.disabled = true;
-        pushButton.textContent = 'Requesting permission...';
-        const granted = await requestNotificationPermission();
-        if (granted) {
-            pushButton.textContent = '✅ Notifications enabled';
-            setTimeout(() => {
-                pushButton.remove();
-            }, 3000);
-        } else {
-            pushButton.textContent = '❌ Permission denied';
-            setTimeout(() => {
-                pushButton.textContent = '🔔 Enable Notifications';
-                pushButton.disabled = false;
-            }, 3000);
+        const usersPanel = document.querySelector('.users-panel');
+        if (usersPanel) {
+            usersPanel.appendChild(pushButton);
+            console.log('✅ Enable push button added');
         }
     };
     
-    // Add to users panel
-    const usersPanel = document.querySelector('.users-panel');
-    if (usersPanel && usersPanel.querySelector('#enable-push-btn') === null) {
-        usersPanel.appendChild(pushButton);
-        console.log('✅ Enable push button added to UI');
-    }
-}
+    checkExisting();
+};
 
-// ==================== AUTO-SUBSCRIBE TO PUSH ====================
+// ==================== AUTO-SUBSCRIBE ====================
 window.autoSubscribeToPush = async function() {
-    if (!CONFIG.myUsername) {
-        console.log('⏳ Not logged in, skipping auto-subscribe');
-        return;
-    }
+    if (!CONFIG.myUsername) return;
     
-    // Check if already subscribed in browser
-    const registration = await navigator.serviceWorker.ready;
-    let subscription = await registration.pushManager.getSubscription();
+    // Check if already have subscriptions
+    const userDoc = await db.collection('users').doc(CONFIG.myUsername).get();
+    const userData = userDoc.data();
     
-    if (subscription) {
-        console.log('✅ Already subscribed to push');
-        CONFIG.pushSubscription = subscription;
+    if (userData?.webPushSubscription || userData?.fcmToken) {
+        console.log('✅ Already subscribed');
         return;
     }
     
@@ -458,48 +470,31 @@ window.autoSubscribeToPush = async function() {
     const permission = Notification.permission;
     
     if (permission === 'granted') {
-        // Already granted, just subscribe
         console.log('🔔 Permission already granted, auto-subscribing...');
-        await subscribeToPush();
+        await savePushSubscriptions();
     } else if (permission === 'default') {
-        // Ask for permission
         console.log('🔔 Asking for notification permission...');
-        await requestNotificationPermission();
-    } else if (permission === 'denied') {
-        console.log('❌ Notifications denied by user');
-        // Optionally show a message explaining how to enable
+        await window.enablePushNotifications();
     }
 };
 
-// Check for pending subscription after login
-function checkPendingPushSubscription() {
-    if (window.pendingPushSubscription && CONFIG.myUsername) {
-        console.log('📱 Saving pending push subscription');
-        savePushSubscription(window.pendingPushSubscription);
-        window.pendingPushSubscription = null;
-    }
-}
-
-// Expose functions globally
+// ==================== EXPOSE GLOBALLY ====================
 window.startRingtone = startRingtone;
 window.stopRingtone = stopRingtone;
 window.showConnectionStatus = showConnectionStatus;
 window.clearConnectionStatus = clearConnectionStatus;
 window.updateCallButtonState = updateCallButtonState;
 window.resetAllCallButtons = resetAllCallButtons;
-window.requestNotificationPermission = requestNotificationPermission;
-window.subscribeToPush = subscribeToPush;
-window.savePushSubscription = savePushSubscription;
 window.showEnablePushButton = showEnablePushButton;
-window.checkPendingPushSubscription = checkPendingPushSubscription;
 window.autoSubscribeToPush = autoSubscribeToPush;
+window.enablePushNotifications = enablePushNotifications;
 
-// Initialize everything when DOM is ready
+// ==================== INITIALIZATION ====================
 document.addEventListener('DOMContentLoaded', function() {
     console.log('DOM Content Loaded');
     
     if (initDOM() && !uiInitialized) {
-        // Clone and replace buttons to ensure clean event listeners
+        // Clone and replace buttons for clean event listeners
         if (dom.acceptBtn) {
             const newAcceptBtn = dom.acceptBtn.cloneNode(true);
             dom.acceptBtn.parentNode.replaceChild(newAcceptBtn, dom.acceptBtn);
@@ -563,29 +558,31 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         uiInitialized = true;
-        console.log('🚀 UI loaded with ringtone, connection status, and push notification support');
+        console.log('🚀 UI loaded with dual push support (Web Push + FCM)');
         
         window.dispatchEvent(new Event('ui-ready'));
     }
 });
 
-// ==================== LOGIN COMPLETE EVENT HANDLER ====================
+// ==================== LOGIN COMPLETE EVENT ====================
 window.addEventListener('login-complete', () => {
-    console.log('📱 Login complete, checking push subscription...');
+    console.log('📱 Login complete, checking push subscriptions...');
     setTimeout(() => {
         window.autoSubscribeToPush();
     }, 1000);
 });
 
-// ==================== CHECK FOR EXISTING SUBSCRIPTION ON PAGE LOAD ====================
+// ==================== CHECK ON PAGE LOAD ====================
 setTimeout(() => {
     if (CONFIG && CONFIG.myUsername) {
-        console.log('📱 User already logged in, checking push subscription...');
+        console.log('📱 User already logged in, checking push...');
         window.autoSubscribeToPush();
+    } else {
+        console.log('📱 Not logged in, push will be enabled after login');
     }
-}, 2000);
+}, 3000);
 
-// Ensure audio context is resumed on user interaction
+// ==================== AUDIO CONTEXT RESUME ====================
 document.addEventListener('click', () => {
     if (audioContext && audioContext.state === 'suspended') {
         audioContext.resume();
