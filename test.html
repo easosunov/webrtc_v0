@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Android Test</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background: #f0f0f0; }
+        .pass { color: green; font-weight: bold; }
+        .fail { color: red; font-weight: bold; }
+        button { padding: 15px; margin: 10px 0; font-size: 18px; width: 100%; }
+        .result { background: white; padding: 10px; margin: 5px 0; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <h1>📱 Android Compatibility Test</h1>
+    
+    <div class="result" id="test1">Loading...</div>
+    <div class="result" id="test2">Loading...</div>
+    <div class="result" id="test3">Loading...</div>
+    <div class="result" id="test4">Loading...</div>
+    
+    <button onclick="runTests()">🔄 Run Tests</button>
+    <button onclick="requestNotification()">🔔 Request Notification</button>
+    
+    <script>
+        async function runTests() {
+            // Test 1: JavaScript
+            document.getElementById('test1').innerHTML = '✅ JavaScript: Working';
+            
+            // Test 2: VAPID Key
+            try {
+                const response = await fetch('/webrtc_v0/js/config.js');
+                const text = await response.text();
+                const hasVapid = text.includes('VAPID_PUBLIC_KEY');
+                document.getElementById('test2').innerHTML = hasVapid ? '✅ VAPID Key: Found' : '❌ VAPID Key: Missing';
+            } catch(e) {
+                document.getElementById('test2').innerHTML = '❌ VAPID Key: Error loading config.js';
+            }
+            
+            // Test 3: Service Worker
+            if ('serviceWorker' in navigator) {
+                try {
+                    const reg = await navigator.serviceWorker.register('/webrtc_v0/sw.js');
+                    document.getElementById('test3').innerHTML = '✅ Service Worker: Registered';
+                } catch(e) {
+                    document.getElementById('test3').innerHTML = '❌ Service Worker: Failed - ' + e.message;
+                }
+            } else {
+                document.getElementById('test3').innerHTML = '❌ Service Worker: Not supported';
+            }
+            
+            // Test 4: Notification
+            if ('Notification' in window) {
+                document.getElementById('test4').innerHTML = '✅ Notification: Supported (Permission: ' + Notification.permission + ')';
+            } else {
+                document.getElementById('test4').innerHTML = '❌ Notification: Not supported';
+            }
+        }
+        
+        async function requestNotification() {
+            if ('Notification' in window) {
+                const permission = await Notification.requestPermission();
+                alert('Notification permission: ' + permission);
+                runTests();
+            } else {
+                alert('Notifications not supported');
+            }
+        }
+        
+        runTests();
+    </script>
+</body>
+</html>
