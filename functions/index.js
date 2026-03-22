@@ -1,5 +1,4 @@
 const {onDocumentCreated} = require('firebase-functions/v2/firestore');
-const {onRequest} = require('firebase-functions/v2/https');
 const {logger} = require('firebase-functions');
 const admin = require('firebase-admin');
 
@@ -31,6 +30,7 @@ exports.onCallCreated = onDocumentCreated('calls/{callId}', async (event) => {
         
         const subscription = userDoc.data().pushSubscription;
         
+        // CORRECTED PAYLOAD - icon/badge/vibrate go INSIDE webpush, NOT in notification
         const payload = {
             notification: {
                 title: '📞 Incoming Call',
@@ -41,7 +41,19 @@ exports.onCallCreated = onDocumentCreated('calls/{callId}', async (event) => {
                 callerId: call.callerId,
                 callerName: callerName
             },
-            token: subscription.endpoint
+            token: subscription.endpoint,
+            webpush: {
+                notification: {
+                    icon: 'https://easosunov.github.io/webrtc_v0/favicon.ico',
+                    badge: 'https://easosunov.github.io/webrtc_v0/favicon.ico',
+                    vibrate: [200, 100, 200],
+                    requireInteraction: true,
+                    actions: [
+                        { action: 'answer', title: 'Answer Call' },
+                        { action: 'dismiss', title: 'Dismiss' }
+                    ]
+                }
+            }
         };
         
         const response = await admin.messaging().send(payload);
@@ -66,11 +78,13 @@ exports.onCallCreated = onDocumentCreated('calls/{callId}', async (event) => {
             status: 'failed',
             error: error.message
         });
+        
+        if (error.code === 'messaging/invalid-registration-token') {
+            await db.collection('users').doc(call.calleeId).update({
+                pushSubscription: admin.firestore.FieldValue.delete()
+            });
+        }
     }
     
     return null;
-});
-
-exports.healthCheck = onRequest((req, res) => {
-    res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
 });
