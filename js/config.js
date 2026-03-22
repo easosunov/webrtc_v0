@@ -64,8 +64,9 @@ const CONFIG = {
 
 // ==================== WEB PUSH CONFIGURATION ====================
 // VAPID Public Key - Generate this at: https://web-push-codelab.glitch.me/
-// Or using: npx web-push generate-vapid-keys
-const VAPID_PUBLIC_KEY = 'BOABGfwwrk7DOXF6M6DVPt1Mzri7s93RoOUapUGE2amql9gUV5CJORH8mU2gGFOw6xzativSoX3kgKhd1ZI0vXs';
+// Or using: npx web-push generate-vapidc-keys
+
+const VAPID_PUBLIC_KEY = 'BH33WjtMVo0Y_bml_nke0gtVqahGcPd6m-yjh__LBHp6Ahvfq-vN-m25D2MzMB3e1jbTGwQRGt5ufKEhSyj6Yv0';
 
 // Add to CONFIG object
 CONFIG.pushSubscription = null;
