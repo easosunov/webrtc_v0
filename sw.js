@@ -1,151 +1,116 @@
-// Service Worker with Push Notification Support
-const CACHE_NAME = 'webrtc-communicator-v2';
+// ==================== SERVICE WORKER ====================
+
+const CACHE_NAME = 'webrtc-v3';
 
 const urlsToCache = [
   '/webrtc_v0/',
   '/webrtc_v0/index.html',
+  '/webrtc_v0/css/styles.css',
   '/webrtc_v0/js/config.js',
   '/webrtc_v0/js/ui.js',
-  '/webrtc_v0/js/init.js',
   '/webrtc_v0/js/auth.js',
   '/webrtc_v0/js/users.js',
   '/webrtc_v0/js/webrtc.js',
   '/webrtc_v0/js/calls.js',
-  '/webrtc_v0/js/apk.js',
-  '/webrtc_v0/js/chat.js'
+  '/webrtc_v0/js/chat.js',
+  '/webrtc_v0/js/apk.js'
 ];
 
+// ==================== INSTALL ====================
+self.addEventListener('install', (event) => {
+  console.log('🔧 SW installing');
 
-
-self.addEventListener('install', event => {
-  console.log('🔧 Service Worker installing...');
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => {
-        console.log('📦 Caching files...');
-        return cache.addAll(urlsToCache);
-      })
+    caches.open(CACHE_NAME).then((cache) => {
+      console.log('📦 Caching files...');
+      return cache.addAll(urlsToCache).catch(err => {
+        console.error('Cache addAll failed:', err);
+      });
+    })
   );
+
   self.skipWaiting();
 });
 
-self.addEventListener('activate', event => {
-  console.log('🚀 Service Worker activated');
+// ==================== ACTIVATE ====================
+self.addEventListener('activate', (event) => {
+  console.log('🚀 SW active');
   event.waitUntil(clients.claim());
 });
 
-// ==================== FETCH HANDLER ====================
-self.addEventListener('fetch', event => {
+// ==================== FETCH ====================
+self.addEventListener('fetch', (event) => {
   event.respondWith(
-    caches.match(event.request)
-      .then(response => {
-        if (response) {
-          return response;
-        }
-        return fetch(event.request);
-      })
-  );
-});
-
-
-// ==================== PUSH NOTIFICATION HANDLER ====================
-self.addEventListener('push', event => {
-  console.log('📱 Push notification received:', event);
-  
-  let data = {};
-  let title = '📞 Incoming Call';
-  let body = 'You have an incoming call';
-  let callId = null;
-  let callerId = null;
-  
-  try {
-    data = event.data ? event.data.json() : {};
-    console.log('📱 Push data received:', JSON.stringify(data));
-    
-    if (data.notification) {
-      title = data.notification.title || title;
-      body = data.notification.body || body;
-    } else if (data.title) {
-      title = data.title;
-      body = data.body || body;
-    }
-    
-    if (data.data) {
-      callId = data.data.callId;
-      callerId = data.data.callerId;
-    } else {
-      callId = data.callId;
-      callerId = data.callerId;
-    }
-    
-  } catch (e) {
-    console.log('Push data parse error:', e);
-  }
-  
-  const options = {
-    body: body,
-    icon: 'https://easosunov.github.io/webrtc_v0/favicon.ico',
-    badge: 'https://easosunov.github.io/webrtc_v0/favicon.ico',
-    vibrate: [200, 100, 200],
-    requireInteraction: true,
-    silent: false,
-    tag: 'incoming-call',           // ADDED: helps group notifications
-    renotify: true,                 // ADDED: forces notification to show
-    timestamp: Date.now(),          // ADDED: ensures fresh notification
-    data: {
-      callId: callId,
-      callerId: callerId,
-      url: '/webrtc_v0/'
-    },
-    actions: [
-      { action: 'answer', title: 'Answer Call' },
-      { action: 'dismiss', title: 'Dismiss' }
-    ]
-  };
-  
-  console.log('📱 Attempting to show notification with title:', title);
-  
-  // Add a small delay to help with background mode
-  event.waitUntil(
-    new Promise(resolve => {
-      setTimeout(() => {
-        self.registration.showNotification(title, options)
-          .then(() => {
-            console.log('✅ Notification shown successfully');
-            resolve();
-          })
-          .catch(err => {
-            console.error('❌ Failed to show notification:', err);
-            resolve();
-          });
-      }, 100);
+    caches.match(event.request).then((res) => {
+      return res || fetch(event.request);
     })
   );
 });
 
+// ==================== PUSH ====================
+self.addEventListener('push', (event) => {
+  console.log('🔥 PUSH RECEIVED');
 
+  let data = {};
 
-// ==================== NOTIFICATION CLICK HANDLER ====================
-self.addEventListener('notificationclick', event => {
-  console.log('🔔 Notification clicked:', event);
-  event.notification.close();
-  
-  const notificationData = event.notification.data;
-  const action = event.action;
-  
-  if (action === 'answer') {
-    // Open the app to answer the call
-    const callUrl = `https://easosunov.github.io/webrtc_v0/?callId=${notificationData.callId}&callerId=${notificationData.callerId}`;
-    event.waitUntil(
-      clients.openWindow(callUrl)
-    );
-  } else if (action === 'dismiss') {
-    console.log('Notification dismissed');
-  } else {
-    // Default: open the app
-    event.waitUntil(
-      clients.openWindow('https://easosunov.github.io/webrtc_v0/')
-    );
+  try {
+    data = event.data ? event.data.json() : {};
+    console.log('📦 Data:', data);
+  } catch (e) {
+    console.error('❌ JSON parse error', e);
   }
+
+  const title = data.title || 'Incoming Call';
+
+  const options = {
+    body: data.body || 'You have an incoming call',
+    icon: data.icon || 'https://easosunov.github.io/webrtc_v0/favicon.ico',
+    badge: data.icon || 'https://easosunov.github.io/webrtc_v0/favicon.ico',
+    vibrate: [200, 100, 200],
+    requireInteraction: true,
+    tag: 'incoming-call',
+    renotify: true,
+    data: {
+      callId: data.callId,
+      callerId: data.callerId,
+      url: data.url || '/webrtc_v0/'
+    },
+    actions: [
+      { action: 'answer', title: 'Answer' },
+      { action: 'dismiss', title: 'Dismiss' }
+    ]
+  };
+
+  // ✅ NO setTimeout — CRITICAL FOR ANDROID
+  event.waitUntil(
+    self.registration.showNotification(title, options)
+  );
 });
 
+// ==================== CLICK ====================
+self.addEventListener('notificationclick', (event) => {
+  console.log('🔔 Notification click');
+
+  event.notification.close();
+
+  const data = event.notification.data;
+  const action = event.action;
+
+  let url = '/webrtc_v0/';
+
+  if (action === 'answer' && data.callId) {
+    url = `/webrtc_v0/?callId=${data.callId}&callerId=${data.callerId}`;
+  }
+
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true })
+      .then((clientList) => {
+        for (const client of clientList) {
+          if (client.url.includes('/webrtc_v0/') && 'focus' in client) {
+            return client.focus();
+          }
+        }
+        return clients.openWindow(url);
+      })
+  );
+});
