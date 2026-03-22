@@ -11,13 +11,13 @@ admin.initializeApp();
 const db = admin.firestore();
 
 // ==================== VAPID KEYS ====================
-// These MUST match the keys used in your web app config.js
+// Replace with your actual private key!
 const VAPID_PUBLIC_KEY = 'BH33WjtMVo0Y_bml_nke0gtVqahGcPd6m-yjh__LBHp6Ahvfq-vN-m25D2MzMB3e1jbTGwQRGt5ufKEhSyj6Yv0';
-const VAPID_PRIVATE_KEY = 'lULaLKgEB47Ab9p8FDr5_NqbusivicVHnDvkdC6TJYA';  // ⚠️ You need to add this!
+const VAPID_PRIVATE_KEY = 'lULaLKgEB47Ab9p8FDr5_NqbusivicVHnDvkdC6TJYA';  // ⚠️ PUT YOUR ACTUAL PRIVATE KEY HERE!
 
 // Configure web-push with VAPID keys
 webpush.setVapidDetails(
-    'mailto:webrtc@easosunov.com',  // Change to your email
+    'mailto:webrtc@easosunov.com',
     VAPID_PUBLIC_KEY,
     VAPID_PRIVATE_KEY
 );
@@ -35,48 +35,39 @@ exports.onCallCreated = functions.firestore
         console.log(`   Caller: ${call.callerId}`);
         console.log(`   Callee: ${call.calleeId}`);
         
-        // Only send notification for ringing calls (incoming)
         if (call.status !== 'ringing') {
-            console.log(`⚠️ Call status is '${call.status}', not sending push notification`);
+            console.log(`⚠️ Call status is '${call.status}', not sending push`);
             return null;
         }
         
-        // Don't send notification if the caller is the same as callee
         if (call.callerId === call.calleeId) {
             console.log(`⚠️ Caller and callee are the same, skipping push`);
             return null;
         }
         
         try {
-            // Get the callee's user document
             const userDoc = await db.collection('users').doc(call.calleeId).get();
             
             if (!userDoc.exists) {
-                console.log(`❌ User document not found for callee: ${call.calleeId}`);
+                console.log(`❌ User not found: ${call.calleeId}`);
                 return null;
             }
             
             const userData = userDoc.data();
             
-            // Check if user has a push subscription
             if (!userData.pushSubscription) {
-                console.log(`📱 No push subscription found for user: ${call.calleeId}`);
+                console.log(`📱 No push subscription for ${call.calleeId}`);
                 return null;
             }
             
             const subscription = userData.pushSubscription;
-            
-            // Log subscription details
             console.log(`🔍 Endpoint: ${subscription.endpoint.substring(0, 80)}...`);
-            console.log(`🔍 Keys present: ${!!subscription.keys}`);
             
-            // Get caller's display name
             const callerDoc = await db.collection('users').doc(call.callerId).get();
             const callerName = callerDoc.exists ? 
                 (callerDoc.data().displayname || callerDoc.data().displayName || call.callerId) : 
                 call.callerId;
             
-            // Build the payload (what the service worker will receive)
             const payload = JSON.stringify({
                 notification: {
                     title: '📞 Incoming Call',
@@ -98,12 +89,10 @@ exports.onCallCreated = functions.firestore
                 }
             });
             
-            // Send the push notification
             console.log(`📤 Sending push to ${call.calleeId}...`);
             await webpush.sendNotification(subscription, payload);
             console.log(`✅ Push sent successfully`);
             
-            // Log success in Firestore
             await db.collection('notifications').add({
                 userId: call.calleeId,
                 callId: callId,
@@ -113,12 +102,9 @@ exports.onCallCreated = functions.firestore
                 status: 'sent'
             });
             
-            return { success: true };
-            
         } catch (error) {
-            console.error(`❌ Error sending push:`, error.message);
+            console.error(`❌ Error:`, error.message);
             
-            // Log the error in Firestore
             await db.collection('notifications').add({
                 userId: call.calleeId,
                 callId: callId,
@@ -128,20 +114,20 @@ exports.onCallCreated = functions.firestore
                 error: error.message
             });
             
-            // If subscription is invalid (410 Gone or 404 Not Found), remove it
+            // Remove invalid subscription
             if (error.statusCode === 410 || error.statusCode === 404) {
                 console.log(`🗑️ Removing invalid subscription for ${call.calleeId}`);
                 await db.collection('users').doc(call.calleeId).update({
                     pushSubscription: admin.firestore.FieldValue.delete()
                 });
             }
-            
-            return null;
         }
+        
+        return null;
     });
 
 /**
- * Simple health check endpoint
+ * Health check endpoint
  */
 exports.healthCheck = functions.https.onRequest((req, res) => {
     res.status(200).json({ 
