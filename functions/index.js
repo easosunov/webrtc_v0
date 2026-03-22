@@ -1,10 +1,22 @@
+/**
+ * Firebase Cloud Functions for WebRTC Communicator
+ * Sends push notifications when incoming calls are created
+ */
+
 const {onDocumentCreated} = require('firebase-functions/v2/firestore');
 const {logger} = require('firebase-functions');
 const admin = require('firebase-admin');
 
+// Initialize Firebase Admin SDK
 admin.initializeApp();
+
+// Reference to Firestore
 const db = admin.firestore();
 
+/**
+ * Send push notification when a new call is created
+ * Triggered when a document is added to the 'calls' collection
+ */
 exports.onCallCreated = onDocumentCreated('calls/{callId}', async (event) => {
     const call = event.data.data();
     const callId = event.params.callId;
@@ -12,36 +24,52 @@ exports.onCallCreated = onDocumentCreated('calls/{callId}', async (event) => {
     logger.log(`📞 New call created: ${callId}`);
     logger.log(`   Caller: ${call.callerId}`);
     logger.log(`   Callee: ${call.calleeId}`);
+    logger.log(`   Status: ${call.status}`);
     
-    if (call.status !== 'ringing') return null;
-    if (call.callerId === call.calleeId) return null;
+    // Only send notification for ringing calls (incoming)
+    if (call.status !== 'ringing') {
+        logger.log(`⚠️ Call status is '${call.status}', not sending push notification`);
+        return null;
+    }
+    
+    // Don't send notification if the caller is the same as callee
+    if (call.callerId === call.calleeId) {
+        logger.log(`⚠️ Caller and callee are the same, skipping push`);
+        return null;
+    }
     
     try {
+        // Force fresh read by getting the document directly
         const userDoc = await db.collection('users').doc(call.calleeId).get();
+        
         if (!userDoc.exists) {
-            logger.log(`❌ User ${call.calleeId} not found`);
+            logger.log(`❌ User document not found for callee: ${call.calleeId}`);
             return null;
         }
         
         const userData = userDoc.data();
-        const subscription = userData.pushSubscription;
         
-        if (!subscription) {
-            logger.log(`📱 No push subscription for ${call.calleeId}`);
+        // Check if user has a push subscription
+        if (!userData.pushSubscription) {
+            logger.log(`📱 No push subscription found for user: ${call.calleeId}`);
             return null;
         }
         
-        // Debug: Log subscription details
-        logger.log(`🔍 Subscription found for ${call.calleeId}`);
-        logger.log(`🔍 Endpoint: ${subscription.endpoint.substring(0, 60)}...`);
-        logger.log(`🔍 Keys present: ${!!subscription.keys}`);
+        const subscription = userData.pushSubscription;
         
+        // Log subscription details for debugging
+        logger.log(`🔍 Subscription found for ${call.calleeId}`);
+        logger.log(`🔍 Endpoint: ${subscription.endpoint.substring(0, 80)}...`);
+        logger.log(`🔍 Keys present: ${!!subscription.keys}`);
+        logger.log(`🔍 Full subscription length: ${JSON.stringify(subscription).length}`);
+        
+        // Get caller's display name
         const callerDoc = await db.collection('users').doc(call.callerId).get();
         const callerName = callerDoc.exists ? 
             (callerDoc.data().displayname || callerDoc.data().displayName || call.callerId) : 
             call.callerId;
         
-        // Use the subscription directly
+        // Build the notification payload
         const payload = {
             notification: {
                 title: '📞 Incoming Call',
@@ -50,27 +78,54 @@ exports.onCallCreated = onDocumentCreated('calls/{callId}', async (event) => {
             data: {
                 callId: callId,
                 callerId: call.callerId,
-                callerName: callerName
+                callerName: callerName,
+                url: 'https://easosunov.github.io/webrtc_v0/',
+                timestamp: new Date().toISOString()
             },
-            token: subscription.endpoint
+            token: subscription.endpoint,
+            webpush: {
+                notification: {
+                    icon: 'https://easosunov.github.io/webrtc_v0/favicon.ico',
+                    badge: 'https://easosunov.github.io/webrtc_v0/favicon.ico',
+                    vibrate: [200, 100, 200],
+                    requireInteraction: true,
+                    actions: [
+                        {
+                            action: 'answer',
+                            title: 'Answer Call'
+                        },
+                        {
+                            action: 'dismiss',
+                            title: 'Dismiss'
+                        }
+                    ]
+                }
+            }
         };
         
-        logger.log(`📤 Sending push to ${call.calleeId}...`);
+        // Send the push notification
+        logger.log(`📤 Sending push notification to ${call.calleeId}...`);
         const response = await admin.messaging().send(payload);
-        logger.log(`✅ Push sent successfully: ${response}`);
+        logger.log(`✅ Push notification sent successfully: ${response}`);
         
+        // Log success in Firestore
         await db.collection('notifications').add({
             userId: call.calleeId,
             callId: callId,
             callerId: call.callerId,
+            callerName: callerName,
             sentAt: admin.firestore.FieldValue.serverTimestamp(),
             status: 'sent',
             response: response
         });
         
-    } catch (error) {
-        logger.error(`❌ Error:`, error.message);
+        return { success: true, messageId: response };
         
+    } catch (error) {
+        logger.error(`❌ Error sending push notification:`, error.message);
+        logger.error(`❌ Error details:`, error);
+        
+        // Log the error in Firestore
         await db.collection('notifications').add({
             userId: call.calleeId,
             callId: callId,
@@ -80,13 +135,27 @@ exports.onCallCreated = onDocumentCreated('calls/{callId}', async (event) => {
             error: error.message
         });
         
-        if (error.code === 'messaging/invalid-registration-token') {
-            logger.log(`🗑️ Removing invalid token for ${call.calleeId}`);
+        // If token is invalid, remove it from the user document
+        if (error.code === 'messaging/invalid-registration-token' ||
+            error.code === 'messaging/registration-token-not-registered') {
+            logger.log(`🗑️ Removing invalid push token for ${call.calleeId}`);
             await db.collection('users').doc(call.calleeId).update({
-                pushSubscription: admin.firestore.FieldValue.delete()
+                pushSubscription: admin.firestore.FieldValue.delete(),
+                pushInvalidAt: admin.firestore.FieldValue.serverTimestamp()
             });
         }
+        
+        return null;
     }
-    
-    return null;
+});
+
+/**
+ * Simple health check endpoint
+ */
+exports.healthCheck = require('firebase-functions/v2/https').onRequest((req, res) => {
+    res.status(200).json({ 
+        status: 'healthy', 
+        timestamp: new Date().toISOString(),
+        service: 'webrtc-communicator-push'
+    });
 });
