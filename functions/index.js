@@ -48,73 +48,59 @@ exports.onCallCreated = onDocumentCreated('calls/{callId}', async (event) => {
 
         let pushSent = false;
 
-        // ========== METHOD 1: FCM (Android) ==========
-        if (userData.fcmToken) {
-            try {
-                const fcmPayload = {
-                    notification: {
-                        title: '📞 Incoming Call',
-                        body: `Call from ${callerName}`,
-                        icon: 'https://easosunov.github.io/webrtc_v0/favicon.ico'
-                    },
-                    data: {
-                        callId: callId,
-                        callerId: call.callerId,
-                        callerName: callerName,
-                        url: 'https://easosunov.github.io/webrtc_v0/'
-                    },
-                    token: userData.fcmToken,
-                    android: {
-                        priority: 'high',
-                        notification: {
-                            sound: 'default',
-                            channelId: 'calls',
-                            priority: 'high'
-                        }
-                    },
-                    apns: {
-                        payload: {
-                            aps: {
-                                sound: 'default',
-                                contentAvailable: true
-                            }
-                        }
-                    },
-                    webpush: {
-                        notification: {
-                            requireInteraction: true,
-                            actions: [
-                                { action: 'answer', title: 'Answer Call' },
-                                { action: 'dismiss', title: 'Dismiss' }
-                            ]
-                        }
+// ========== METHOD 1: FCM (Android) ==========
+if (userData.fcmToken) {
+    try {
+        const fcmPayload = {
+            notification: {
+                title: '📞 Incoming Call',
+                body: `Call from ${callerName}`,
+                icon: 'https://easosunov.github.io/webrtc_v0/favicon.ico'
+            },
+            data: {
+                callId: callId,
+                callerId: call.callerId,
+                callerName: callerName,
+                url: 'https://easosunov.github.io/webrtc_v0/'
+            },
+            token: userData.fcmToken,
+            android: {
+                priority: 'high',
+                notification: {
+                    sound: 'default',
+                    channelId: 'calls',
+                    priority: 'high',
+                    clickAction: 'OPEN_ACTIVITY'
+                }
+            },
+            apns: {
+                payload: {
+                    aps: {
+                        sound: 'default',
+                        contentAvailable: true,
+                        category: 'INCOMING_CALL'
                     }
-                };
-                
-                await admin.messaging().send(fcmPayload);
-                logger.log(`✅ FCM push sent to ${call.calleeId}`);
-                pushSent = true;
-                
-                await db.collection('notifications').add({
-                    userId: call.calleeId,
-                    callId: callId,
-                    method: 'fcm',
-                    status: 'sent',
-                    timestamp: admin.firestore.FieldValue.serverTimestamp()
-                });
-                
-            } catch (fcmError) {
-                logger.error(`❌ FCM failed: ${fcmError.message}`);
-                
-                // Remove invalid token
-                if (fcmError.code === 'messaging/invalid-registration-token') {
-                    await db.collection('users').doc(call.calleeId).update({
-                        fcmToken: admin.firestore.FieldValue.delete()
-                    });
+                }
+            },
+            webpush: {
+                notification: {
+                    requireInteraction: true,
+                    actions: [
+                        { action: 'answer', title: 'Answer Call' },
+                        { action: 'dismiss', title: 'Dismiss' }
+                    ]
                 }
             }
-        }
-
+        };
+        
+        await admin.messaging().send(fcmPayload);
+        logger.log(`✅ FCM push sent to ${call.calleeId}`);
+        pushSent = true;
+        
+    } catch (fcmError) {
+        logger.error(`❌ FCM failed: ${fcmError.message}`);
+    }
+}
         // ========== METHOD 2: Web Push (iOS, Windows, Desktop) ==========
         if (!pushSent && userData.webPushSubscription) {
             try {
