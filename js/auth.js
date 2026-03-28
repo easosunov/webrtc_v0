@@ -178,6 +178,7 @@ async function clearOldIceCandidates() {
     }
 }
 
+
 // ==================== ANDROID FCM TOKEN SETUP ====================
 async function setupAndroidFCM() {
     // Only run on Android devices
@@ -194,75 +195,71 @@ async function setupAndroidFCM() {
     }
     
     try {
-        // Check if user already has a token
-        const userDoc = await db.collection('users').doc(CONFIG.myUsername).get();
-        if (userDoc.data()?.fcmToken) {
-            console.log('✅ User already has FCM token');
-            return;
-        }
-        
         console.log('📱 Android: Setting up FCM notifications...');
         
-        // First, check if service worker is already registered
+        // Register root service worker
         let registration = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js');
-        
-        // If not registered, register it now
         if (!registration) {
-            console.log('Registering FCM service worker...');
             registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
                 scope: '/'
             });
             console.log('✅ Service worker registered');
-        } else {
-            console.log('✅ Service worker already registered');
         }
         
-        // Wait for service worker to be active
+        // Wait for activation
         if (!registration.active) {
-            console.log('Waiting for service worker to activate...');
+            console.log('Waiting for service worker activation...');
             await new Promise((resolve) => {
-                if (registration.active) {
-                    resolve();
-                } else {
-                    registration.addEventListener('activate', () => {
-                        console.log('Service worker activated');
-                        resolve();
-                    });
-                }
+                registration.addEventListener('activate', () => resolve());
             });
         }
+        console.log('✅ Service worker active');
         
         // Tell FCM to use this service worker
         if (window.messaging.useServiceWorker) {
             window.messaging.useServiceWorker(registration);
         }
         
-        // Request notification permission
-        console.log('Requesting notification permission...');
+        // Request permission
         const permission = await Notification.requestPermission();
         if (permission !== 'granted') {
-            console.log('❌ Notification permission denied');
+            console.log('❌ Permission denied');
             return;
         }
         
-        // Get FCM token
-        console.log('Getting FCM token...');
+        // Delete any existing token first (important for fresh binding)
+        try {
+            const oldToken = await window.messaging.getToken();
+            if (oldToken) {
+                console.log('Deleting old token...');
+                await window.messaging.deleteToken();
+            }
+        } catch (e) {
+            console.log('No old token to delete');
+        }
+        
+        // Get NEW token with correct service worker
         const token = await window.messaging.getToken({
             vapidKey: window.VAPID_PUBLIC_KEY,
             serviceWorkerRegistration: registration
         });
         
         if (token) {
-            // Save to Firestore
+            // Check if user already has this token in Firestore
+            const userDoc = await db.collection('users').doc(CONFIG.myUsername).get();
+            if (userDoc.data()?.fcmToken === token) {
+                console.log('✅ FCM token already saved');
+                return;
+            }
+            
             await db.collection('users').doc(CONFIG.myUsername).update({
                 fcmToken: token,
                 fcmEnabled: true,
                 fcmLastUpdated: firebase.firestore.FieldValue.serverTimestamp()
             });
-            console.log('✅ FCM token saved for Android');
-            console.log('Token:', token.substring(0, 50) + '...');
+            console.log('✅ NEW FCM token saved:', token.substring(0, 50) + '...');
         } else {
-            console.log('❌ No FCM token received');
+            console.log('❌ No token received');
         }
         
     } catch (error) {
