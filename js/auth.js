@@ -21,7 +21,6 @@ function updateDisplay() {
 }
 
 function initAuth() {
-    // Prevent multiple initializations
     if (authInitialized) {
         console.log('Auth already initialized, skipping...');
         return true;
@@ -29,7 +28,6 @@ function initAuth() {
     
     console.log('Initializing auth with dom:', window.dom);
     
-    // Check if dom and login button exist
     if (!window.dom || !window.dom.loginBtn) {
         console.warn('DOM or login button not ready yet, will retry...');
         setTimeout(initAuth, 500);
@@ -38,7 +36,6 @@ function initAuth() {
 
     console.log('Found login button:', window.dom.loginBtn);
 
-    // Remove any existing event listeners by cloning and replacing buttons
     const keypadButtons = document.querySelectorAll('.keypad-btn[data-digit]');
     keypadButtons.forEach(btn => {
         const newBtn = btn.cloneNode(true);
@@ -49,7 +46,6 @@ function initAuth() {
         });
     });
 
-    // Replace login button to remove old listeners
     const oldLoginBtn = window.dom.loginBtn;
     const newLoginBtn = oldLoginBtn.cloneNode(true);
     oldLoginBtn.parentNode.replaceChild(newLoginBtn, oldLoginBtn);
@@ -61,7 +57,6 @@ function initAuth() {
         login();
     });
 
-    // Replace logout button if it exists
     if (window.dom.logoutBtn) {
         const oldLogoutBtn = window.dom.logoutBtn;
         const newLogoutBtn = oldLogoutBtn.cloneNode(true);
@@ -74,7 +69,6 @@ function initAuth() {
         });
     }
 
-    // Remove old keyboard listener and add new one
     document.removeEventListener('keydown', handleKeyDown);
     document.addEventListener('keydown', handleKeyDown);
 
@@ -84,7 +78,6 @@ function initAuth() {
     return true;
 }
 
-// Separate keyboard handler function
 function handleKeyDown(event) {
     if (window.dom && window.dom.callScreen && window.dom.callScreen.style.display === 'block') return;
     
@@ -150,7 +143,6 @@ async function clearOldIceCandidates() {
         
         console.log(`📊 Found ${snapshot.size} old ice-candidates to delete`);
         
-        // Delete in batches of 500
         let totalDeleted = 0;
         let batch = db.batch();
         let count = 0;
@@ -178,99 +170,33 @@ async function clearOldIceCandidates() {
     }
 }
 
-// ==================== AUTO INSTALL PROMPT ====================
-async function checkAndPromptInstall() {
-    // Only prompt on Android
+// ==================== INSTALL CHECK ====================
+async function checkAndShowInstallButton() {
     const isAndroid = /Android/i.test(navigator.userAgent);
-    if (!isAndroid) {
-        console.log('Not Android, skipping install prompt');
-        return;
-    }
+    if (!isAndroid) return;
     
-    // Check if already installed
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
-    if (isStandalone) {
-        console.log('App already installed to home screen');
-        return;
-    }
+    if (isStandalone) return;
     
-    console.log('App not installed, checking for install prompt...');
-    
-    // Wait for beforeinstallprompt event to be captured
-    setTimeout(async () => {
-        if (window.deferredPrompt) {
-            console.log('Showing install prompt...');
-            window.deferredPrompt.prompt();
-            const result = await window.deferredPrompt.userChoice;
-            console.log('Install result:', result.outcome);
-            window.deferredPrompt = null;
-        } else {
-            console.log('No install prompt available');
-            // Fallback: show a floating button
-            showInstallFallbackButton();
-        }
-    }, 2000);
-}
-
-function showInstallFallbackButton() {
-    // Check if button already exists
-    if (document.getElementById('fallback-install-btn')) return;
-    
-    const installBtn = document.createElement('button');
-    installBtn.id = 'fallback-install-btn';
-    installBtn.textContent = '📱 Install App';
-    installBtn.style.cssText = `
-        position: fixed;
-        bottom: 80px;
-        left: 20px;
-        right: 20px;
-        background: #4CAF50;
-        color: white;
-        padding: 14px;
-        border: none;
-        border-radius: 10px;
-        font-size: 16px;
-        font-weight: bold;
-        z-index: 10000;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-        cursor: pointer;
-    `;
-    
-    installBtn.onclick = async () => {
-        if (window.deferredPrompt) {
-            window.deferredPrompt.prompt();
-            installBtn.remove();
-        } else {
-            alert('Tap the menu (⋮) → "Install app" or "Add to Home screen"');
-            installBtn.remove();
-        }
-    };
-    
-    document.body.appendChild(installBtn);
-    
-    // Auto-remove after 30 seconds
-    setTimeout(() => {
-        if (installBtn.parentNode) installBtn.remove();
-    }, 30000);
+    console.log('App not installed, install button should appear');
+    const installSection = document.getElementById('install-app-section');
+    if (installSection) installSection.style.display = 'block';
 }
 
 // ==================== ANDROID FCM TOKEN SETUP ====================
 async function setupAndroidFCM() {
-    // Only run on Android devices
     const isAndroid = /Android/i.test(navigator.userAgent);
     if (!isAndroid) {
         console.log('📱 Not Android, skipping FCM setup');
         return;
     }
     
-    // Check if FCM is available
     if (!window.messaging) {
         console.log('❌ FCM not available on this device');
         return;
     }
     
     try {
-        // Check if user already has a token
         const userDoc = await db.collection('users').doc(CONFIG.myUsername).get();
         if (userDoc.data()?.fcmToken) {
             console.log('✅ User already has FCM token');
@@ -279,7 +205,6 @@ async function setupAndroidFCM() {
         
         console.log('📱 Android: Setting up FCM notifications...');
         
-        // Register root service worker
         let registration = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js');
         if (!registration) {
             registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
@@ -288,7 +213,6 @@ async function setupAndroidFCM() {
             console.log('✅ Service worker registered');
         }
         
-        // Wait for activation
         if (!registration.active) {
             console.log('Waiting for service worker activation...');
             await new Promise((resolve) => {
@@ -297,19 +221,16 @@ async function setupAndroidFCM() {
         }
         console.log('✅ Service worker active');
         
-        // Tell FCM to use this service worker
         if (window.messaging.useServiceWorker) {
             window.messaging.useServiceWorker(registration);
         }
         
-        // Request permission
         const permission = await Notification.requestPermission();
         if (permission !== 'granted') {
             console.log('❌ Permission denied');
             return;
         }
         
-        // Delete any existing token first (important for fresh binding)
         try {
             const oldToken = await window.messaging.getToken();
             if (oldToken) {
@@ -320,14 +241,12 @@ async function setupAndroidFCM() {
             console.log('No old token to delete');
         }
         
-        // Get NEW token with correct service worker
         const token = await window.messaging.getToken({
             vapidKey: window.VAPID_PUBLIC_KEY,
             serviceWorkerRegistration: registration
         });
         
         if (token) {
-            // Check if user already has this token in Firestore
             const userDoc = await db.collection('users').doc(CONFIG.myUsername).get();
             if (userDoc.data()?.fcmToken === token) {
                 console.log('✅ FCM token already saved');
@@ -400,12 +319,10 @@ async function login() {
         
         console.log('✅ UI updated, showing call screen');
         
-        // ===== CLEAR OLD ICE-CANDIDATES ON LOGIN =====
         console.log('🔜 About to call clearOldIceCandidates...');
         await clearOldIceCandidates();
         console.log('✅ clearOldIceCandidates completed');
         
-        // Initialize other modules with error handling
         try {
             if (window.cleanupStaleCalls) {
                 console.log('Calling cleanupStaleCalls...');
@@ -444,8 +361,8 @@ async function login() {
         
         console.log('✅ Login complete!');
         
-        // ===== AUTO INSTALL PROMPT (Android) =====
-        await checkAndPromptInstall();
+        // ===== SHOW INSTALL BUTTON IF NOT INSTALLED =====
+        await checkAndShowInstallButton();
         
         // ===== ANDROID FCM TOKEN SETUP =====
         await setupAndroidFCM();
@@ -494,6 +411,5 @@ async function logout() {
     }
 }
 
-// Make functions available globally
 window.login = login;
 window.logout = logout;
