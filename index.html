@@ -101,18 +101,106 @@
                         <h3>Available Users</h3>
                         <div id="users-container"></div>
                         
-                        <!-- ANDROID NOTIFICATION FIX BUTTON -->
-                        <div style="background: #ff9800; padding: 15px; margin: 10px 0; border-radius: 10px; border: 3px solid #f44336;">
-                            <div style="font-size: 16px; font-weight: bold; margin-bottom: 10px; color: white;">📱 ANDROID NOTIFICATIONS</div>
-                            <button id="androidEnableBtn" style="background: #4CAF50; color: white; padding: 12px; font-size: 16px; border: none; border-radius: 8px; width: 100%; margin-bottom: 5px;">
-                                🔔 ENABLE NOTIFICATIONS
-                            </button>
-                            <button id="androidTestBtn" style="background: #2196F3; color: white; padding: 12px; font-size: 16px; border: none; border-radius: 8px; width: 100%;">
-                                📱 TEST NOTIFICATION
-                            </button>
-                            <div id="androidStatus" style="margin-top: 10px; color: white; font-size: 12px; background: rgba(0,0,0,0.5); padding: 8px; border-radius: 5px;"></div>
-                        </div>
-                    </div>
+<!-- ANDROID NOTIFICATION FIX BUTTON -->
+<div style="background: #ff9800; padding: 15px; margin: 10px 0; border-radius: 10px; border: 3px solid #f44336;">
+    <div style="font-size: 16px; font-weight: bold; margin-bottom: 10px; color: white;">📱 ANDROID NOTIFICATIONS</div>
+    <button id="androidEnableBtn" style="background: #4CAF50; color: white; padding: 12px; font-size: 16px; border: none; border-radius: 8px; width: 100%; margin-bottom: 5px;">
+        🔔 ENABLE NOTIFICATIONS
+    </button>
+    <button id="androidTestBtn" style="background: #2196F3; color: white; padding: 12px; font-size: 16px; border: none; border-radius: 8px; width: 100%;">
+        📱 TEST NOTIFICATION
+    </button>
+    <div id="androidStatus" style="margin-top: 10px; color: white; font-size: 12px; background: rgba(0,0,0,0.5); padding: 8px; border-radius: 5px;"></div>
+</div>
+
+<script>
+// Wait for page to be ready
+document.addEventListener('DOMContentLoaded', function() {
+    const enableBtn = document.getElementById('androidEnableBtn');
+    const testBtn = document.getElementById('androidTestBtn');
+    const statusDiv = document.getElementById('androidStatus');
+    
+    if (enableBtn) {
+        enableBtn.onclick = async function() {
+            statusDiv.innerHTML = 'Requesting permission...';
+            
+            try {
+                // Check if already logged in
+                if (!CONFIG || !CONFIG.myUsername) {
+                    statusDiv.innerHTML = '❌ Please log in first';
+                    return;
+                }
+                
+                // Request notification permission
+                const permission = await Notification.requestPermission();
+                if (permission !== 'granted') {
+                    statusDiv.innerHTML = '❌ Permission denied';
+                    return;
+                }
+                statusDiv.innerHTML = '✅ Permission granted. Registering root service worker...';
+                
+                // CRITICAL: Register service worker at ROOT (not in subfolder)
+                const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
+                    scope: '/'
+                });
+                console.log('✅ Root service worker registered at:', registration.scope);
+                statusDiv.innerHTML = '✅ Root service worker registered. Getting token...';
+                
+                // Check if messaging is available
+                if (!window.messaging) {
+                    statusDiv.innerHTML = '❌ FCM not available';
+                    return;
+                }
+                
+                // CRITICAL: Pass the root service worker registration when getting token
+                const token = await window.messaging.getToken({
+                    vapidKey: window.VAPID_PUBLIC_KEY,
+                    serviceWorkerRegistration: registration  // This is the key fix!
+                });
+                
+                if (token) {
+                    statusDiv.innerHTML = `✅ Token obtained! Saving...`;
+                    
+                    // Save to Firestore
+                    await db.collection('users').doc(CONFIG.myUsername).update({
+                        fcmToken: token,
+                        fcmEnabled: true,
+                        fcmLastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    statusDiv.innerHTML = '✅ NOTIFICATIONS ENABLED! Close app and make a test call.';
+                    statusDiv.style.color = '#90EE90';
+                } else {
+                    statusDiv.innerHTML = '❌ No token received. Make sure app is installed to home screen.';
+                }
+            } catch (err) {
+                statusDiv.innerHTML = '❌ Error: ' + err.message;
+                console.error(err);
+            }
+        };
+    }
+    
+    if (testBtn) {
+        testBtn.onclick = async function() {
+            statusDiv.innerHTML = 'Sending test notification...';
+            
+            try {
+                const registration = await navigator.serviceWorker.ready;
+                await registration.showNotification('Test Notification', {
+                    body: 'If you see this, notifications work!',
+                    icon: '/webrtc_v0/favicon.ico',
+                    requireInteraction: true,
+                    vibrate: [200, 100, 200]
+                });
+                statusDiv.innerHTML = '✅ Test notification sent! Check your notifications.';
+                statusDiv.style.color = '#90EE90';
+            } catch (err) {
+                statusDiv.innerHTML = '❌ Error: ' + err.message;
+                console.error(err);
+            }
+        };
+    }
+});
+</script>                    </div>
                     
                     <!-- Chat Section -->
                     <div class="chat-section">
