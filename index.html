@@ -94,93 +94,8 @@
                     <div class="users-panel">
                         <h3>Available Users</h3>
                         <div id="users-container"></div>
-						
-						
-						
                     </div>
                     
-					
-
-<!-- SIMPLE FCM TEST -->
-<div id="simple-fcm-test" style="background: #2196F3; padding: 15px; margin: 10px 0; border-radius: 10px;">
-    <button id="fcm-test-button" style="background: white; color: #2196F3; padding: 10px; border: none; border-radius: 5px; width: 100%; font-size: 16px;">
-        🔔 GET FCM TOKEN (TEST)
-    </button>
-    <div id="fcm-test-status" style="margin-top: 8px; color: white; font-size: 12px;"></div>
-</div>
-
-<script>
-// Define the function first
-window.getFCMTokenTest = async function() {
-    const statusDiv = document.getElementById('fcm-test-status');
-    statusDiv.innerHTML = 'Testing...';
-    
-    try {
-        // Step 1: Check CONFIG
-        statusDiv.innerHTML = 'Checking CONFIG...';
-        if (!window.CONFIG || !window.CONFIG.myUsername) {
-            statusDiv.innerHTML = '❌ Please log in first';
-            return;
-        }
-        statusDiv.innerHTML = `✅ Logged in: ${window.CONFIG.myUsername}<br>`;
-        
-        // Step 2: Check Notification permission
-        statusDiv.innerHTML += 'Checking notification permission...<br>';
-        if (Notification.permission !== 'granted') {
-            statusDiv.innerHTML += 'Requesting permission...<br>';
-            const perm = await Notification.requestPermission();
-            if (perm !== 'granted') {
-                statusDiv.innerHTML += '❌ Permission denied';
-                return;
-            }
-        }
-        statusDiv.innerHTML += '✅ Permission granted<br>';
-        
-        // Step 3: Check messaging
-        statusDiv.innerHTML += 'Checking FCM...<br>';
-        if (!window.messaging) {
-            statusDiv.innerHTML += '❌ FCM not available';
-            return;
-        }
-        statusDiv.innerHTML += '✅ FCM available<br>';
-        
-        // Step 4: Get token
-        statusDiv.innerHTML += 'Getting token...<br>';
-        const token = await window.messaging.getToken({
-            vapidKey: window.VAPID_PUBLIC_KEY
-        });
-        
-        if (token) {
-            statusDiv.innerHTML += `✅ TOKEN: ${token.substring(0, 50)}...<br>`;
-            
-            // Step 5: Save to Firestore
-            statusDiv.innerHTML += 'Saving to Firestore...<br>';
-            await window.db.collection('users').doc(window.CONFIG.myUsername).update({
-                fcmToken: token,
-                fcmEnabled: true
-            });
-            statusDiv.innerHTML += '✅ SAVED!';
-            statusDiv.style.color = '#90EE90';
-        } else {
-            statusDiv.innerHTML += '❌ No token returned';
-        }
-    } catch (err) {
-        statusDiv.innerHTML += `❌ Error: ${err.message}`;
-        console.error('FCM Error:', err);
-    }
-};
-
-// Add event listener after the page loads
-document.addEventListener('DOMContentLoaded', function() {
-    const btn = document.getElementById('fcm-test-button');
-    if (btn) {
-        btn.onclick = window.getFCMTokenTest;
-    }
-});
-</script>
-					
-					
-					
                     <!-- Chat Section -->
                     <div class="chat-section">
                         <div class="chat-layout">
@@ -249,6 +164,14 @@ document.addEventListener('DOMContentLoaded', function() {
         </div>
     </div>
 
+    <!-- FCM TEST BUTTON - BOTTOM OF SCREEN (outside main containers) -->
+    <div id="fcm-test-section" style="background: #2196F3; padding: 15px; margin: 20px; border-radius: 10px; text-align: center;">
+        <button id="fcm-test-btn" style="background: white; color: #2196F3; padding: 12px 20px; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; width: 100%;">
+            🔔 Test FCM Notifications
+        </button>
+        <div id="fcm-test-status" style="margin-top: 8px; color: white; font-size: 12px;"></div>
+    </div>
+
     <!-- Modals -->
     <div id="modal-overlay"></div>
     <div id="incoming-call-modal">
@@ -309,19 +232,24 @@ document.addEventListener('DOMContentLoaded', function() {
         // Web Push Service Worker (for Windows/iOS)
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('/webrtc_v0/sw.js')
-                .then(reg => console.log('✅ Web Push Service Worker registered'))
+                .then(reg => console.log('✅ Web Push SW registered'))
                 .catch(err => console.log('❌ Web Push SW failed:', err));
         }
         
-        // FCM Service Worker (for Android) - only register if FCM is available
+        // FCM Service Worker (for Android)
         if ('serviceWorker' in navigator && window.messaging) {
             navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/' })
-                .then(reg => console.log('✅ FCM Service Worker registered at root'))
+                .then(reg => {
+                    console.log('✅ FCM SW registered at root');
+                    if (window.messaging) {
+                        window.messaging.useServiceWorker(reg);
+                    }
+                })
                 .catch(err => console.log('❌ FCM SW failed:', err));
         }
     </script>
     
-    <!-- Install Panel -->
+    <!-- Install Panel Script -->
     <script>
         const installBtn = document.getElementById('install-btn');
         const installPanel = document.getElementById('install-panel');
@@ -338,62 +266,53 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     </script>
     
-    <!-- Android Notification Script (only runs on Android) -->
+    <!-- FCM Test Button Script -->
     <script>
-    // Check if this is Android
-    const isAndroid = /Android/i.test(navigator.userAgent);
-    
-    if (isAndroid && window.messaging) {
-        // Add Android button after users panel
-        setTimeout(() => {
-            const usersPanel = document.querySelector('.users-panel');
-            if (usersPanel && !document.getElementById('android-panel')) {
-                const panel = document.createElement('div');
-                panel.id = 'android-panel';
-                panel.style.cssText = 'background: #ff9800; padding: 15px; margin: 10px 0; border-radius: 10px; border: 3px solid #f44336;';
-                panel.innerHTML = `
-                    <div style="font-size: 16px; font-weight: bold; margin-bottom: 10px; color: white;">📱 ANDROID NOTIFICATIONS</div>
-                    <button id="androidEnableBtn" style="background: #4CAF50; color: white; padding: 12px; font-size: 16px; border: none; border-radius: 8px; width: 100%;">
-                        🔔 ENABLE NOTIFICATIONS
-                    </button>
-                    <div id="androidStatus" style="margin-top: 10px; color: white; font-size: 12px; background: rgba(0,0,0,0.5); padding: 8px; border-radius: 5px;"></div>
-                `;
-                usersPanel.appendChild(panel);
+        const fcmTestBtn = document.getElementById('fcm-test-btn');
+        const fcmTestStatus = document.getElementById('fcm-test-status');
+        
+        if (fcmTestBtn) {
+            fcmTestBtn.addEventListener('click', async () => {
+                fcmTestStatus.innerHTML = 'Testing...';
                 
-                // Add button handler
-                document.getElementById('androidEnableBtn').onclick = async () => {
-                    const statusDiv = document.getElementById('androidStatus');
-                    statusDiv.innerHTML = 'Requesting permission...';
-                    
-                    try {
-                        const permission = await Notification.requestPermission();
-                        if (permission !== 'granted') {
-                            statusDiv.innerHTML = '❌ Permission denied';
-                            return;
-                        }
-                        statusDiv.innerHTML = '✅ Permission granted. Getting token...';
-                        
-                        const token = await window.messaging.getToken({
-                            vapidKey: window.VAPID_PUBLIC_KEY
-                        });
-                        
-                        if (token) {
-                            await db.collection('users').doc(CONFIG.myUsername).update({
-                                fcmToken: token,
-                                fcmEnabled: true
-                            });
-                            statusDiv.innerHTML = '✅ NOTIFICATIONS ENABLED! Close app and make a test call.';
-                            statusDiv.style.color = '#90EE90';
-                        } else {
-                            statusDiv.innerHTML = '❌ No token. Make sure app is installed to home screen.';
-                        }
-                    } catch (err) {
-                        statusDiv.innerHTML = '❌ Error: ' + err.message;
+                try {
+                    // Check if logged in
+                    if (!CONFIG || !CONFIG.myUsername) {
+                        fcmTestStatus.innerHTML = '❌ Please log in first';
+                        return;
                     }
-                };
-            }
-        }, 2000);
-    }
+                    
+                    // Check messaging
+                    if (!window.messaging) {
+                        fcmTestStatus.innerHTML = '❌ FCM not available';
+                        return;
+                    }
+                    
+                    // Get token
+                    const token = await window.messaging.getToken({
+                        vapidKey: window.VAPID_PUBLIC_KEY
+                    });
+                    
+                    if (token) {
+                        fcmTestStatus.innerHTML = `✅ Token: ${token.substring(0, 40)}...<br>Saving to Firestore...`;
+                        
+                        // Save to Firestore
+                        await db.collection('users').doc(CONFIG.myUsername).update({
+                            fcmToken: token,
+                            fcmEnabled: true,
+                            fcmLastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                        fcmTestStatus.innerHTML = '✅ FCM token saved! Test call to receive notification.';
+                        fcmTestStatus.style.color = '#90EE90';
+                    } else {
+                        fcmTestStatus.innerHTML = '❌ No token received';
+                    }
+                } catch (err) {
+                    fcmTestStatus.innerHTML = `❌ Error: ${err.message}`;
+                    console.error(err);
+                }
+            });
+        }
     </script>
 </body>
 </html>
