@@ -15,6 +15,12 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
+// Create notification channel on Android (important!)
+self.addEventListener('install', () => {
+    console.log('Service Worker installed');
+    self.skipWaiting();
+});
+
 messaging.onBackgroundMessage((payload) => {
     console.log('🔥 Background message received:', payload);
     
@@ -23,12 +29,13 @@ messaging.onBackgroundMessage((payload) => {
         body: payload.notification?.body || 'You have an incoming call',
         icon: 'https://easosunov.github.io/webrtc_v0/favicon.ico',
         badge: 'https://easosunov.github.io/webrtc_v0/favicon.ico',
-        vibrate: [200, 100, 200, 500, 200],
-        requireInteraction: true,
+        vibrate: [200, 100, 200],
+        requireInteraction: true,  // Keeps notification until user interacts
         silent: false,
         tag: 'incoming-call',
         renotify: true,
-        timestamp: Date.now(),
+        priority: 'high',
+        sticky: true,  // Makes notification stay
         data: payload.data || {},
         actions: [
             { action: 'answer', title: 'Answer Call' },
@@ -36,10 +43,7 @@ messaging.onBackgroundMessage((payload) => {
         ]
     };
     
-    // Add a small delay to ensure notification stays
-    event.waitUntil(
-        self.registration.showNotification(notificationTitle, notificationOptions)
-            .then(() => console.log('✅ Notification shown'))
-            .catch(err => console.error('❌ Failed:', err))
-    );
+    // Use a promise to ensure it completes
+    const promise = self.registration.showNotification(notificationTitle, notificationOptions);
+    event.waitUntil(promise);
 });
