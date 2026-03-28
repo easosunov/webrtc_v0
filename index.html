@@ -94,6 +94,93 @@
                     <div class="users-panel">
                         <h3>Available Users</h3>
                         <div id="users-container"></div>
+						
+						<!-- ANDROID NOTIFICATION FIX BUTTON -->
+						<div style="background: #ff9800; padding: 15px; margin: 10px 0; border-radius: 10px; border: 3px solid #f44336;">
+							<div style="font-size: 16px; font-weight: bold; margin-bottom: 10px; color: white;">📱 ANDROID NOTIFICATIONS</div>
+							<button onclick="fixAndroidNotifications()" style="background: #4CAF50; color: white; padding: 12px; font-size: 16px; border: none; border-radius: 8px; width: 100%; margin-bottom: 5px;">
+								🔔 ENABLE NOTIFICATIONS
+							</button>
+							<button onclick="testNotificationNow()" style="background: #2196F3; color: white; padding: 12px; font-size: 16px; border: none; border-radius: 8px; width: 100%;">
+								📱 TEST NOTIFICATION
+							</button>
+							<div id="androidStatus" style="margin-top: 10px; color: white; font-size: 12px; background: rgba(0,0,0,0.5); padding: 8px; border-radius: 5px;"></div>
+						</div>
+
+						<script>
+						window.fixAndroidNotifications = async function() {
+							const statusDiv = document.getElementById('androidStatus');
+							statusDiv.innerHTML = 'Requesting permission...';
+							
+							// Request notification permission
+							const permission = await Notification.requestPermission();
+							if (permission !== 'granted') {
+								statusDiv.innerHTML = '❌ Permission denied. Please enable in Chrome settings.';
+								return;
+							}
+							statusDiv.innerHTML = '✅ Permission granted! Getting token...';
+							
+							// Get FCM token
+							if (window.messaging) {
+								try {
+									const token = await window.messaging.getToken({ vapidKey: window.VAPID_PUBLIC_KEY });
+									if (token) {
+										statusDiv.innerHTML = `✅ FCM Token: ${token.substring(0, 40)}...<br>Saving to Firestore...`;
+										
+										// Save to Firestore
+										await db.collection('users').doc(CONFIG.myUsername).update({
+											fcmToken: token,
+											fcmEnabled: true,
+											fcmLastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+										});
+										statusDiv.innerHTML = '✅ NOTIFICATIONS ENABLED! Close the app and make a test call.';
+										
+										// Also register web push for backup
+										const registration = await navigator.serviceWorker.ready;
+										let webPushSub = await registration.pushManager.getSubscription();
+										if (!webPushSub && window.VAPID_PUBLIC_KEY) {
+											const base64 = window.VAPID_PUBLIC_KEY.replace(/-/g, '+').replace(/_/g, '/');
+											const appServerKey = new Uint8Array(atob(base64).split('').map(c => c.charCodeAt(0)));
+											webPushSub = await registration.pushManager.subscribe({
+												userVisibleOnly: true,
+												applicationServerKey: appServerKey
+											});
+											const webPushData = {
+												endpoint: webPushSub.endpoint,
+												keys: {
+													p256dh: btoa(String.fromCharCode.apply(null, new Uint8Array(webPushSub.getKey('p256dh')))),
+													auth: btoa(String.fromCharCode.apply(null, new Uint8Array(webPushSub.getKey('auth'))))
+												}
+											};
+											await db.collection('users').doc(CONFIG.myUsername).update({
+												webPushSubscription: webPushData
+											});
+										}
+									} else {
+										statusDiv.innerHTML = '❌ No token. Check if your site is installed to home screen.';
+									}
+								} catch (err) {
+									statusDiv.innerHTML = `❌ Error: ${err.message}`;
+								}
+							} else {
+								statusDiv.innerHTML = '❌ FCM not supported. Make sure you added the Firebase Messaging SDK.';
+							}
+						};
+
+						window.testNotificationNow = async function() {
+							const statusDiv = document.getElementById('androidStatus');
+							statusDiv.innerHTML = 'Sending test notification...';
+							
+							const registration = await navigator.serviceWorker.ready;
+							await registration.showNotification('Test Notification', {
+								body: 'If you see this, notifications work!',
+								icon: '/webrtc_v0/favicon.ico',
+								requireInteraction: true
+							});
+							statusDiv.innerHTML = '✅ Test notification sent! Check your notifications.';
+						};
+						</script>
+						
                     </div>
                     
                     <!-- Chat Section -->
