@@ -4,7 +4,7 @@
  * Android: Repeated pushes every 3 seconds to simulate ringing
  */
 
-const { onDocumentCreated } = require('firebase-functions/v2/firestore');
+const { onDocumentCreated, onDocumentUpdated } = require('firebase-functions/v2/firestore');
 const { onRequest } = require('firebase-functions/v2/https');
 const { logger } = require('firebase-functions');
 const admin = require('firebase-admin');
@@ -13,9 +13,9 @@ const webpush = require('web-push');
 admin.initializeApp();
 const db = admin.firestore();
 
-// VAPID Keys (for Web Push)
+// VAPID Keys (for Web Push) - REPLACE WITH YOUR ACTUAL PRIVATE KEY
 const VAPID_PUBLIC_KEY = 'BH33WjtMVo0Y_bml_nke0gtVqahGcPd6m-yjh__LBHp6Ahvfq-vN-m25D2MzMB3e1jbTGwQRGt5ufKEhSyj6Yv0';
-const VAPID_PRIVATE_KEY = 'lULaLKgEB47Ab9p8FDr5_NqbusivicVHnDvkdC6TJYA';
+const VAPID_PRIVATE_KEY = 'lULaLKgEB47Ab9p8FDr5_NqbusivicVHnDvkdC6TJYA';  // ⚠️ REPLACE THIS!
 
 webpush.setVapidDetails(
     'mailto:webrtc@easosunov.com',
