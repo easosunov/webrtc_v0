@@ -200,3 +200,40 @@ exports.healthCheck = onRequest((req, res) => {
         service: 'webrtc-communicator-push'
     });
 });
+
+// Reject call endpoint
+exports.rejectCall = onRequest(async (req, res) => {
+    const callId = req.query.callId;
+    
+    if (!callId) {
+        res.status(400).json({ error: 'Missing callId' });
+        return;
+    }
+    
+    try {
+        const callDoc = await db.collection('calls').doc(callId).get();
+        
+        if (!callDoc.exists) {
+            res.status(404).json({ error: 'Call not found' });
+            return;
+        }
+        
+        const call = callDoc.data();
+        
+        // Only reject if call is still ringing
+        if (call.status === 'ringing') {
+            await db.collection('calls').doc(callId).update({
+                status: 'rejected',
+                endedAt: admin.firestore.FieldValue.serverTimestamp()
+            });
+            console.log(`📞 Call ${callId} rejected via notification dismiss`);
+            res.status(200).json({ success: true, status: 'rejected' });
+        } else {
+            res.status(200).json({ success: true, status: call.status });
+        }
+        
+    } catch (error) {
+        console.error('Reject call error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
