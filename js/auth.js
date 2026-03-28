@@ -155,7 +155,6 @@ async function clearOldIceCandidates() {
         let batch = db.batch();
         let count = 0;
         
-        // Use forEach with a Promise-based approach
         const docs = snapshot.docs;
         for (let i = 0; i < docs.length; i++) {
             batch.delete(docs[i].ref);
@@ -176,6 +175,71 @@ async function clearOldIceCandidates() {
     } catch (error) {
         console.error('❌ ERROR in clearOldIceCandidates:', error);
         console.error('Error details:', error.message);
+    }
+}
+
+// ==================== ANDROID FCM TOKEN SETUP ====================
+async function setupAndroidFCM() {
+    // Only run on Android devices
+    const isAndroid = /Android/i.test(navigator.userAgent);
+    if (!isAndroid) {
+        console.log('📱 Not Android, skipping FCM setup');
+        return;
+    }
+    
+    // Check if FCM is available
+    if (!window.messaging) {
+        console.log('❌ FCM not available on this device');
+        return;
+    }
+    
+    try {
+        // Check if user already has a token
+        const userDoc = await db.collection('users').doc(CONFIG.myUsername).get();
+        if (userDoc.data()?.fcmToken) {
+            console.log('✅ User already has FCM token');
+            return;
+        }
+        
+        console.log('📱 Android: Setting up FCM notifications...');
+        
+        // Register root service worker (for FCM)
+        const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
+            scope: '/'
+        });
+        console.log('✅ FCM service worker registered at:', registration.scope);
+        
+        // Tell FCM to use this service worker
+        if (window.messaging.useServiceWorker) {
+            window.messaging.useServiceWorker(registration);
+        }
+        
+        // Request notification permission
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') {
+            console.log('❌ Notification permission denied');
+            return;
+        }
+        
+        // Get FCM token
+        const token = await window.messaging.getToken({
+            vapidKey: window.VAPID_PUBLIC_KEY
+        });
+        
+        if (token) {
+            // Save to Firestore
+            await db.collection('users').doc(CONFIG.myUsername).update({
+                fcmToken: token,
+                fcmEnabled: true,
+                fcmLastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            console.log('✅ FCM token saved for Android');
+        } else {
+            console.log('❌ No FCM token received');
+        }
+        
+    } catch (error) {
+        console.error('❌ FCM setup error:', error);
     }
 }
 
@@ -273,6 +337,9 @@ async function login() {
         }
         
         console.log('✅ Login complete!');
+        
+        // ===== ANDROID FCM TOKEN SETUP =====
+        await setupAndroidFCM();
         
         // ===== DISPATCH LOGIN COMPLETE EVENT =====
         window.dispatchEvent(new CustomEvent('login-complete', { 
