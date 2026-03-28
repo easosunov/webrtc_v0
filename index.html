@@ -94,35 +94,27 @@
                     <div class="users-panel">
                         <h3>Available Users</h3>
                         <div id="users-container"></div>
-						
-						<!-- DEBUG: Check Android detection -->
-<div id="android-debug" style="background: #333; color: lime; padding: 10px; margin: 10px 0; border-radius: 5px; font-family: monospace; font-size: 12px;">
-    <strong>🔍 DEBUG</strong><br>
-    <span id="debug-info">Loading...</span>
+					<!-- Available Users Panel -->
+<div class="users-panel">
+    <h3>Available Users</h3>
+    <div id="users-container"></div>
+    
+    <!-- ========== ANDROID NOTIFICATION SECTION ========== -->
+    <div id="android-notify-panel" style="display: none; background: #ff9800; padding: 15px; margin: 10px 0; border-radius: 10px;">
+        <div style="font-size: 14px; font-weight: bold; margin-bottom: 8px; color: white;">📱 Enable Notifications</div>
+        <button id="enable-notify-btn" style="background: #4CAF50; color: white; padding: 10px; border: none; border-radius: 5px; width: 100%; font-weight: bold;">
+            🔔 Enable
+        </button>
+        <div id="notify-status" style="margin-top: 8px; color: white; font-size: 11px;">Waiting for login...</div>
+    </div>
+    <!-- ========== END ANDROID NOTIFICATION SECTION ========== -->
 </div>
 
-<script>
-    // Debug info
-    const debugDiv = document.getElementById('debug-info');
-    const isAndroid = /Android/i.test(navigator.userAgent);
-    const hasMessaging = !!window.messaging;
-    const isLoggedIn = !!(window.CONFIG && window.CONFIG.myUsername);
-    
-    debugDiv.innerHTML = `
-        User Agent: ${navigator.userAgent}<br>
-        isAndroid: ${isAndroid}<br>
-        messaging available: ${hasMessaging}<br>
-        Logged in: ${isLoggedIn}<br>
-        CONFIG exists: ${!!window.CONFIG}
-    `;
-    
-    console.log('Debug:', {
-        isAndroid,
-        hasMessaging,
-        isLoggedIn,
-        CONFIG: window.CONFIG
-    });
-</script>
+<!-- Chat Section -->
+<div class="chat-section">
+    ...
+</div>	
+						
 						
 						
                     </div>
