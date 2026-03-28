@@ -203,11 +203,34 @@ async function setupAndroidFCM() {
         
         console.log('📱 Android: Setting up FCM notifications...');
         
-        // Register root service worker (for FCM)
-        const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
-            scope: '/'
-        });
-        console.log('✅ FCM service worker registered at:', registration.scope);
+        // First, check if service worker is already registered
+        let registration = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js');
+        
+        // If not registered, register it now
+        if (!registration) {
+            console.log('Registering FCM service worker...');
+            registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
+                scope: '/'
+            });
+            console.log('✅ Service worker registered');
+        } else {
+            console.log('✅ Service worker already registered');
+        }
+        
+        // Wait for service worker to be active
+        if (!registration.active) {
+            console.log('Waiting for service worker to activate...');
+            await new Promise((resolve) => {
+                if (registration.active) {
+                    resolve();
+                } else {
+                    registration.addEventListener('activate', () => {
+                        console.log('Service worker activated');
+                        resolve();
+                    });
+                }
+            });
+        }
         
         // Tell FCM to use this service worker
         if (window.messaging.useServiceWorker) {
@@ -215,6 +238,7 @@ async function setupAndroidFCM() {
         }
         
         // Request notification permission
+        console.log('Requesting notification permission...');
         const permission = await Notification.requestPermission();
         if (permission !== 'granted') {
             console.log('❌ Notification permission denied');
@@ -222,8 +246,10 @@ async function setupAndroidFCM() {
         }
         
         // Get FCM token
+        console.log('Getting FCM token...');
         const token = await window.messaging.getToken({
-            vapidKey: window.VAPID_PUBLIC_KEY
+            vapidKey: window.VAPID_PUBLIC_KEY,
+            serviceWorkerRegistration: registration
         });
         
         if (token) {
@@ -234,6 +260,7 @@ async function setupAndroidFCM() {
                 fcmLastUpdated: firebase.firestore.FieldValue.serverTimestamp()
             });
             console.log('✅ FCM token saved for Android');
+            console.log('Token:', token.substring(0, 50) + '...');
         } else {
             console.log('❌ No FCM token received');
         }
