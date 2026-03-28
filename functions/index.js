@@ -51,28 +51,32 @@ exports.onCallCreated = onDocumentCreated('calls/{callId}', async (event) => {
         // ========== METHOD 1: FCM (Android) ==========
         if (userData.fcmToken) {
             try {
-// In the FCM section, replace the payload with:
-const fcmPayload = {
-    data: {
-        title: '📞 Incoming Call',
-        body: `Call from ${callerName}`,
-        callId: callId,
-        callerId: call.callerId,
-        callerName: callerName,
-        url: 'https://easosunov.github.io/webrtc_v0/'
-    },
-    token: userData.fcmToken,
-    android: {
-        priority: 'high',
-        notification: {
-            sound: 'default',
-            channelId: 'incoming_calls',
-            priority: 'high',
-            sticky: true
-        }
-    }
-};
-                
+
+				// In the FCM section of your Cloud Function
+				const fcmPayload = {
+					data: {
+						title: '📞 Incoming Call',
+						body: `Call from ${callerName}`,
+						callId: callId,
+						callerId: call.callerId,
+						callerName: callerName,
+						url: 'https://easosunov.github.io/webrtc_v0/'
+					},
+					token: userData.fcmToken,
+					android: {
+						priority: 'high',
+						ttl: 30 * 1000, // 30 seconds
+						notification: {
+							channelId: 'incoming_calls',
+							priority: 'high',
+							defaultSound: true,
+							defaultVibrateTimings: true,
+							sticky: true
+						}
+					}
+				};
+
+               
                 await admin.messaging().send(fcmPayload);
                 logger.log(`✅ FCM push sent to ${call.calleeId}`);
                 pushSent = true;
