@@ -21,12 +21,13 @@ messaging.onBackgroundMessage((payload) => {
     const notificationTitle = payload.notification?.title || '📞 Incoming Call';
     const notificationOptions = {
         body: payload.notification?.body || 'You have an incoming call',
-        icon: payload.notification?.icon || 'https://easosunov.github.io/webrtc_v0/favicon.ico',
+        icon: 'https://easosunov.github.io/webrtc_v0/favicon.ico',
         badge: 'https://easosunov.github.io/webrtc_v0/favicon.ico',
-        vibrate: [200, 100, 200],
-        requireInteraction: true,  // This keeps notification visible
+        vibrate: [200, 100, 200, 500, 200],  // Longer pattern
+        requireInteraction: true,  // Keeps notification until user interacts
         silent: false,
-        priority: 'high',
+        tag: 'incoming-call',
+        renotify: true,
         data: payload.data || {},
         actions: [
             { action: 'answer', title: 'Answer Call' },
@@ -34,8 +35,5 @@ messaging.onBackgroundMessage((payload) => {
         ]
     };
     
-    // Add a small delay to ensure notification stays
-    event.waitUntil(
-        self.registration.showNotification(notificationTitle, notificationOptions)
-    );
+    return self.registration.showNotification(notificationTitle, notificationOptions);
 });
