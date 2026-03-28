@@ -1,77 +1,42 @@
-<!-- SIMPLE FCM TEST -->
-<div id="simple-fcm-test" style="background: #2196F3; padding: 15px; margin: 10px 0; border-radius: 10px;">
-    <button id="fcm-test-button" style="background: white; color: #2196F3; padding: 10px; border: none; border-radius: 5px; width: 100%; font-size: 16px;">
-        🔔 GET FCM TOKEN (TEST)
-    </button>
-    <div id="fcm-test-status" style="margin-top: 8px; color: white; font-size: 12px;"></div>
-</div>
+// firebase-messaging-sw.js (at root)
+importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging-compat.js');
 
-<script>
-// Define the function first
-window.getFCMTokenTest = async function() {
-    const statusDiv = document.getElementById('fcm-test-status');
-    statusDiv.innerHTML = 'Testing...';
-    
-    try {
-        // Step 1: Check CONFIG
-        statusDiv.innerHTML = 'Checking CONFIG...';
-        if (!window.CONFIG || !window.CONFIG.myUsername) {
-            statusDiv.innerHTML = '❌ Please log in first';
-            return;
-        }
-        statusDiv.innerHTML = `✅ Logged in: ${window.CONFIG.myUsername}<br>`;
-        
-        // Step 2: Check Notification permission
-        statusDiv.innerHTML += 'Checking notification permission...<br>';
-        if (Notification.permission !== 'granted') {
-            statusDiv.innerHTML += 'Requesting permission...<br>';
-            const perm = await Notification.requestPermission();
-            if (perm !== 'granted') {
-                statusDiv.innerHTML += '❌ Permission denied';
-                return;
-            }
-        }
-        statusDiv.innerHTML += '✅ Permission granted<br>';
-        
-        // Step 3: Check messaging
-        statusDiv.innerHTML += 'Checking FCM...<br>';
-        if (!window.messaging) {
-            statusDiv.innerHTML += '❌ FCM not available';
-            return;
-        }
-        statusDiv.innerHTML += '✅ FCM available<br>';
-        
-        // Step 4: Get token
-        statusDiv.innerHTML += 'Getting token...<br>';
-        const token = await window.messaging.getToken({
-            vapidKey: window.VAPID_PUBLIC_KEY
-        });
-        
-        if (token) {
-            statusDiv.innerHTML += `✅ TOKEN: ${token.substring(0, 50)}...<br>`;
-            
-            // Step 5: Save to Firestore
-            statusDiv.innerHTML += 'Saving to Firestore...<br>';
-            await window.db.collection('users').doc(window.CONFIG.myUsername).update({
-                fcmToken: token,
-                fcmEnabled: true
-            });
-            statusDiv.innerHTML += '✅ SAVED!';
-            statusDiv.style.color = '#90EE90';
-        } else {
-            statusDiv.innerHTML += '❌ No token returned';
-        }
-    } catch (err) {
-        statusDiv.innerHTML += `❌ Error: ${err.message}`;
-        console.error('FCM Error:', err);
-    }
-};
-
-// Add event listener after the page loads
-document.addEventListener('DOMContentLoaded', function() {
-    const btn = document.getElementById('fcm-test-button');
-    if (btn) {
-        btn.onclick = window.getFCMTokenTest;
-    }
+firebase.initializeApp({
+    apiKey: "AIzaSyChU1sW6u5T0Ho0y0yIPgI1dHFYx-6Q_X8",
+    authDomain: "webrtc-v0.firebaseapp.com",
+    projectId: "webrtc-v0",
+    storageBucket: "webrtc-v0.firebasestorage.app",
+    messagingSenderId: "647705075894",
+    appId: "1:647705075894:web:d23544a3f8e509f69e8617"
 });
-</script>
+
+const messaging = firebase.messaging();
+
+messaging.onBackgroundMessage((payload) => {
+    console.log('🔥 Background message received:', payload);
+    
+    const notificationTitle = payload.notification?.title || '📞 Incoming Call';
+    const notificationOptions = {
+        body: payload.notification?.body || 'You have an incoming call',
+        icon: 'https://easosunov.github.io/webrtc_v0/favicon.ico',
+        badge: 'https://easosunov.github.io/webrtc_v0/favicon.ico',
+        vibrate: [200, 100, 200],
+        requireInteraction: true,
+        silent: false,
+        priority: 'high',
+        sticky: true,
+        tag: 'incoming-call',
+        renotify: true,
+        timestamp: Date.now(),
+        data: payload.data || {},
+        actions: [
+            { action: 'answer', title: 'Answer Call' },
+            { action: 'dismiss', title: 'Dismiss' }
+        ]
+    };
+    
+    event.waitUntil(
+        self.registration.showNotification(notificationTitle, notificationOptions)
+    );
+});
