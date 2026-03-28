@@ -226,13 +226,6 @@ async function setupAndroidFCM() {
     }
     
     try {
-        // Check if user already has a token
-        const userDoc = await db.collection('users').doc(CONFIG.myUsername).get();
-        if (userDoc.data()?.fcmToken) {
-            console.log('✅ User already has FCM token');
-            return;
-        }
-        
         console.log('📱 Android: Setting up FCM notifications...');
         
         // Register root service worker
@@ -258,14 +251,19 @@ async function setupAndroidFCM() {
             window.messaging.useServiceWorker(registration);
         }
         
-        // Request permission
-        const permission = await Notification.requestPermission();
-        if (permission !== 'granted') {
-            console.log('❌ Permission denied');
-            return;
+        // Request permission if not already granted
+        if (Notification.permission !== 'granted') {
+            const permission = await Notification.requestPermission();
+            if (permission !== 'granted') {
+                console.log('❌ Permission denied');
+                return;
+            }
         }
         
-        // Delete any existing token first (important for fresh binding)
+        // ALWAYS get a fresh token - this ensures app appears in notification settings
+        console.log('Getting fresh FCM token...');
+        
+        // Delete any existing token first to force a fresh one
         try {
             const oldToken = await window.messaging.getToken();
             if (oldToken) {
@@ -276,26 +274,23 @@ async function setupAndroidFCM() {
             console.log('No old token to delete');
         }
         
-        // Get NEW token with correct service worker
+        // Get NEW token
         const token = await window.messaging.getToken({
             vapidKey: window.VAPID_PUBLIC_KEY,
             serviceWorkerRegistration: registration
         });
         
         if (token) {
-            // Check if user already has this token in Firestore
-            const userDoc = await db.collection('users').doc(CONFIG.myUsername).get();
-            if (userDoc.data()?.fcmToken === token) {
-                console.log('✅ FCM token already saved');
-                return;
-            }
-            
+            // Save to Firestore (always update)
             await db.collection('users').doc(CONFIG.myUsername).update({
                 fcmToken: token,
                 fcmEnabled: true,
                 fcmLastUpdated: firebase.firestore.FieldValue.serverTimestamp()
             });
-            console.log('✅ NEW FCM token saved:', token.substring(0, 50) + '...');
+            console.log('✅ FCM token saved/updated:', token.substring(0, 50) + '...');
+            
+            // Also store that token was fetched this session
+            sessionStorage.setItem('fcm_token_fetched', 'true');
         } else {
             console.log('❌ No token received');
         }
@@ -304,6 +299,7 @@ async function setupAndroidFCM() {
         console.error('❌ FCM setup error:', error);
     }
 }
+
 
 // ==================== AUTHENTICATION ====================
 async function login() {
