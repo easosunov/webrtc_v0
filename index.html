@@ -368,5 +368,96 @@
         });
     }
     </script>
+
+<!-- Android Notification Script -->
+<script>
+// Only show and run on Android devices
+const isAndroid = /Android/i.test(navigator.userAgent);
+
+if (isAndroid) {
+    // Show the Android panel
+    const panel = document.getElementById('android-notification-panel');
+    if (panel) panel.style.display = 'block';
+    
+    // Add button handlers
+    document.addEventListener('DOMContentLoaded', function() {
+        const enableBtn = document.getElementById('androidEnableBtn');
+        const testBtn = document.getElementById('androidTestBtn');
+        const statusDiv = document.getElementById('androidStatus');
+        
+        if (enableBtn) {
+            enableBtn.onclick = async function() {
+                if (statusDiv) statusDiv.innerHTML = 'Requesting permission...';
+                
+                try {
+                    if (!CONFIG || !CONFIG.myUsername) {
+                        if (statusDiv) statusDiv.innerHTML = '❌ Please log in first';
+                        return;
+                    }
+                    
+                    const permission = await Notification.requestPermission();
+                    if (permission !== 'granted') {
+                        if (statusDiv) statusDiv.innerHTML = '❌ Permission denied';
+                        return;
+                    }
+                    if (statusDiv) statusDiv.innerHTML = '✅ Permission granted. Registering root service worker...';
+                    
+                    // Register root service worker (for FCM on Android)
+                    const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
+                        scope: '/'
+                    });
+                    console.log('✅ Root service worker registered at:', registration.scope);
+                    if (statusDiv) statusDiv.innerHTML = '✅ Root service worker registered. Getting token...';
+                    
+                    if (!window.messaging) {
+                        if (statusDiv) statusDiv.innerHTML = '❌ FCM not available';
+                        return;
+                    }
+                    
+                    const token = await window.messaging.getToken({
+                        vapidKey: window.VAPID_PUBLIC_KEY,
+                        serviceWorkerRegistration: registration
+                    });
+                    
+                    if (token) {
+                        if (statusDiv) statusDiv.innerHTML = `✅ Token obtained! Saving...`;
+                        await db.collection('users').doc(CONFIG.myUsername).update({
+                            fcmToken: token,
+                            fcmEnabled: true,
+                            fcmLastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                        if (statusDiv) statusDiv.innerHTML = '✅ NOTIFICATIONS ENABLED! Close app and make a test call.';
+                        if (statusDiv) statusDiv.style.color = '#90EE90';
+                    } else {
+                        if (statusDiv) statusDiv.innerHTML = '❌ No token received. Make sure app is installed to home screen.';
+                    }
+                } catch (err) {
+                    if (statusDiv) statusDiv.innerHTML = '❌ Error: ' + err.message;
+                    console.error(err);
+                }
+            };
+        }
+        
+        if (testBtn) {
+            testBtn.onclick = async function() {
+                if (statusDiv) statusDiv.innerHTML = 'Sending test notification...';
+                try {
+                    const registration = await navigator.serviceWorker.ready;
+                    await registration.showNotification('Test Notification', {
+                        body: 'If you see this, notifications work!',
+                        icon: '/webrtc_v0/favicon.ico',
+                        requireInteraction: true,
+                        vibrate: [200, 100, 200]
+                    });
+                    if (statusDiv) statusDiv.innerHTML = '✅ Test notification sent!';
+                } catch (err) {
+                    if (statusDiv) statusDiv.innerHTML = '❌ Error: ' + err.message;
+                }
+            };
+        }
+    });
+}
+</script>
+
 </body>
 </html>
