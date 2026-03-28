@@ -288,8 +288,9 @@
         if (!isStandalone) {
             if (installSection) installSection.style.display = 'block';
         } else {
-            // App is installed, show notification guide if needed
+            // App is already installed, show notification guide if needed
             if (Notification.permission !== 'granted' && !guideDismissed) {
+                console.log('App installed, notifications not granted - showing guide');
                 setTimeout(() => {
                     if (notificationGuide) notificationGuide.style.display = 'block';
                 }, 2000);
@@ -308,12 +309,11 @@
                     statusDiv.style.color = '#90EE90';
                     if (installSection) installSection.style.display = 'none';
                     
-                    // Show notification guide after installation
-                    setTimeout(() => {
-                        if (notificationGuide && Notification.permission !== 'granted') {
-                            notificationGuide.style.display = 'block';
-                        }
-                    }, 1000);
+                    // SHOW NOTIFICATION GUIDE IMMEDIATELY AFTER INSTALLATION
+                    console.log('Installation complete - showing notification guide');
+                    if (notificationGuide) {
+                        notificationGuide.style.display = 'block';
+                    }
                 } else {
                     statusDiv.innerHTML = '❌ Installation cancelled';
                 }
