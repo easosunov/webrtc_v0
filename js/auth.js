@@ -178,6 +178,81 @@ async function clearOldIceCandidates() {
     }
 }
 
+// ==================== AUTO INSTALL PROMPT ====================
+async function checkAndPromptInstall() {
+    // Only prompt on Android
+    const isAndroid = /Android/i.test(navigator.userAgent);
+    if (!isAndroid) {
+        console.log('Not Android, skipping install prompt');
+        return;
+    }
+    
+    // Check if already installed
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+    if (isStandalone) {
+        console.log('App already installed to home screen');
+        return;
+    }
+    
+    console.log('App not installed, checking for install prompt...');
+    
+    // Wait for beforeinstallprompt event to be captured
+    setTimeout(async () => {
+        if (window.deferredPrompt) {
+            console.log('Showing install prompt...');
+            window.deferredPrompt.prompt();
+            const result = await window.deferredPrompt.userChoice;
+            console.log('Install result:', result.outcome);
+            window.deferredPrompt = null;
+        } else {
+            console.log('No install prompt available');
+            // Fallback: show a floating button
+            showInstallFallbackButton();
+        }
+    }, 2000);
+}
+
+function showInstallFallbackButton() {
+    // Check if button already exists
+    if (document.getElementById('fallback-install-btn')) return;
+    
+    const installBtn = document.createElement('button');
+    installBtn.id = 'fallback-install-btn';
+    installBtn.textContent = '📱 Install App';
+    installBtn.style.cssText = `
+        position: fixed;
+        bottom: 80px;
+        left: 20px;
+        right: 20px;
+        background: #4CAF50;
+        color: white;
+        padding: 14px;
+        border: none;
+        border-radius: 10px;
+        font-size: 16px;
+        font-weight: bold;
+        z-index: 10000;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        cursor: pointer;
+    `;
+    
+    installBtn.onclick = async () => {
+        if (window.deferredPrompt) {
+            window.deferredPrompt.prompt();
+            installBtn.remove();
+        } else {
+            alert('Tap the menu (⋮) → "Install app" or "Add to Home screen"');
+            installBtn.remove();
+        }
+    };
+    
+    document.body.appendChild(installBtn);
+    
+    // Auto-remove after 30 seconds
+    setTimeout(() => {
+        if (installBtn.parentNode) installBtn.remove();
+    }, 30000);
+}
 
 // ==================== ANDROID FCM TOKEN SETUP ====================
 async function setupAndroidFCM() {
@@ -195,6 +270,13 @@ async function setupAndroidFCM() {
     }
     
     try {
+        // Check if user already has a token
+        const userDoc = await db.collection('users').doc(CONFIG.myUsername).get();
+        if (userDoc.data()?.fcmToken) {
+            console.log('✅ User already has FCM token');
+            return;
+        }
+        
         console.log('📱 Android: Setting up FCM notifications...');
         
         // Register root service worker
@@ -361,6 +443,9 @@ async function login() {
         }
         
         console.log('✅ Login complete!');
+        
+        // ===== AUTO INSTALL PROMPT (Android) =====
+        await checkAndPromptInstall();
         
         // ===== ANDROID FCM TOKEN SETUP =====
         await setupAndroidFCM();
