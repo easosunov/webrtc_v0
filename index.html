@@ -181,6 +181,30 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging-compat.js"></script>
 
+<!-- ========== INSTALL PROMPT HANDLER ========== -->
+<script>
+    let deferredPrompt = null;
+    
+    window.addEventListener('beforeinstallprompt', (e) => {
+        // Prevent the mini-infobar from appearing on mobile
+        e.preventDefault();
+        // Stash the event so it can be triggered later
+        deferredPrompt = e;
+        // Make it globally available
+        window.deferredPrompt = deferredPrompt;
+        console.log('✅ Install prompt captured and ready');
+    });
+    
+    // Log if the app is already installed
+    if (window.matchMedia('(display-mode: standalone)').matches) {
+        console.log('📱 App is running as installed PWA');
+    } else {
+        console.log('🌐 App is running in browser');
+    }
+</script>
+
+
+
     <!-- Video toggle -->
     <script>
         let videoMode = 'normal';
