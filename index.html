@@ -145,31 +145,17 @@
                         </div>
                     </div>
                     
-                    <!-- Add to Home Screen Panel -->
-                    <div class="install-panel" id="install-panel">
-                        <div class="install-header">
-                            <span>📱</span>
-                            <h4>Add to Home Screen</h4>
-                        </div>
-                        <div class="install-description">
-                            Install this app on your home screen for easy access.
-                        </div>
-                        <button id="install-btn" class="install-btn">
-                            ➕ How to Install
+                    <!-- FCM Test Button - Bottom of Right Panel -->
+                    <div id="fcm-test-section" style="background: #2196F3; padding: 15px; margin: 10px 0; border-radius: 10px; text-align: center;">
+                        <div style="font-size: 14px; font-weight: bold; margin-bottom: 8px; color: white;">📱 Android FCM Test</div>
+                        <button id="fcm-test-btn" style="background: white; color: #2196F3; padding: 12px; border: none; border-radius: 8px; width: 100%; font-size: 14px; font-weight: bold;">
+                            🔔 Get FCM Token & Test
                         </button>
-                        <div id="install-status" class="install-status"></div>
+                        <div id="fcm-test-status" style="margin-top: 8px; color: white; font-size: 11px;"></div>
                     </div>
                 </div>
             </div>
         </div>
-    </div>
-
-    <!-- FCM TEST BUTTON - BOTTOM OF SCREEN (outside main containers) -->
-    <div id="fcm-test-section" style="background: #2196F3; padding: 15px; margin: 20px; border-radius: 10px; text-align: center;">
-        <button id="fcm-test-btn" style="background: white; color: #2196F3; padding: 12px 20px; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; width: 100%;">
-            🔔 Test FCM Notifications
-        </button>
-        <div id="fcm-test-status" style="margin-top: 8px; color: white; font-size: 12px;"></div>
     </div>
 
     <!-- Modals -->
@@ -249,23 +235,6 @@
         }
     </script>
     
-    <!-- Install Panel Script -->
-    <script>
-        const installBtn = document.getElementById('install-btn');
-        const installPanel = document.getElementById('install-panel');
-        const installStatus = document.getElementById('install-status');
-        const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
-        if (isStandalone && installPanel) installPanel.style.display = 'none';
-        if (installBtn) {
-            installBtn.addEventListener('click', () => {
-                if (installStatus) {
-                    installStatus.innerHTML = '📱 Tap menu (⋮) → "Install app" or "Add to Home screen"';
-                    setTimeout(() => installStatus.innerHTML = '', 5000);
-                }
-            });
-        }
-    </script>
-    
     <!-- FCM Test Button Script -->
     <script>
         const fcmTestBtn = document.getElementById('fcm-test-btn');
@@ -274,6 +243,7 @@
         if (fcmTestBtn) {
             fcmTestBtn.addEventListener('click', async () => {
                 fcmTestStatus.innerHTML = 'Testing...';
+                fcmTestStatus.style.color = 'white';
                 
                 try {
                     // Check if logged in
@@ -282,19 +252,33 @@
                         return;
                     }
                     
+                    fcmTestStatus.innerHTML = `✅ Logged in as ${CONFIG.myUsername}<br>`;
+                    
                     // Check messaging
                     if (!window.messaging) {
                         fcmTestStatus.innerHTML = '❌ FCM not available';
                         return;
                     }
+                    fcmTestStatus.innerHTML += '✅ FCM available<br>';
+                    
+                    // Check permission
+                    if (Notification.permission !== 'granted') {
+                        const perm = await Notification.requestPermission();
+                        if (perm !== 'granted') {
+                            fcmTestStatus.innerHTML = '❌ Notification permission denied';
+                            return;
+                        }
+                    }
+                    fcmTestStatus.innerHTML += '✅ Permission granted<br>';
                     
                     // Get token
+                    fcmTestStatus.innerHTML += 'Getting token...<br>';
                     const token = await window.messaging.getToken({
                         vapidKey: window.VAPID_PUBLIC_KEY
                     });
                     
                     if (token) {
-                        fcmTestStatus.innerHTML = `✅ Token: ${token.substring(0, 40)}...<br>Saving to Firestore...`;
+                        fcmTestStatus.innerHTML += `✅ Token: ${token.substring(0, 40)}...<br>Saving...`;
                         
                         // Save to Firestore
                         await db.collection('users').doc(CONFIG.myUsername).update({
@@ -302,7 +286,7 @@
                             fcmEnabled: true,
                             fcmLastUpdated: firebase.firestore.FieldValue.serverTimestamp()
                         });
-                        fcmTestStatus.innerHTML = '✅ FCM token saved! Test call to receive notification.';
+                        fcmTestStatus.innerHTML = '✅ FCM token saved! Close app and make a test call.';
                         fcmTestStatus.style.color = '#90EE90';
                     } else {
                         fcmTestStatus.innerHTML = '❌ No token received';
