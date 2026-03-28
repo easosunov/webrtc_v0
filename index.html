@@ -1,324 +1,77 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebRTC Communicator</title>
-    
-    <!-- PWA Manifest -->
-    <link rel="manifest" href="/webrtc_v0/manifest.json">
-    <meta name="theme-color" content="#667eea">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="WebRTC Chat">
-    <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23667eea'/%3E%3Ctext x='50' y='70' font-size='50' text-anchor='middle' fill='white'%3E📞%3C/text%3E%3C/svg%3E">
-    
-    <!-- Main Styles -->
-    <link rel="stylesheet" href="/webrtc_v0/css/styles.css">
-</head>
-<body>
-    <div class="container">
-        <!-- Login Screen -->
-        <div id="login-screen">
-            <div class="login-header">
-                <h1>📞 WebRTC Communicator</h1>
-                <p>Enter your access code to start</p>
-            </div>
-            
-            <div class="keypad">
-                <div class="display" id="code-display"></div>
-                
-                <div class="keypad-grid">
-                    <button class="keypad-btn" data-digit="1" data-key="1">1</button>
-                    <button class="keypad-btn" data-digit="2" data-key="2">2</button>
-                    <button class="keypad-btn" data-digit="3" data-key="3">3</button>
-                    <button class="keypad-btn" data-digit="4" data-key="4">4</button>
-                    <button class="keypad-btn" data-digit="5" data-key="5">5</button>
-                    <button class="keypad-btn" data-digit="6" data-key="6">6</button>
-                    <button class="keypad-btn" data-digit="7" data-key="7">7</button>
-                    <button class="keypad-btn" data-digit="8" data-key="8">8</button>
-                    <button class="keypad-btn" data-digit="9" data-key="9">9</button>
-                    <button class="keypad-btn special" data-digit="clear" data-key="C">C</button>
-                    <button class="keypad-btn" data-digit="0" data-key="0">0</button>
-                    <button class="keypad-btn special" data-digit="back" data-key="⌫">⌫</button>
-                </div>
-                
-                <button class="enter-btn" id="login-btn" disabled>Enter</button>
-                
-                <div class="key-hint">
-                    <span>⌫</span> Backspace • <span>C</span> Clear • <span>Enter</span> Login
-                </div>
-                
-                <div id="login-status" class="status-message"></div>
-            </div>
-        </div>
-        
-        <!-- Call Screen -->
-        <div id="call-screen">
-            <div class="call-header">
-                <div class="user-info">
-                    Logged in as: <span id="current-user"></span>
-                </div>
-                <button class="logout-btn" id="logout-btn">Logout</button>
-            </div>
-            
-            <div class="main-content">
-                <!-- Left side: Video section -->
-                <div class="video-section">
-                    <div class="video-container" id="video-container">
-                        <div class="video-box">
-                            <video id="local-video" autoplay playsinline muted></video>
-                        </div>
-                        <div class="video-box">
-                            <video id="remote-video" autoplay playsinline></video>
-                        </div>
-                    </div>
-                    
-                    <div class="call-controls">
-                        <button class="call-btn hangup" id="hangup-btn" disabled>Hang Up</button>
-                        <button id="switch-camera-btn" class="camera-switch-btn" onclick="switchCamera()" style="display: none;">
-                            🔄 Switch Camera
-                        </button>
-                    </div>
-                </div>
-                
-                <!-- Right side: All panels stacked vertically -->
-                <div class="right-panels">
-                    <!-- Connection Status Area -->
-                    <div id="call-status-area">
-                        <span id="call-status-text"></span>
-                    </div>
-                    
-                    <!-- Available Users Panel -->
-                    <div class="users-panel">
-                        <h3>Available Users</h3>
-                        <div id="users-container"></div>
-                    </div>
-                    
-					
-					<div id="simple-fcm-test" style="background: #2196F3; padding: 15px; margin: 10px 0; border-radius: 10px;">
-    <button onclick="getFCMTokenTest()" style="background: white; color: #2196F3; padding: 10px; border: none; border-radius: 5px; width: 100%; font-size: 16px;">
+<!-- SIMPLE FCM TEST -->
+<div id="simple-fcm-test" style="background: #2196F3; padding: 15px; margin: 10px 0; border-radius: 10px;">
+    <button id="fcm-test-button" style="background: white; color: #2196F3; padding: 10px; border: none; border-radius: 5px; width: 100%; font-size: 16px;">
         🔔 GET FCM TOKEN (TEST)
     </button>
     <div id="fcm-test-status" style="margin-top: 8px; color: white; font-size: 12px;"></div>
 </div>
-					
-					
-					
-                    <!-- Chat Section -->
-                    <div class="chat-section">
-                        <div class="chat-layout">
-                            <div class="chats-sidebar" id="chats-view">
-                                <div class="chats-header">
-                                    <h3>Chats</h3>
-                                    <button class="new-chat-btn" onclick="showUsersForChat()">➕ New Chat</button>
-                                </div>
-                                <div id="chats-container"></div>
-                            </div>
-                            
-                            <div class="chat-view" id="chat-view" style="display: none;">
-                                <div class="chat-view-header">
-                                    <button class="back-btn" onclick="closeChat()">←</button>
-                                    <h3 id="current-chat-name">Select a chat</h3>
-                                    <button class="delete-chat-header-btn" onclick="deleteCurrentChat()" title="Delete this chat">🗑️</button>
-                                </div>
-                                <div class="chat-messages-container" id="chat-messages"></div>
-                                <div class="chat-input-area">
-                                    <input type="text" id="message-input" placeholder="Type a message...">
-                                    <button onclick="sendMessage()">Send</button>
-                                </div>
-                                <input type="hidden" id="current-chat-id">
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Android Background Listener Panel -->
-                    <div class="apk-panel">
-                        <div class="apk-header">
-                            <span>📱</span>
-                            <h4>Android Background Listener</h4>
-                        </div>
-                        <div class="apk-description">
-                            Start the background service to receive notifications when browser is closed.
-                        </div>
-                        <div class="apk-buttons">
-                            <button id="startApkBtn" onclick="startApkListener()" class="apk-start-btn">
-                                ▶️ Start Listener
-                            </button>
-                            <button onclick="stopApkListener()" class="apk-stop-btn">
-                                ⏹️ Stop
-                            </button>
-                        </div>
-                        <div id="apkStatus" class="apk-status">
-                            ℹ️ Not running
-                        </div>
-                    </div>
-                    
-                    <!-- Add to Home Screen Panel -->
-                    <div class="install-panel" id="install-panel">
-                        <div class="install-header">
-                            <span>📱</span>
-                            <h4>Add to Home Screen</h4>
-                        </div>
-                        <div class="install-description">
-                            Install this app on your home screen for easy access.
-                        </div>
-                        <button id="install-btn" class="install-btn">
-                            ➕ How to Install
-                        </button>
-                        <div id="install-status" class="install-status"></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
 
-    <!-- Modals -->
-    <div id="modal-overlay"></div>
-    <div id="incoming-call-modal">
-        <h3>📞 Incoming Call</h3>
-        <p id="caller-name">Loading...</p>
-        <div class="modal-buttons">
-            <button class="modal-btn accept" id="accept-call">Accept</button>
-            <button class="modal-btn reject" id="reject-call">Reject</button>
-        </div>
-    </div>
-
-    <div id="status-modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 3000;"></div>
-    <div id="status-modal" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 20px; border-radius: 10px; z-index: 3001; min-width: 250px; text-align: center;">
-        <h3 id="status-modal-title" style="margin-bottom: 10px;">Status</h3>
-        <p id="status-modal-message" style="margin-bottom: 15px;"></p>
-        <button id="status-modal-ok" style="padding: 8px 20px; background: #667eea; color: white; border: none; border-radius: 5px; cursor: pointer;">OK</button>
-    </div>
-
-    <!-- Firebase SDKs -->
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging-compat.js"></script>
-
-    <!-- Video toggle -->
-    <script>
-        let videoMode = 'normal';
-        document.addEventListener('DOMContentLoaded', function() {
-            const remoteVideo = document.getElementById('remote-video');
-            if (remoteVideo) remoteVideo.addEventListener('click', toggleVideoMode);
-        });
-        function toggleVideoMode() {
-            const container = document.getElementById('video-container');
-            const remote = document.getElementById('remote-video');
-            if (!container || !remote) return;
-            if (videoMode === 'normal') {
-                container.classList.add('fullscreen-mode');
-                videoMode = 'fullscreen';
-            } else {
-                container.classList.remove('fullscreen-mode');
-                videoMode = 'normal';
-            }
-        }
-    </script>
-
-    <!-- JavaScript Modules -->
-    <script src="/webrtc_v0/js/config.js"></script>
-    <script src="/webrtc_v0/js/ui.js"></script>
-    <script src="/webrtc_v0/js/init.js"></script>
-    <script src="/webrtc_v0/js/auth.js"></script>
-    <script src="/webrtc_v0/js/users.js"></script>
-    <script src="/webrtc_v0/js/webrtc.js"></script>
-    <script src="/webrtc_v0/js/calls.js"></script>
-    <script src="/webrtc_v0/js/apk.js"></script>
-    <script src="/webrtc_v0/js/chat.js"></script>
+<script>
+// Define the function first
+window.getFCMTokenTest = async function() {
+    const statusDiv = document.getElementById('fcm-test-status');
+    statusDiv.innerHTML = 'Testing...';
     
-    <!-- Service Workers -->
-    <script>
-        // Web Push Service Worker (for Windows/iOS)
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/webrtc_v0/sw.js')
-                .then(reg => console.log('✅ Web Push Service Worker registered'))
-                .catch(err => console.log('❌ Web Push SW failed:', err));
+    try {
+        // Step 1: Check CONFIG
+        statusDiv.innerHTML = 'Checking CONFIG...';
+        if (!window.CONFIG || !window.CONFIG.myUsername) {
+            statusDiv.innerHTML = '❌ Please log in first';
+            return;
         }
+        statusDiv.innerHTML = `✅ Logged in: ${window.CONFIG.myUsername}<br>`;
         
-        // FCM Service Worker (for Android) - only register if FCM is available
-        if ('serviceWorker' in navigator && window.messaging) {
-            navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/' })
-                .then(reg => console.log('✅ FCM Service Worker registered at root'))
-                .catch(err => console.log('❌ FCM SW failed:', err));
-        }
-    </script>
-    
-    <!-- Install Panel -->
-    <script>
-        const installBtn = document.getElementById('install-btn');
-        const installPanel = document.getElementById('install-panel');
-        const installStatus = document.getElementById('install-status');
-        const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
-        if (isStandalone && installPanel) installPanel.style.display = 'none';
-        if (installBtn) {
-            installBtn.addEventListener('click', () => {
-                if (installStatus) {
-                    installStatus.innerHTML = '📱 Tap menu (⋮) → "Install app" or "Add to Home screen"';
-                    setTimeout(() => installStatus.innerHTML = '', 5000);
-                }
-            });
-        }
-    </script>
-    
-    <!-- Android Notification Script (only runs on Android) -->
-    <script>
-    // Check if this is Android
-    const isAndroid = /Android/i.test(navigator.userAgent);
-    
-    if (isAndroid && window.messaging) {
-        // Add Android button after users panel
-        setTimeout(() => {
-            const usersPanel = document.querySelector('.users-panel');
-            if (usersPanel && !document.getElementById('android-panel')) {
-                const panel = document.createElement('div');
-                panel.id = 'android-panel';
-                panel.style.cssText = 'background: #ff9800; padding: 15px; margin: 10px 0; border-radius: 10px; border: 3px solid #f44336;';
-                panel.innerHTML = `
-                    <div style="font-size: 16px; font-weight: bold; margin-bottom: 10px; color: white;">📱 ANDROID NOTIFICATIONS</div>
-                    <button id="androidEnableBtn" style="background: #4CAF50; color: white; padding: 12px; font-size: 16px; border: none; border-radius: 8px; width: 100%;">
-                        🔔 ENABLE NOTIFICATIONS
-                    </button>
-                    <div id="androidStatus" style="margin-top: 10px; color: white; font-size: 12px; background: rgba(0,0,0,0.5); padding: 8px; border-radius: 5px;"></div>
-                `;
-                usersPanel.appendChild(panel);
-                
-                // Add button handler
-                document.getElementById('androidEnableBtn').onclick = async () => {
-                    const statusDiv = document.getElementById('androidStatus');
-                    statusDiv.innerHTML = 'Requesting permission...';
-                    
-                    try {
-                        const permission = await Notification.requestPermission();
-                        if (permission !== 'granted') {
-                            statusDiv.innerHTML = '❌ Permission denied';
-                            return;
-                        }
-                        statusDiv.innerHTML = '✅ Permission granted. Getting token...';
-                        
-                        const token = await window.messaging.getToken({
-                            vapidKey: window.VAPID_PUBLIC_KEY
-                        });
-                        
-                        if (token) {
-                            await db.collection('users').doc(CONFIG.myUsername).update({
-                                fcmToken: token,
-                                fcmEnabled: true
-                            });
-                            statusDiv.innerHTML = '✅ NOTIFICATIONS ENABLED! Close app and make a test call.';
-                            statusDiv.style.color = '#90EE90';
-                        } else {
-                            statusDiv.innerHTML = '❌ No token. Make sure app is installed to home screen.';
-                        }
-                    } catch (err) {
-                        statusDiv.innerHTML = '❌ Error: ' + err.message;
-                    }
-                };
+        // Step 2: Check Notification permission
+        statusDiv.innerHTML += 'Checking notification permission...<br>';
+        if (Notification.permission !== 'granted') {
+            statusDiv.innerHTML += 'Requesting permission...<br>';
+            const perm = await Notification.requestPermission();
+            if (perm !== 'granted') {
+                statusDiv.innerHTML += '❌ Permission denied';
+                return;
             }
-        }, 2000);
+        }
+        statusDiv.innerHTML += '✅ Permission granted<br>';
+        
+        // Step 3: Check messaging
+        statusDiv.innerHTML += 'Checking FCM...<br>';
+        if (!window.messaging) {
+            statusDiv.innerHTML += '❌ FCM not available';
+            return;
+        }
+        statusDiv.innerHTML += '✅ FCM available<br>';
+        
+        // Step 4: Get token
+        statusDiv.innerHTML += 'Getting token...<br>';
+        const token = await window.messaging.getToken({
+            vapidKey: window.VAPID_PUBLIC_KEY
+        });
+        
+        if (token) {
+            statusDiv.innerHTML += `✅ TOKEN: ${token.substring(0, 50)}...<br>`;
+            
+            // Step 5: Save to Firestore
+            statusDiv.innerHTML += 'Saving to Firestore...<br>';
+            await window.db.collection('users').doc(window.CONFIG.myUsername).update({
+                fcmToken: token,
+                fcmEnabled: true
+            });
+            statusDiv.innerHTML += '✅ SAVED!';
+            statusDiv.style.color = '#90EE90';
+        } else {
+            statusDiv.innerHTML += '❌ No token returned';
+        }
+    } catch (err) {
+        statusDiv.innerHTML += `❌ Error: ${err.message}`;
+        console.error('FCM Error:', err);
     }
-    </script>
-</body>
-</html>
+};
+
+// Add event listener after the page loads
+document.addEventListener('DOMContentLoaded', function() {
+    const btn = document.getElementById('fcm-test-button');
+    if (btn) {
+        btn.onclick = window.getFCMTokenTest;
+    }
+});
+</script>
