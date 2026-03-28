@@ -318,19 +318,20 @@
     <script src="/webrtc_v0/js/chat.js"></script>
     
     <!-- FCM Service Worker Registration -->
-    <script>
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/webrtc_v0/firebase-messaging-sw.js')
-                .then(registration => {
-                    console.log('✅ FCM Service Worker registered');
-                    if (window.messaging) {
-                        window.messaging.useServiceWorker(registration);
-                    }
-                })
-                .catch(err => console.log('❌ FCM SW failed:', err));
-        }
-    </script>
-    
+	<script>
+		if ('serviceWorker' in navigator) {
+			// Use absolute path with full URL to ensure correct scope
+			const swUrl = 'https://easosunov.github.io/webrtc_v0/firebase-messaging-sw.js';
+			navigator.serviceWorker.register(swUrl, { scope: '/webrtc_v0/' })
+				.then(registration => {
+					console.log('✅ FCM Service Worker registered at:', registration.scope);
+					if (window.messaging) {
+						window.messaging.useServiceWorker(registration);
+					}
+				})
+				.catch(err => console.log('❌ FCM SW failed:', err));
+		}
+	</script>    
     <!-- Standard Service Worker (for Web Push) -->
     <script>
         if ('serviceWorker' in navigator) {
