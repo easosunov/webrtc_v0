@@ -154,6 +154,21 @@
                         <div id="install-status" style="margin-top: 8px; color: white; font-size: 11px;"></div>
                     </div>
                     
+                    <!-- Notification Settings Guide -->
+                    <div id="notification-guide" style="display: none; background: #ff9800; padding: 15px; margin: 10px 0; border-radius: 10px; text-align: left;">
+                        <div style="font-size: 14px; font-weight: bold; margin-bottom: 10px; color: white;">🔔 Enable Notifications</div>
+                        <div style="font-size: 12px; color: white; margin-bottom: 8px;">Follow these steps:</div>
+                        <ol style="color: white; margin-left: 20px; font-size: 12px; line-height: 1.6;">
+                            <li>Settings → Apps → Chrome → Notifications</li>
+                            <li>Tap <strong>Show unused categories</strong></li>
+                            <li>Tap <strong>easosunov.github.io</strong></li>
+                            <li>Turn <strong>ON</strong> all switches</li>
+                        </ol>
+                        <button id="close-notification-guide" style="background: white; color: #ff9800; padding: 8px; border: none; border-radius: 5px; width: 100%; margin-top: 10px; font-size: 12px;">
+                            I've done this
+                        </button>
+                    </div>
+                    
                     <!-- FCM Test Button -->
                     <div id="fcm-test-section" style="background: #2196F3; padding: 15px; margin: 10px 0; border-radius: 10px; text-align: center;">
                         <div style="font-size: 14px; font-weight: bold; margin-bottom: 8px; color: white;">📱 Android FCM Test</div>
@@ -262,15 +277,26 @@
         }
     </script>
     
-    <!-- Install Button Script -->
+    <!-- Install Button and Notification Guide Script -->
     <script>
         const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+        const installSection = document.getElementById('install-app-section');
+        const notificationGuide = document.getElementById('notification-guide');
+        const guideDismissed = localStorage.getItem('notification_guide_dismissed');
         
+        // Show install button if not installed
         if (!isStandalone) {
-            const installSection = document.getElementById('install-app-section');
             if (installSection) installSection.style.display = 'block';
+        } else {
+            // App is installed, show notification guide if needed
+            if (Notification.permission !== 'granted' && !guideDismissed) {
+                setTimeout(() => {
+                    if (notificationGuide) notificationGuide.style.display = 'block';
+                }, 2000);
+            }
         }
         
+        // Handle install button click
         document.getElementById('manual-install-btn')?.addEventListener('click', async () => {
             const statusDiv = document.getElementById('install-status');
             
@@ -280,10 +306,14 @@
                 if (result.outcome === 'accepted') {
                     statusDiv.innerHTML = '✅ App installed!';
                     statusDiv.style.color = '#90EE90';
+                    if (installSection) installSection.style.display = 'none';
+                    
+                    // Show notification guide after installation
                     setTimeout(() => {
-                        const section = document.getElementById('install-app-section');
-                        if (section) section.style.display = 'none';
-                    }, 2000);
+                        if (notificationGuide && Notification.permission !== 'granted') {
+                            notificationGuide.style.display = 'block';
+                        }
+                    }, 1000);
                 } else {
                     statusDiv.innerHTML = '❌ Installation cancelled';
                 }
@@ -292,6 +322,12 @@
                 statusDiv.innerHTML = '📱 Tap the menu (⋮) → "Install app" or "Add to Home screen"';
                 statusDiv.style.color = '#ffd966';
             }
+        });
+        
+        // Handle close notification guide button
+        document.getElementById('close-notification-guide')?.addEventListener('click', () => {
+            localStorage.setItem('notification_guide_dismissed', 'true');
+            if (notificationGuide) notificationGuide.style.display = 'none';
         });
     </script>
     
