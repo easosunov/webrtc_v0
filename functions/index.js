@@ -51,51 +51,27 @@ exports.onCallCreated = onDocumentCreated('calls/{callId}', async (event) => {
         // ========== METHOD 1: FCM (Android) ==========
         if (userData.fcmToken) {
             try {
-                const fcmPayload = {
-                    notification: {
-                        title: '📞 Incoming Call',
-                        body: `Call from ${callerName}`,
-                        icon: 'https://easosunov.github.io/webrtc_v0/favicon.ico'
-                    },
-                    data: {
-                        callId: callId,
-                        callerId: call.callerId,
-                        callerName: callerName,
-                        url: 'https://easosunov.github.io/webrtc_v0/'
-                    },
-                    token: userData.fcmToken,
-                    android: {
-                        priority: 'high',
-                        notification: {
-                            sound: 'default',
-                            channelId: 'incoming_calls',
-                            priority: 'high',
-                            defaultSound: true,
-                            defaultVibrateTimings: true,
-                            sticky: true,
-                            clickAction: 'OPEN_ACTIVITY',
-                            color: '#667eea'
-                        }
-                    },
-                    apns: {
-                        payload: {
-                            aps: {
-                                sound: 'default',
-                                contentAvailable: true,
-                                category: 'INCOMING_CALL'
-                            }
-                        }
-                    },
-                    webpush: {
-                        notification: {
-                            requireInteraction: true,
-                            actions: [
-                                { action: 'answer', title: 'Answer Call' },
-                                { action: 'dismiss', title: 'Dismiss' }
-                            ]
-                        }
-                    }
-                };
+// In the FCM section, replace the payload with:
+const fcmPayload = {
+    data: {
+        title: '📞 Incoming Call',
+        body: `Call from ${callerName}`,
+        callId: callId,
+        callerId: call.callerId,
+        callerName: callerName,
+        url: 'https://easosunov.github.io/webrtc_v0/'
+    },
+    token: userData.fcmToken,
+    android: {
+        priority: 'high',
+        notification: {
+            sound: 'default',
+            channelId: 'incoming_calls',
+            priority: 'high',
+            sticky: true
+        }
+    }
+};
                 
                 await admin.messaging().send(fcmPayload);
                 logger.log(`✅ FCM push sent to ${call.calleeId}`);
