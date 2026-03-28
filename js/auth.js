@@ -2,6 +2,7 @@ console.log('✅ auth.js loaded');
 
 // Flag to ensure we only initialize once
 let authInitialized = false;
+let installPromptShown = false;
 
 // Wait for UI to be ready - use the dom object from ui.js
 window.addEventListener('ui-ready', function() {
@@ -21,6 +22,7 @@ function updateDisplay() {
 }
 
 function initAuth() {
+    // Prevent multiple initializations
     if (authInitialized) {
         console.log('Auth already initialized, skipping...');
         return true;
@@ -28,6 +30,7 @@ function initAuth() {
     
     console.log('Initializing auth with dom:', window.dom);
     
+    // Check if dom and login button exist
     if (!window.dom || !window.dom.loginBtn) {
         console.warn('DOM or login button not ready yet, will retry...');
         setTimeout(initAuth, 500);
@@ -36,6 +39,7 @@ function initAuth() {
 
     console.log('Found login button:', window.dom.loginBtn);
 
+    // Remove any existing event listeners by cloning and replacing buttons
     const keypadButtons = document.querySelectorAll('.keypad-btn[data-digit]');
     keypadButtons.forEach(btn => {
         const newBtn = btn.cloneNode(true);
@@ -46,6 +50,7 @@ function initAuth() {
         });
     });
 
+    // Replace login button to remove old listeners
     const oldLoginBtn = window.dom.loginBtn;
     const newLoginBtn = oldLoginBtn.cloneNode(true);
     oldLoginBtn.parentNode.replaceChild(newLoginBtn, oldLoginBtn);
@@ -57,6 +62,7 @@ function initAuth() {
         login();
     });
 
+    // Replace logout button if it exists
     if (window.dom.logoutBtn) {
         const oldLogoutBtn = window.dom.logoutBtn;
         const newLogoutBtn = oldLogoutBtn.cloneNode(true);
@@ -69,6 +75,7 @@ function initAuth() {
         });
     }
 
+    // Remove old keyboard listener and add new one
     document.removeEventListener('keydown', handleKeyDown);
     document.addEventListener('keydown', handleKeyDown);
 
@@ -78,6 +85,7 @@ function initAuth() {
     return true;
 }
 
+// Separate keyboard handler function
 function handleKeyDown(event) {
     if (window.dom && window.dom.callScreen && window.dom.callScreen.style.display === 'block') return;
     
@@ -143,6 +151,7 @@ async function clearOldIceCandidates() {
         
         console.log(`📊 Found ${snapshot.size} old ice-candidates to delete`);
         
+        // Delete in batches of 500
         let totalDeleted = 0;
         let batch = db.batch();
         let count = 0;
@@ -170,33 +179,54 @@ async function clearOldIceCandidates() {
     }
 }
 
-// ==================== INSTALL CHECK ====================
+// ==================== INSTALL BUTTON ====================
 async function checkAndShowInstallButton() {
+    // Only show once per session
+    if (installPromptShown) {
+        console.log('Install prompt already shown, skipping');
+        return;
+    }
+    
+    // Only on Android
     const isAndroid = /Android/i.test(navigator.userAgent);
-    if (!isAndroid) return;
+    if (!isAndroid) {
+        console.log('Not Android, skipping install button');
+        return;
+    }
     
+    // Check if already installed
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
-    if (isStandalone) return;
+    if (isStandalone) {
+        console.log('App already installed to home screen');
+        return;
+    }
     
-    console.log('App not installed, install button should appear');
+    console.log('App not installed, showing install button once');
+    installPromptShown = true;
+    
     const installSection = document.getElementById('install-app-section');
-    if (installSection) installSection.style.display = 'block';
+    if (installSection) {
+        installSection.style.display = 'block';
+    }
 }
 
 // ==================== ANDROID FCM TOKEN SETUP ====================
 async function setupAndroidFCM() {
+    // Only run on Android devices
     const isAndroid = /Android/i.test(navigator.userAgent);
     if (!isAndroid) {
         console.log('📱 Not Android, skipping FCM setup');
         return;
     }
     
+    // Check if FCM is available
     if (!window.messaging) {
         console.log('❌ FCM not available on this device');
         return;
     }
     
     try {
+        // Check if user already has a token
         const userDoc = await db.collection('users').doc(CONFIG.myUsername).get();
         if (userDoc.data()?.fcmToken) {
             console.log('✅ User already has FCM token');
@@ -205,6 +235,7 @@ async function setupAndroidFCM() {
         
         console.log('📱 Android: Setting up FCM notifications...');
         
+        // Register root service worker
         let registration = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js');
         if (!registration) {
             registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
@@ -213,6 +244,7 @@ async function setupAndroidFCM() {
             console.log('✅ Service worker registered');
         }
         
+        // Wait for activation
         if (!registration.active) {
             console.log('Waiting for service worker activation...');
             await new Promise((resolve) => {
@@ -221,16 +253,19 @@ async function setupAndroidFCM() {
         }
         console.log('✅ Service worker active');
         
+        // Tell FCM to use this service worker
         if (window.messaging.useServiceWorker) {
             window.messaging.useServiceWorker(registration);
         }
         
+        // Request permission
         const permission = await Notification.requestPermission();
         if (permission !== 'granted') {
             console.log('❌ Permission denied');
             return;
         }
         
+        // Delete any existing token first (important for fresh binding)
         try {
             const oldToken = await window.messaging.getToken();
             if (oldToken) {
@@ -241,12 +276,14 @@ async function setupAndroidFCM() {
             console.log('No old token to delete');
         }
         
+        // Get NEW token with correct service worker
         const token = await window.messaging.getToken({
             vapidKey: window.VAPID_PUBLIC_KEY,
             serviceWorkerRegistration: registration
         });
         
         if (token) {
+            // Check if user already has this token in Firestore
             const userDoc = await db.collection('users').doc(CONFIG.myUsername).get();
             if (userDoc.data()?.fcmToken === token) {
                 console.log('✅ FCM token already saved');
@@ -319,10 +356,12 @@ async function login() {
         
         console.log('✅ UI updated, showing call screen');
         
+        // ===== CLEAR OLD ICE-CANDIDATES ON LOGIN =====
         console.log('🔜 About to call clearOldIceCandidates...');
         await clearOldIceCandidates();
         console.log('✅ clearOldIceCandidates completed');
         
+        // Initialize other modules with error handling
         try {
             if (window.cleanupStaleCalls) {
                 console.log('Calling cleanupStaleCalls...');
@@ -361,7 +400,7 @@ async function login() {
         
         console.log('✅ Login complete!');
         
-        // ===== SHOW INSTALL BUTTON IF NOT INSTALLED =====
+        // ===== SHOW INSTALL BUTTON (ONCE) =====
         await checkAndShowInstallButton();
         
         // ===== ANDROID FCM TOKEN SETUP =====
@@ -411,5 +450,6 @@ async function logout() {
     }
 }
 
+// Make functions available globally
 window.login = login;
 window.logout = logout;
