@@ -14,7 +14,7 @@ const db = admin.firestore();
 
 // ==================== VAPID KEYS (for Web Push) ====================
 const VAPID_PUBLIC_KEY = 'BH33WjtMVo0Y_bml_nke0gtVqahGcPd6m-yjh__LBHp6Ahvfq-vN-m25D2MzMB3e1jbTGwQRGt5ufKEhSyj6Yv0';
-const VAPID_PRIVATE_KEY = 'YOUR_PRIVATE_KEY_HERE';  // ⚠️ REPLACE WITH YOUR ACTUAL PRIVATE KEY!
+const VAPID_PRIVATE_KEY = 'lULaLKgEB47Ab9p8FDr5_NqbusivicVHnDvkdC6TJYA';  // ⚠️ REPLACE WITH YOUR ACTUAL PRIVATE KEY!
 
 webpush.setVapidDetails(
     'mailto:webrtc@easosunov.com',
