@@ -1,3 +1,4 @@
+/* ==================== BASE STYLES ==================== */
 * {
     margin: 0;
     padding: 0;
@@ -12,6 +13,16 @@ body {
     align-items: center;
     justify-content: center;
     padding: 20px;
+    
+    /* iPhone Safe Area Support */
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    
+    /* Prevent horizontal scroll */
+    overflow-x: hidden;
+    max-width: 100%;
 }
 
 .container {
@@ -23,7 +34,7 @@ body {
     overflow: hidden;
 }
 
-/* WhatsApp-style chat layout */
+/* ==================== CHAT LAYOUT ==================== */
 .chat-layout {
     display: grid;
     grid-template-columns: 350px 1fr;
@@ -326,7 +337,7 @@ body {
     background: #128C7E;
 }
 
-/* Login Screen */
+/* ==================== LOGIN SCREEN ==================== */
 #login-screen {
     padding: 40px;
     background: white;
@@ -461,7 +472,7 @@ body {
     color: #33c;
 }
 
-/* Call Screen */
+/* ==================== CALL SCREEN ==================== */
 #call-screen {
     display: none;
     padding: 20px;
@@ -1059,10 +1070,10 @@ body {
     to { opacity: 1; }
 }
 
-/* Mobile Responsive */
+/* ==================== MOBILE RESPONSIVE ==================== */
 @media (max-width: 1024px) {
     .main-content {
-        grid-template-columns: 1fr;
+        grid-template-columns: 1fr !important;
     }
     
     .right-panels {
@@ -1074,12 +1085,11 @@ body {
     }
     
     .video-container {
-        grid-template-columns: 1fr;
+        grid-template-columns: 1fr !important;
     }
 }
 
 @media (max-width: 768px) {
-
     .video-container.fullscreen-mode #local-video {
         width: 120px;
         height: 90px;
@@ -1088,7 +1098,14 @@ body {
     }
     
     .chat-layout {
-        height: 350px;
+        grid-template-columns: 1fr !important;
+        height: auto;
+        min-height: 400px;
+    }
+    
+    .chats-sidebar {
+        border-right: none;
+        border-bottom: 1px solid #e0e0e0;
     }
     
     .login-header h1 {
@@ -1118,16 +1135,36 @@ body {
         width: 100%;
         max-width: 200px;
     }
+    
+    /* Prevent horizontal scroll on iPhone */
+    .right-panels,
+    .users-panel,
+    .chat-section,
+    .apk-panel,
+    #install-app-section,
+    #notification-guide,
+    #fcm-test-section,
+    #apk-download-section {
+        width: 100%;
+        overflow-x: hidden;
+    }
+    
+    /* Make buttons full width on mobile */
+    .call-user-btn, .chat-user-btn {
+        padding: 8px 12px;
+        font-size: 12px;
+    }
 }
 
-	/* Make users panel taller on mobile */
-	.users-panel {
-		max-height: 450px !important;
-		overflow-y: auto !important;
-	}
-
-	/* Ensure debug panel is always visible */
-	.debug-panel-simple {
-		display: block !important;
-		margin-top: 15px !important;
-	}
+/* iPhone Safe Area Support for notch */
+@supports (padding: max(0px)) {
+    .container {
+        padding-left: max(0px, env(safe-area-inset-left));
+        padding-right: max(0px, env(safe-area-inset-right));
+    }
+    
+    .call-header {
+        padding-left: max(15px, env(safe-area-inset-left));
+        padding-right: max(15px, env(safe-area-inset-right));
+    }
+}
