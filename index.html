@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -23,7 +23,7 @@
         <div id="login-screen">
             <div class="login-header">
                 <h1>📞 WebRTC Communicator</h1>
-                <p>Enter your access code to start</p>
+                <p>Введите ваш код доступа для входа</p>
             </div>
             
             <div class="keypad">
@@ -44,10 +44,10 @@
                     <button class="keypad-btn special" data-digit="back" data-key="⌫">⌫</button>
                 </div>
                 
-                <button class="enter-btn" id="login-btn" disabled>Enter</button>
+                <button class="enter-btn" id="login-btn" disabled>Вход</button>
                 
                 <div class="key-hint">
-                    <span>⌫</span> Backspace • <span>C</span> Clear • <span>Enter</span> Login
+                    <span>⌫</span> Удалить • <span>C</span> Очистить • <span>Enter</span> Вход
                 </div>
                 
                 <div id="login-status" class="status-message"></div>
@@ -58,9 +58,9 @@
         <div id="call-screen">
             <div class="call-header">
                 <div class="user-info">
-                    Logged in as: <span id="current-user"></span>
+                    Вы вошли как: <span id="current-user"></span>
                 </div>
-                <button class="logout-btn" id="logout-btn">Logout</button>
+                <button class="logout-btn" id="logout-btn">Выход</button>
             </div>
             
             <div class="main-content">
@@ -76,9 +76,9 @@
                     </div>
                     
                     <div class="call-controls">
-                        <button class="call-btn hangup" id="hangup-btn" disabled>Hang Up</button>
+                        <button class="call-btn hangup" id="hangup-btn" disabled>Завершить</button>
                         <button id="switch-camera-btn" class="camera-switch-btn" onclick="switchCamera()" style="display: none;">
-                            🔄 Switch Camera
+                            🔄 Переключить камеру
                         </button>
                     </div>
                 </div>
@@ -92,7 +92,7 @@
                     
                     <!-- Available Users Panel -->
                     <div class="users-panel">
-                        <h3>Available Users</h3>
+                        <h3>Доступные пользователи</h3>
                         <div id="users-container"></div>
                     </div>
                     
@@ -101,8 +101,8 @@
                         <div class="chat-layout">
                             <div class="chats-sidebar" id="chats-view">
                                 <div class="chats-header">
-                                    <h3>Chats</h3>
-                                    <button class="new-chat-btn" onclick="showUsersForChat()">➕ New Chat</button>
+                                    <h3>Чаты</h3>
+                                    <button class="new-chat-btn" onclick="showUsersForChat()">➕ Новый чат</button>
                                 </div>
                                 <div id="chats-container"></div>
                             </div>
@@ -110,13 +110,13 @@
                             <div class="chat-view" id="chat-view" style="display: none;">
                                 <div class="chat-view-header">
                                     <button class="back-btn" onclick="closeChat()">←</button>
-                                    <h3 id="current-chat-name">Select a chat</h3>
-                                    <button class="delete-chat-header-btn" onclick="deleteCurrentChat()" title="Delete this chat">🗑️</button>
+                                    <h3 id="current-chat-name">Выберите чат</h3>
+                                    <button class="delete-chat-header-btn" onclick="deleteCurrentChat()" title="Удалить этот чат">🗑️</button>
                                 </div>
                                 <div class="chat-messages-container" id="chat-messages"></div>
                                 <div class="chat-input-area">
-                                    <input type="text" id="message-input" placeholder="Type a message...">
-                                    <button onclick="sendMessage()">Send</button>
+                                    <input type="text" id="message-input" placeholder="Введите сообщение...">
+                                    <button onclick="sendMessage()">Отправить</button>
                                 </div>
                                 <input type="hidden" id="current-chat-id">
                             </div>
@@ -127,53 +127,53 @@
                     <div class="apk-panel">
                         <div class="apk-header">
                             <span>📱</span>
-                            <h4>Android Background Listener</h4>
+                            <h4>Android Фоновый слушатель</h4>
                         </div>
                         <div class="apk-description">
-                            Start the background service to receive notifications when browser is closed.
+                            Запустите фоновый сервис для получения уведомлений когда браузер закрыт.
                         </div>
                         <div class="apk-buttons">
                             <button id="startApkBtn" onclick="startApkListener()" class="apk-start-btn">
-                                ▶️ Start Listener
+                                ▶️ Запустить
                             </button>
                             <button onclick="stopApkListener()" class="apk-stop-btn">
-                                ⏹️ Stop
+                                ⏹️ Остановить
                             </button>
                         </div>
                         <div id="apkStatus" class="apk-status">
-                            ℹ️ Not running
+                            ℹ️ Не запущен
                         </div>
                     </div>
                     
                     <!-- Install App Button -->
                     <div id="install-app-section" style="display: none; background: #4CAF50; padding: 15px; margin: 10px 0; border-radius: 10px; text-align: center;">
-                        <div style="font-size: 14px; font-weight: bold; margin-bottom: 8px; color: white;">📱 Install App</div>
+                        <div style="font-size: 14px; font-weight: bold; margin-bottom: 8px; color: white;">📱 Установить приложение</div>
                         <button id="manual-install-btn" style="background: white; color: #4CAF50; padding: 12px; border: none; border-radius: 8px; width: 100%; font-size: 14px; font-weight: bold;">
-                            ➕ Add to Home Screen
+                            ➕ Добавить на главный экран
                         </button>
                         <div id="install-status" style="margin-top: 8px; color: white; font-size: 11px;"></div>
                     </div>
                     
                     <!-- Notification Settings Guide -->
                     <div id="notification-guide" style="display: none; background: #ff9800; padding: 15px; margin: 10px 0; border-radius: 10px; text-align: left;">
-                        <div style="font-size: 14px; font-weight: bold; margin-bottom: 10px; color: white;">🔔 Enable Notifications</div>
-                        <div style="font-size: 12px; color: white; margin-bottom: 8px;">Follow these steps:</div>
+                        <div style="font-size: 14px; font-weight: bold; margin-bottom: 10px; color: white;">🔔 Включить уведомления</div>
+                        <div style="font-size: 12px; color: white; margin-bottom: 8px;">Следуйте этим шагам:</div>
                         <ol style="color: white; margin-left: 20px; font-size: 12px; line-height: 1.6;">
-                            <li>Settings → Apps → Chrome → Notifications</li>
-                            <li>Tap <strong>Show unused categories</strong></li>
-                            <li>Tap <strong>easosunov.github.io</strong></li>
-                            <li>Turn <strong>ON</strong> all switches</li>
+                            <li>Настройки → Приложения → Chrome → Уведомления</li>
+                            <li>Нажмите <strong>Показать неиспользуемые категории</strong></li>
+                            <li>Нажмите <strong>easosunov.github.io</strong></li>
+                            <li>Включите <strong>ВСЕ</strong> переключатели</li>
                         </ol>
                         <button id="close-notification-guide" style="background: white; color: #ff9800; padding: 8px; border: none; border-radius: 5px; width: 100%; margin-top: 10px; font-size: 12px;">
-                            I've done this
+                            Я сделал это
                         </button>
                     </div>
                     
                     <!-- FCM Test Button -->
                     <div id="fcm-test-section" style="background: #2196F3; padding: 15px; margin: 10px 0; border-radius: 10px; text-align: center;">
-                        <div style="font-size: 14px; font-weight: bold; margin-bottom: 8px; color: white;">📱 Android FCM Test</div>
+                        <div style="font-size: 14px; font-weight: bold; margin-bottom: 8px; color: white;">📱 Android FCM Тест</div>
                         <button id="fcm-test-btn" style="background: white; color: #2196F3; padding: 12px; border: none; border-radius: 8px; width: 100%; font-size: 14px; font-weight: bold;">
-                            🔔 Get FCM Token & Test
+                            🔔 Получить токен и проверить
                         </button>
                         <div id="fcm-test-status" style="margin-top: 8px; color: white; font-size: 11px;"></div>
                     </div>
@@ -182,20 +182,30 @@
         </div>
     </div>
 
+    <!-- APK Download Link (Android only) -->
+    <div id="apk-download-section" style="background: #f0f7ff; padding: 15px; margin: 20px 0 10px 0; border-radius: 10px; text-align: center; border: 1px solid #cce5ff;">
+        <div style="font-size: 14px; font-weight: bold; margin-bottom: 8px; color: #0066cc;">📱 APK Фоновый слушатель для Android</div>
+        <div style="font-size: 12px; color: #555; margin-bottom: 10px;">Скачайте и установите только для Android. Включает уведомления о звонках когда приложение закрыто.</div>
+        <a href="/webrtc_v0/WebRTCListener.apk" download style="background: #28a745; color: white; padding: 10px 20px; text-decoration: none; border-radius: 8px; display: inline-block; font-size: 14px; font-weight: bold;">
+            ⬇️ Скачать APK
+        </a>
+        <div style="font-size: 11px; color: #888; margin-top: 8px;">Версия 1.0 | Размер: ~5MB</div>
+    </div>
+
     <!-- Modals -->
     <div id="modal-overlay"></div>
     <div id="incoming-call-modal">
-        <h3>📞 Incoming Call</h3>
-        <p id="caller-name">Loading...</p>
+        <h3>📞 Входящий звонок</h3>
+        <p id="caller-name">Загрузка...</p>
         <div class="modal-buttons">
-            <button class="modal-btn accept" id="accept-call">Accept</button>
-            <button class="modal-btn reject" id="reject-call">Reject</button>
+            <button class="modal-btn accept" id="accept-call">Ответить</button>
+            <button class="modal-btn reject" id="reject-call">Отклонить</button>
         </div>
     </div>
 
     <div id="status-modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 3000;"></div>
     <div id="status-modal" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 20px; border-radius: 10px; z-index: 3001; min-width: 250px; text-align: center;">
-        <h3 id="status-modal-title" style="margin-bottom: 10px;">Status</h3>
+        <h3 id="status-modal-title" style="margin-bottom: 10px;">Статус</h3>
         <p id="status-modal-message" style="margin-bottom: 15px;"></p>
         <button id="status-modal-ok" style="padding: 8px 20px; background: #667eea; color: white; border: none; border-radius: 5px; cursor: pointer;">OK</button>
     </div>
@@ -305,7 +315,7 @@
                 window.deferredPrompt.prompt();
                 const result = await window.deferredPrompt.userChoice;
                 if (result.outcome === 'accepted') {
-                    statusDiv.innerHTML = '✅ App installed!';
+                    statusDiv.innerHTML = '✅ Приложение установлено!';
                     statusDiv.style.color = '#90EE90';
                     if (installSection) installSection.style.display = 'none';
                     
@@ -315,11 +325,11 @@
                         notificationGuide.style.display = 'block';
                     }
                 } else {
-                    statusDiv.innerHTML = '❌ Installation cancelled';
+                    statusDiv.innerHTML = '❌ Установка отменена';
                 }
                 window.deferredPrompt = null;
             } else {
-                statusDiv.innerHTML = '📱 Tap the menu (⋮) → "Install app" or "Add to Home screen"';
+                statusDiv.innerHTML = '📱 Нажмите меню (⋮) → "Установить приложение" или "Добавить на главный экран"';
                 statusDiv.style.color = '#ffd966';
             }
         });
@@ -338,51 +348,51 @@
         
         if (fcmTestBtn) {
             fcmTestBtn.addEventListener('click', async () => {
-                fcmTestStatus.innerHTML = 'Testing...';
+                fcmTestStatus.innerHTML = 'Тестирование...';
                 fcmTestStatus.style.color = 'white';
                 
                 try {
                     if (!CONFIG || !CONFIG.myUsername) {
-                        fcmTestStatus.innerHTML = '❌ Please log in first';
+                        fcmTestStatus.innerHTML = '❌ Пожалуйста, войдите сначала';
                         return;
                     }
                     
-                    fcmTestStatus.innerHTML = `✅ Logged in as ${CONFIG.myUsername}<br>`;
+                    fcmTestStatus.innerHTML = `✅ Вы вошли как ${CONFIG.myUsername}<br>`;
                     
                     if (!window.messaging) {
-                        fcmTestStatus.innerHTML = '❌ FCM not available';
+                        fcmTestStatus.innerHTML = '❌ FCM недоступен';
                         return;
                     }
-                    fcmTestStatus.innerHTML += '✅ FCM available<br>';
+                    fcmTestStatus.innerHTML += '✅ FCM доступен<br>';
                     
                     if (Notification.permission !== 'granted') {
                         const perm = await Notification.requestPermission();
                         if (perm !== 'granted') {
-                            fcmTestStatus.innerHTML = '❌ Notification permission denied';
+                            fcmTestStatus.innerHTML = '❌ Разрешение на уведомления отклонено';
                             return;
                         }
                     }
-                    fcmTestStatus.innerHTML += '✅ Permission granted<br>';
+                    fcmTestStatus.innerHTML += '✅ Разрешение получено<br>';
                     
-                    fcmTestStatus.innerHTML += 'Getting token...<br>';
+                    fcmTestStatus.innerHTML += 'Получение токена...<br>';
                     const token = await window.messaging.getToken({
                         vapidKey: window.VAPID_PUBLIC_KEY
                     });
                     
                     if (token) {
-                        fcmTestStatus.innerHTML += `✅ Token: ${token.substring(0, 40)}...<br>Saving...`;
+                        fcmTestStatus.innerHTML += `✅ Токен: ${token.substring(0, 40)}...<br>Сохранение...`;
                         await db.collection('users').doc(CONFIG.myUsername).update({
                             fcmToken: token,
                             fcmEnabled: true,
                             fcmLastUpdated: firebase.firestore.FieldValue.serverTimestamp()
                         });
-                        fcmTestStatus.innerHTML = '✅ FCM token saved! Close app and make a test call.';
+                        fcmTestStatus.innerHTML = '✅ Токен FCM сохранен! Закройте приложение и сделайте тестовый звонок.';
                         fcmTestStatus.style.color = '#90EE90';
                     } else {
-                        fcmTestStatus.innerHTML = '❌ No token received';
+                        fcmTestStatus.innerHTML = '❌ Токен не получен';
                     }
                 } catch (err) {
-                    fcmTestStatus.innerHTML = `❌ Error: ${err.message}`;
+                    fcmTestStatus.innerHTML = `❌ Ошибка: ${err.message}`;
                     console.error(err);
                 }
             });
