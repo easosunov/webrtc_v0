@@ -42,7 +42,7 @@ function renderUsersList(users) {
     }
     
     if (users.length === 0) {
-        window.dom.usersContainer.innerHTML = '<div class="user-item">No other users available</div>';
+        window.dom.usersContainer.innerHTML = '<div class="user-item">Нет других пользователей</div>';
         return;
     }
     
@@ -51,11 +51,11 @@ function renderUsersList(users) {
         const isCallActive = CONFIG.currentCallId && CONFIG.isInCall;
         const isThisUserBeingCalled = CONFIG.currentCallId?.includes(user.username);
         
-        let buttonText = 'Call';
+        let buttonText = '📞';
         let callDisabled = !CONFIG.localStream || (isCallActive && !isThisUserBeingCalled);
         
         if (isThisUserBeingCalled) {
-            buttonText = 'Calling...';
+            buttonText = '📞 Звонок...';
             callDisabled = true;
         }
         
@@ -76,7 +76,7 @@ function renderUsersList(users) {
                     <button class="chat-user-btn" 
                             onclick="window.startChat('${user.username}')"
                             ${!CONFIG.myUsername ? 'disabled' : ''}>
-                        💬 Chat
+                        💬 Чат
                     </button>
                 </div>
             </div>
