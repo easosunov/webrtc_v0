@@ -61,7 +61,6 @@
                 <div class="user-info">
                     Вы вошли как: <span id="current-user"></span>
                 </div>
-                <button class="logout-btn" id="logout-btn">Выход</button>
             </div>
             
             <div class="main-content">
@@ -77,7 +76,7 @@
                     </div>
                     
                     <div class="call-controls">
-                        <button class="call-btn hangup" id="hangup-btn" disabled>Завершить</button>
+                        <button class="call-btn hangup" id="hangup-btn" disabled>Повесить трубку</button>
                         <button id="switch-camera-btn" class="camera-switch-btn" onclick="switchCamera()" style="display: none;">
                             🔄 Переключить камеру
                         </button>
@@ -179,7 +178,7 @@
                         <div id="fcm-test-status" style="margin-top: 8px; color: white; font-size: 11px;"></div>
                     </div>
                     
-                    <!-- APK Download Link (Android only) -->
+                    <!-- APK Download Link -->
                     <div id="apk-download-section" style="background: #f0f7ff; padding: 15px; margin: 10px 0; border-radius: 10px; text-align: center; border: 1px solid #cce5ff;">
                         <div style="font-size: 14px; font-weight: bold; margin-bottom: 8px; color: #0066cc;">📱 APK Фоновый слушатель для Android</div>
                         <div style="font-size: 12px; color: #555; margin-bottom: 10px;">Скачайте и установите только для Android. Включает уведомления о звонках когда приложение закрыто.</div>
@@ -188,6 +187,12 @@
                         </a>
                         <div style="font-size: 11px; color: #888; margin-top: 8px;">Версия 1.0 | Размер: ~5MB</div>
                     </div>
+
+                    <!-- MOVED LOGOUT BUTTON -->
+                    <div style="text-align:center; margin: 15px 0;">
+                        <button class="logout-btn" id="logout-btn">Выход</button>
+                    </div>
+
                 </div>
             </div>
         </div>
@@ -268,14 +273,12 @@
     
     <!-- Service Workers -->
     <script>
-        // Web Push Service Worker (for Windows/iOS)
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('/webrtc_v0/sw.js')
                 .then(reg => console.log('✅ Web Push SW registered'))
                 .catch(err => console.log('❌ Web Push SW failed:', err));
         }
         
-        // FCM Service Worker (for Android)
         if ('serviceWorker' in navigator && window.messaging) {
             navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/' })
                 .then(reg => {
