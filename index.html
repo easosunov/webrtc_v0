@@ -2,14 +2,15 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, shrink-to-fit=no">
     <title>WebRTC Communicator</title>
     
     <!-- PWA Manifest -->
     <link rel="manifest" href="/webrtc_v0/manifest.json">
     <meta name="theme-color" content="#667eea">
+    
+    <!-- iOS Web App Settings -->
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="WebRTC Chat">
     <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23667eea'/%3E%3Ctext x='50' y='70' font-size='50' text-anchor='middle' fill='white'%3E📞%3C/text%3E%3C/svg%3E">
@@ -178,7 +179,7 @@
                         <div id="fcm-test-status" style="margin-top: 8px; color: white; font-size: 11px;"></div>
                     </div>
                     
-                    <!-- APK Download Link (Android only) - BOTTOM OF RIGHT PANEL -->
+                    <!-- APK Download Link (Android only) -->
                     <div id="apk-download-section" style="background: #f0f7ff; padding: 15px; margin: 10px 0; border-radius: 10px; text-align: center; border: 1px solid #cce5ff;">
                         <div style="font-size: 14px; font-weight: bold; margin-bottom: 8px; color: #0066cc;">📱 APK Фоновый слушатель для Android</div>
                         <div style="font-size: 12px; color: #555; margin-bottom: 10px;">Скачайте и установите только для Android. Включает уведомления о звонках когда приложение закрыто.</div>
@@ -294,11 +295,9 @@
         const notificationGuide = document.getElementById('notification-guide');
         const guideDismissed = localStorage.getItem('notification_guide_dismissed');
         
-        // Show install button if not installed
         if (!isStandalone) {
             if (installSection) installSection.style.display = 'block';
         } else {
-            // App is already installed, show notification guide if needed
             if (Notification.permission !== 'granted' && !guideDismissed) {
                 console.log('App installed, notifications not granted - showing guide');
                 setTimeout(() => {
@@ -307,7 +306,6 @@
             }
         }
         
-        // Handle install button click
         document.getElementById('manual-install-btn')?.addEventListener('click', async () => {
             const statusDiv = document.getElementById('install-status');
             
@@ -319,7 +317,6 @@
                     statusDiv.style.color = '#90EE90';
                     if (installSection) installSection.style.display = 'none';
                     
-                    // SHOW NOTIFICATION GUIDE IMMEDIATELY AFTER INSTALLATION
                     console.log('Installation complete - showing notification guide');
                     if (notificationGuide) {
                         notificationGuide.style.display = 'block';
@@ -334,7 +331,6 @@
             }
         });
         
-        // Handle close notification guide button
         document.getElementById('close-notification-guide')?.addEventListener('click', () => {
             localStorage.setItem('notification_guide_dismissed', 'true');
             if (notificationGuide) notificationGuide.style.display = 'none';
