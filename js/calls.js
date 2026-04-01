@@ -639,6 +639,7 @@ window.cleanupOrphanedIceCandidates = async function() {
     }
 };
 
+
 // ==================== HANGUP FUNCTION ====================
 window.hangup = async function(reason = 'user_initiated') {
     console.log(`📞 Call ended - reason: ${reason}`);
@@ -675,25 +676,36 @@ window.hangup = async function(reason = 'user_initiated') {
             await addCallLogEntry(CONFIG.currentCallPartner, callerId, wasAnswered, duration);
         }
         
+        // Update call status in Firestore
         try {
             const callDoc = await db.collection('calls').doc(CONFIG.currentCallId).get();
             if (callDoc.exists) {
                 const callData = callDoc.data();
                 
-                if (callData.status === 'ringing' || callData.status === 'answered') {
+                // IMPORTANT: Check status and update appropriately
+                if (callData.status === 'ringing') {
                     if (callData.callerId === CONFIG.myUsername) {
+                        // Caller hung up while ringing → mark as cancelled
                         await db.collection('calls').doc(CONFIG.currentCallId).update({
                             status: 'cancelled',
                             endedAt: firebase.firestore.FieldValue.serverTimestamp()
                         });
                         console.log('📞 Call cancelled by caller');
                     } else {
+                        // Callee hung up while ringing → mark as rejected
                         await db.collection('calls').doc(CONFIG.currentCallId).update({
-                            status: 'ended',
+                            status: 'rejected',
                             endedAt: firebase.firestore.FieldValue.serverTimestamp()
                         });
-                        console.log('📞 Call ended by callee');
+                        console.log('📞 Call rejected by callee');
                     }
+                } else if (callData.status === 'answered') {
+                    // Call was answered, now ending
+                    await db.collection('calls').doc(CONFIG.currentCallId).update({
+                        status: 'ended',
+                        endedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    console.log('📞 Call ended after being answered');
                 }
             }
         } catch (err) {
@@ -750,6 +762,7 @@ window.hangup = async function(reason = 'user_initiated') {
         }
     }, 3000);
 };
+
 
 // ==================== ATTACH HANGUP BUTTON LISTENER ====================
 function attachHangupListener() {
