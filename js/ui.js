@@ -630,23 +630,40 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
 
-        if (dom.rejectBtn) {
-            const newRejectBtn = dom.rejectBtn.cloneNode(true);
-            dom.rejectBtn.parentNode.replaceChild(newRejectBtn, dom.rejectBtn);
-            dom.rejectBtn = newRejectBtn;
+
+// In ui.js, inside DOMContentLoaded, replace the reject button section:
+
+if (dom.rejectBtn) {
+    const newRejectBtn = dom.rejectBtn.cloneNode(true);
+    dom.rejectBtn.parentNode.replaceChild(newRejectBtn, dom.rejectBtn);
+    dom.rejectBtn = newRejectBtn;
+    
+    dom.rejectBtn.addEventListener('click', async () => {
+        if (CONFIG.currentIncomingCall) {
+            const { callId, callerId } = CONFIG.currentIncomingCall;
             
-            dom.rejectBtn.addEventListener('click', () => {
-                if (CONFIG.currentIncomingCall) {
-                    const { callId } = CONFIG.currentIncomingCall;
-                    db.collection('calls').doc(callId).update({
-                        status: 'rejected',
-                        endedAt: firebase.firestore.FieldValue.serverTimestamp()
-                    }).catch(err => console.error('Error rejecting call:', err));
-                    hideIncomingCallModal();
-                    console.log('📞 Call rejected');
-                }
-            });
+            // Explicitly update the call status to 'rejected'
+            try {
+                await db.collection('calls').doc(callId).update({
+                    status: 'rejected',
+                    endedAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                console.log('📞 Call rejected, status updated to rejected');
+                
+                // Also trigger a call to the reject endpoint to clean up intervals
+                fetch(`https://us-central1-webrtc-v0.cloudfunctions.net/rejectCall?callId=${callId}`)
+                    .catch(err => console.log('Reject endpoint error:', err));
+                    
+            } catch (err) {
+                console.error('Error rejecting call:', err);
+            }
+            
+            hideIncomingCallModal();
+            console.log('📞 Call rejected');
         }
+    });
+}
+
 
         if (dom.statusModalOk) {
             const newOkBtn = dom.statusModalOk.cloneNode(true);
