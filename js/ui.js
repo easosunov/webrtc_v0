@@ -508,12 +508,11 @@ async function saveBarkDeviceKey() {
 // Show a button to enable Bark (iOS only)
 window.showEnableBarkButton = function() {
     // Only show on iOS devices
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-    if (!isIOS) {
-        console.log('📱 Not iOS, skipping Bark button');
-        return;
-    }
-    
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+                  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);    
+	if (!isIOS) {console.log('📱 Not iOS, skipping Bark button');return;}
+    console.log('iOS detection result:', isIOS);
+    console.log('User Agent:', navigator.userAgent);
     // Check if already have Bark key
     const checkExisting = async () => {
         if (!CONFIG.myUsername) return;
