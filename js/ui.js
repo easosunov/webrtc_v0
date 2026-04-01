@@ -454,6 +454,28 @@ window.showEnablePushButton = function() {
 };
 
 // ==================== BARK (iOS) REGISTRATION ====================
+// 🔧 NEW FUNCTION: Extract key from URL or raw key
+function extractBarkKey(input) {
+    if (!input) return null;
+    
+    // Remove whitespace
+    input = input.trim();
+    
+    // If it's a Bark URL, extract the key
+    if (input.includes('api.day.app/')) {
+        const match = input.match(/api\.day\.app\/([^\/]+)/);
+        if (match && match[1]) {
+            return match[1];
+        }
+    }
+    
+    // If it's a raw key (looks like a long string), return as-is
+    if (input.length > 20 && /^[a-zA-Z0-9]+$/.test(input)) {
+        return input;
+    }
+    
+    return null;
+}
 
 async function getBarkDeviceKey() {
     // Check if we already have a saved key
@@ -463,23 +485,29 @@ async function getBarkDeviceKey() {
         return barkKey;
     }
     
-    // Prompt user for Bark device key
+    // 🔧 UPDATED: Clearer instructions for the new Bark UI
     barkKey = prompt(
-        '🔔 For iOS call notifications:\n\n' +
-        '1. Install Bark app from App Store\n' +
-        '2. Open Bark and copy your device key\n' +
-        '3. Paste it here\n\n' +
-        'Your device key:'
+        '🍎 Set up iOS Call Notifications\n\n' +
+        '1. Open the Bark app\n' +
+        '2. Tap the "Service" tab\n' +
+        '3. Tap "Copy Test"\n' +
+        '4. Paste the URL here\n\n' +
+        'Paste the URL here:'
     );
     
-    if (barkKey && barkKey.length > 10) {
-        localStorage.setItem('bark_device_key', barkKey);
-        console.log('✅ Bark device key saved');
-        return barkKey;
-    } else {
-        console.log('❌ No valid Bark device key provided');
-        return null;
+    if (barkKey) {
+        const extractedKey = extractBarkKey(barkKey);
+        if (extractedKey) {
+            localStorage.setItem('bark_device_key', extractedKey);
+            console.log('✅ Bark device key extracted and saved');
+            return extractedKey;
+        } else {
+            alert('❌ Invalid Bark URL. Please tap "Copy Test" in the Bark app and paste again.');
+            return null;
+        }
     }
+    
+    return null;
 }
 
 async function saveBarkDeviceKey() {
@@ -509,17 +537,15 @@ async function saveBarkDeviceKey() {
 window.showEnableBarkButton = function() {
     console.log('🔍 showEnableBarkButton called');
     
-    // IMPROVED iOS detection for modern iPads
+    // 🔧 UPDATED: Improved iOS detection for modern iPads
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
                   (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) ||
-                  /Mac/.test(navigator.userAgent) && 'ontouchstart' in document;
+                  (/Mac/.test(navigator.userAgent) && 'ontouchstart' in document);
     
     console.log('iOS detection result:', isIOS);
     console.log('User Agent:', navigator.userAgent);
-    console.log('Platform:', navigator.platform);
-    console.log('Touch points:', navigator.maxTouchPoints);
     
-    // FOR DEBUGGING: Remove this check temporarily to force button to appear
+    // For testing on Windows - you can comment out this check
     // if (!isIOS) {
     //     console.log('Not iOS, skipping Bark button');
     //     return;
@@ -549,6 +575,7 @@ window.showEnableBarkButton = function() {
             return;
         }
         
+        // 🔧 UPDATED: Button with clearer text
         const barkButton = document.createElement('button');
         barkButton.id = 'enable-bark-btn';
         barkButton.className = 'enable-bark-btn';
@@ -589,16 +616,11 @@ window.showEnableBarkButton = function() {
             console.log('✅ Enable Bark button added to', container.className);
         } else {
             console.error('❌ Could not find container for Bark button');
-            // Fallback: add to body
-            document.body.insertBefore(barkButton, document.body.firstChild);
         }
     };
     
     checkExisting();
 };
-
-
-
 
 // ==================== AUTO-SUBSCRIBE ====================
 window.autoSubscribeToPush = async function() {
@@ -637,6 +659,7 @@ window.autoSubscribeToPush = autoSubscribeToPush;
 window.enablePushNotifications = enablePushNotifications;
 window.showEnableBarkButton = showEnableBarkButton;
 window.saveBarkDeviceKey = saveBarkDeviceKey;
+window.extractBarkKey = extractBarkKey;  // 🔧 NEW: Export for debugging
 
 // ==================== INITIALIZATION ====================
 document.addEventListener('DOMContentLoaded', function() {
@@ -658,40 +681,37 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
 
-
-// In ui.js, inside DOMContentLoaded, replace the reject button section:
-
-if (dom.rejectBtn) {
-    const newRejectBtn = dom.rejectBtn.cloneNode(true);
-    dom.rejectBtn.parentNode.replaceChild(newRejectBtn, dom.rejectBtn);
-    dom.rejectBtn = newRejectBtn;
-    
-    dom.rejectBtn.addEventListener('click', async () => {
-        if (CONFIG.currentIncomingCall) {
-            const { callId, callerId } = CONFIG.currentIncomingCall;
+        if (dom.rejectBtn) {
+            const newRejectBtn = dom.rejectBtn.cloneNode(true);
+            dom.rejectBtn.parentNode.replaceChild(newRejectBtn, dom.rejectBtn);
+            dom.rejectBtn = newRejectBtn;
             
-            // Explicitly update the call status to 'rejected'
-            try {
-                await db.collection('calls').doc(callId).update({
-                    status: 'rejected',
-                    endedAt: firebase.firestore.FieldValue.serverTimestamp()
-                });
-                console.log('📞 Call rejected, status updated to rejected');
-                
-                // Also trigger a call to the reject endpoint to clean up intervals
-                fetch(`https://us-central1-webrtc-v0.cloudfunctions.net/rejectCall?callId=${callId}`)
-                    .catch(err => console.log('Reject endpoint error:', err));
+            // 🔧 UPDATED: Async reject handler with status update
+            dom.rejectBtn.addEventListener('click', async () => {
+                if (CONFIG.currentIncomingCall) {
+                    const { callId } = CONFIG.currentIncomingCall;
                     
-            } catch (err) {
-                console.error('Error rejecting call:', err);
-            }
-            
-            hideIncomingCallModal();
-            console.log('📞 Call rejected');
+                    // Explicitly update the call status to 'rejected'
+                    try {
+                        await db.collection('calls').doc(callId).update({
+                            status: 'rejected',
+                            endedAt: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                        console.log('📞 Call rejected, status updated to rejected');
+                        
+                        // Also trigger the reject endpoint to clean up intervals
+                        fetch(`https://us-central1-webrtc-v0.cloudfunctions.net/rejectCall?callId=${callId}`)
+                            .catch(err => console.log('Reject endpoint error:', err));
+                            
+                    } catch (err) {
+                        console.error('Error rejecting call:', err);
+                    }
+                    
+                    hideIncomingCallModal();
+                    console.log('📞 Call rejected');
+                }
+            });
         }
-    });
-}
-
 
         if (dom.statusModalOk) {
             const newOkBtn = dom.statusModalOk.cloneNode(true);
@@ -730,37 +750,39 @@ if (dom.rejectBtn) {
     }
 });
 
-
 // ==================== LOGIN COMPLETE EVENT ====================
 window.addEventListener('login-complete', () => {
     console.log('📱 Login complete, checking push subscriptions...');
     setTimeout(() => {
         window.autoSubscribeToPush();
-        // Show Bark button for iOS users - IMPROVED DETECTION
+        
+        // 🔧 UPDATED: Show Bark button for iOS users with improved detection
         const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
                       (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) ||
-                      /Mac/.test(navigator.userAgent) && 'ontouchstart' in document;
+                      (/Mac/.test(navigator.userAgent) && 'ontouchstart' in document);
         
         console.log('Login complete - iOS detected:', isIOS);
         
-        // FOR DEBUGGING: Remove the iOS check temporarily
-        // if (isIOS) {
+        // Show the button (for testing, remove iOS check if needed)
         setTimeout(() => {
             console.log('Calling showEnableBarkButton...');
             window.showEnableBarkButton();
         }, 1500);
-        // }
     }, 1000);
 });
-
 
 // ==================== CHECK ON PAGE LOAD ====================
 setTimeout(() => {
     if (CONFIG && CONFIG.myUsername) {
         console.log('📱 User already logged in, checking push...');
         window.autoSubscribeToPush();
-        // Show Bark button for iOS users
-        if (/iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream) {
+        
+        // 🔧 UPDATED: Show Bark button for iOS users with improved detection
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+                      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) ||
+                      (/Mac/.test(navigator.userAgent) && 'ontouchstart' in document);
+        
+        if (isIOS) {
             setTimeout(() => {
                 window.showEnableBarkButton();
             }, 2000);
