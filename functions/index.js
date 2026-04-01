@@ -13,9 +13,9 @@ const webpush = require('web-push');
 admin.initializeApp();
 const db = admin.firestore();
 
-// VAPID Keys (for Web Push) - REPLACE WITH YOUR ACTUAL PRIVATE KEY
+// VAPID Keys (for Web Push)
 const VAPID_PUBLIC_KEY = 'BH33WjtMVo0Y_bml_nke0gtVqahGcPd6m-yjh__LBHp6Ahvfq-vN-m25D2MzMB3e1jbTGwQRGt5ufKEhSyj6Yv0';
-const VAPID_PRIVATE_KEY = 'lULaLKgEB47Ab9p8FDr5_NqbusivicVHnDvkdC6TJYA';  // ⚠️ REPLACE THIS!
+const VAPID_PRIVATE_KEY = 'lULaLKgEB47Ab9p8FDr5_NqbusivicVHnDvkdC6TJYA';
 
 webpush.setVapidDetails(
     'mailto:webrtc@easosunov.com',
@@ -94,6 +94,7 @@ async function startRinging(userId, callerName, callId, callerId) {
         }
         
         const callData = callDoc.data();
+        // Stop if call is no longer ringing (answered, cancelled, rejected, timeout)
         if (callData.status !== 'ringing') {
             logger.log(`📞 Call ${callId} status changed to ${callData.status}, stopping Android ringing`);
             clearInterval(interval);
@@ -108,14 +109,20 @@ async function startRinging(userId, callerName, callId, callerId) {
     
     activeCalls.set(callId, interval);
     
-    // Auto-stop after 60 seconds (20 pushes max)
+    // Auto-stop after 120 seconds (40 pushes max)
     setTimeout(() => {
         if (activeCalls.has(callId)) {
             logger.log(`⏰ Android ringing timeout for call ${callId}`);
             clearInterval(activeCalls.get(callId));
             activeCalls.delete(callId);
+            
+            // Update call status to timeout
+            db.collection('calls').doc(callId).update({
+                status: 'timeout',
+                endedAt: admin.firestore.FieldValue.serverTimestamp()
+            }).catch(err => logger.error(`Failed to update timeout status: ${err.message}`));
         }
-    }, 60000);
+    }, 120000);
 }
 
 // ==================== iOS (BARK) PUSH FUNCTIONS ====================
@@ -133,7 +140,6 @@ async function sendBarkPush(userId, callerName, callId, callerId) {
     const barkUrl = `https://api.day.app/${deviceKey}/Incoming Call/${encodedCallerName}?call=1&group=call_${callId}&level=critical&sound=ringtone`;
     
     try {
-        // Use fetch (Node 18+ has fetch built-in)
         const response = await fetch(barkUrl);
         logger.log(`🍎 Bark notification sent to ${userId} for call ${callId}`);
         return true;
@@ -169,6 +175,7 @@ async function startBarkRinging(userId, callerName, callId, callerId) {
         }
         
         const callData = callDoc.data();
+        // Stop if call is no longer ringing (answered, cancelled, rejected, timeout)
         if (callData.status !== 'ringing') {
             logger.log(`📞 Call ${callId} status changed to ${callData.status}, stopping Bark ringing`);
             clearInterval(interval);
@@ -179,18 +186,24 @@ async function startBarkRinging(userId, callerName, callId, callerId) {
         // Send another Bark push
         await sendBarkPush(userId, callerName, callId, callerId);
         
-    }, 3000); // Every 3 seconds
+    }, 3000);
     
     activeCalls.set(barkKey, interval);
     
-    // Auto-stop after 60 seconds (20 pushes max)
+    // Auto-stop after 120 seconds (40 pushes max)
     setTimeout(() => {
         if (activeCalls.has(barkKey)) {
             logger.log(`⏰ Bark ringing timeout for call ${callId}`);
             clearInterval(activeCalls.get(barkKey));
             activeCalls.delete(barkKey);
+            
+            // Update call status to timeout
+            db.collection('calls').doc(callId).update({
+                status: 'timeout',
+                endedAt: admin.firestore.FieldValue.serverTimestamp()
+            }).catch(err => logger.error(`Failed to update timeout status: ${err.message}`));
         }
-    }, 60000);
+    }, 120000);
 }
 
 // ==================== CLOUD FUNCTIONS ====================
@@ -270,11 +283,16 @@ exports.onCallEnded = onDocumentUpdated('calls/{callId}', async (event) => {
     
     const callId = event.params.callId;
     
-    // If call status changed from ringing to something else
-    if (before.status === 'ringing' && after.status !== 'ringing') {
+    // Check if call status changed FROM 'ringing' TO any non-ringing status
+    const wasRinging = before.status === 'ringing';
+    const isEnded = after.status !== 'ringing';  // includes: answered, ended, cancelled, rejected, timeout
+    
+    if (wasRinging && isEnded) {
+        logger.log(`📞 Call ${callId} changed from ${before.status} to ${after.status}, stopping all ringing`);
+        
         // Clean up Android intervals
         if (activeCalls.has(callId)) {
-            logger.log(`📞 Call ${callId} ended, stopping FCM ringing`);
+            logger.log(`🛑 Stopping FCM ringing for call ${callId}`);
             clearInterval(activeCalls.get(callId));
             activeCalls.delete(callId);
         }
@@ -282,7 +300,7 @@ exports.onCallEnded = onDocumentUpdated('calls/{callId}', async (event) => {
         // Clean up Bark intervals
         const barkKey = `bark_${callId}`;
         if (activeCalls.has(barkKey)) {
-            logger.log(`📞 Call ${callId} ended, stopping Bark ringing`);
+            logger.log(`🍎 Stopping Bark ringing for call ${callId}`);
             clearInterval(activeCalls.get(barkKey));
             activeCalls.delete(barkKey);
         }
@@ -297,6 +315,15 @@ exports.healthCheck = onRequest((req, res) => {
         status: 'ok',
         time: new Date().toISOString(),
         service: 'webrtc-communicator-push'
+    });
+});
+
+// Debug endpoint to see active intervals
+exports.debugActiveCalls = onRequest((req, res) => {
+    const active = Array.from(activeCalls.keys());
+    res.json({ 
+        activeIntervals: active,
+        count: active.length 
     });
 });
 
@@ -325,14 +352,74 @@ exports.rejectCall = onRequest(async (req, res) => {
                 status: 'rejected',
                 endedAt: admin.firestore.FieldValue.serverTimestamp()
             });
-            console.log(`📞 Call ${callId} rejected via notification dismiss`);
+            
+            // Clean up intervals immediately
+            if (activeCalls.has(callId)) {
+                clearInterval(activeCalls.get(callId));
+                activeCalls.delete(callId);
+            }
+            const barkKey = `bark_${callId}`;
+            if (activeCalls.has(barkKey)) {
+                clearInterval(activeCalls.get(barkKey));
+                activeCalls.delete(barkKey);
+            }
+            
+            logger.log(`📞 Call ${callId} rejected via notification dismiss`);
             res.status(200).json({ success: true, status: 'rejected' });
         } else {
             res.status(200).json({ success: true, status: call.status });
         }
         
     } catch (error) {
-        console.error('Reject call error:', error);
+        logger.error('Reject call error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Clean up stale ringing calls (can be triggered by cron job)
+exports.cleanupStaleRingingCalls = onRequest(async (req, res) => {
+    try {
+        const staleTime = Date.now() - 120000; // 2 minutes ago
+        const staleCalls = await db.collection('calls')
+            .where('status', '==', 'ringing')
+            .get();
+        
+        let cleaned = 0;
+        for (const doc of staleCalls.docs) {
+            const callData = doc.data();
+            const callTime = callData.timestamp?.toMillis?.() || 0;
+            
+            if (callTime < staleTime) {
+                const callId = doc.id;
+                logger.log(`🧹 Cleaning up stale call: ${callId}`);
+                
+                // Clean up intervals
+                if (activeCalls.has(callId)) {
+                    clearInterval(activeCalls.get(callId));
+                    activeCalls.delete(callId);
+                }
+                const barkKey = `bark_${callId}`;
+                if (activeCalls.has(barkKey)) {
+                    clearInterval(activeCalls.get(barkKey));
+                    activeCalls.delete(barkKey);
+                }
+                
+                // Update call status
+                await doc.ref.update({
+                    status: 'timeout',
+                    endedAt: admin.firestore.FieldValue.serverTimestamp()
+                });
+                cleaned++;
+            }
+        }
+        
+        res.status(200).json({ 
+            success: true, 
+            cleaned: cleaned,
+            message: `Cleaned up ${cleaned} stale calls`
+        });
+    } catch (error) {
+        logger.error('Cleanup error:', error);
         res.status(500).json({ error: error.message });
     }
 });
