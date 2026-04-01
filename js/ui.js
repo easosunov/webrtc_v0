@@ -507,15 +507,30 @@ async function saveBarkDeviceKey() {
 
 // Show a button to enable Bark (iOS only)
 window.showEnableBarkButton = function() {
-    // Only show on iOS devices
+    console.log('🔍 showEnableBarkButton called');
+    
+    // IMPROVED iOS detection for modern iPads
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
-                  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);    
-	if (!isIOS) {console.log('📱 Not iOS, skipping Bark button');return;}
+                  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) ||
+                  /Mac/.test(navigator.userAgent) && 'ontouchstart' in document;
+    
     console.log('iOS detection result:', isIOS);
     console.log('User Agent:', navigator.userAgent);
+    console.log('Platform:', navigator.platform);
+    console.log('Touch points:', navigator.maxTouchPoints);
+    
+    // FOR DEBUGGING: Remove this check temporarily to force button to appear
+    // if (!isIOS) {
+    //     console.log('Not iOS, skipping Bark button');
+    //     return;
+    // }
+    
     // Check if already have Bark key
     const checkExisting = async () => {
-        if (!CONFIG.myUsername) return;
+        if (!CONFIG.myUsername) {
+            console.log('No username yet, waiting...');
+            return;
+        }
         
         try {
             const userDoc = await db.collection('users').doc(CONFIG.myUsername).get();
@@ -529,7 +544,10 @@ window.showEnableBarkButton = function() {
         }
         
         // Create button if not already present
-        if (document.getElementById('enable-bark-btn')) return;
+        if (document.getElementById('enable-bark-btn')) {
+            console.log('Bark button already exists');
+            return;
+        }
         
         const barkButton = document.createElement('button');
         barkButton.id = 'enable-bark-btn';
@@ -554,23 +572,33 @@ window.showEnableBarkButton = function() {
             }
         };
         
-        // Find a good place to add the button
-        const usersPanel = document.querySelector('.users-panel');
-        if (usersPanel) {
-            usersPanel.appendChild(barkButton);
-            console.log('✅ Enable Bark button added');
+        // Try multiple container locations
+        let container = document.querySelector('.users-panel');
+        if (!container) {
+            container = document.querySelector('.right-panels');
+        }
+        if (!container) {
+            container = document.getElementById('users-container')?.parentElement;
+        }
+        if (!container) {
+            container = document.querySelector('.main-content .right-panels');
+        }
+        
+        if (container) {
+            container.insertBefore(barkButton, container.firstChild);
+            console.log('✅ Enable Bark button added to', container.className);
         } else {
-            // Fallback: add to right panels
-            const rightPanels = document.querySelector('.right-panels');
-            if (rightPanels) {
-                rightPanels.insertBefore(barkButton, rightPanels.firstChild);
-                console.log('✅ Enable Bark button added to right panels');
-            }
+            console.error('❌ Could not find container for Bark button');
+            // Fallback: add to body
+            document.body.insertBefore(barkButton, document.body.firstChild);
         }
     };
     
     checkExisting();
 };
+
+
+
 
 // ==================== AUTO-SUBSCRIBE ====================
 window.autoSubscribeToPush = async function() {
@@ -702,19 +730,29 @@ if (dom.rejectBtn) {
     }
 });
 
+
 // ==================== LOGIN COMPLETE EVENT ====================
 window.addEventListener('login-complete', () => {
     console.log('📱 Login complete, checking push subscriptions...');
     setTimeout(() => {
         window.autoSubscribeToPush();
-        // Show Bark button for iOS users
-        if (/iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream) {
-            setTimeout(() => {
-                window.showEnableBarkButton();
-            }, 1500);
-        }
+        // Show Bark button for iOS users - IMPROVED DETECTION
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+                      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) ||
+                      /Mac/.test(navigator.userAgent) && 'ontouchstart' in document;
+        
+        console.log('Login complete - iOS detected:', isIOS);
+        
+        // FOR DEBUGGING: Remove the iOS check temporarily
+        // if (isIOS) {
+        setTimeout(() => {
+            console.log('Calling showEnableBarkButton...');
+            window.showEnableBarkButton();
+        }, 1500);
+        // }
     }, 1000);
 });
+
 
 // ==================== CHECK ON PAGE LOAD ====================
 setTimeout(() => {
