@@ -335,7 +335,7 @@ window.callUser = async function(targetUsername) {
                 }
                 window.hangup('timeout');
             }
-        }, 30000);
+        }, 60000);
         
     } catch (error) {
         console.log(`❌ Call error: ${error.message}`);
