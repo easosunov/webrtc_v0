@@ -623,31 +623,53 @@ window.showEnableBarkButton = function() {
 };
 
 // Create and show manual bark setup button (no HTML changes needed)
+
+// Create and show manual bark setup button (no HTML changes needed)
 function showManualBarkButton() {
-    // Detect iOS
+    // DEBUG: Show alert to confirm function is running
+    alert('showManualBarkButton() called');
+    
+    // Detect iOS - ADDED MORE DETECTION METHODS
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
                   (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) ||
-                  (/Mac/.test(navigator.userAgent) && 'ontouchstart' in document);
+                  (/Mac/.test(navigator.userAgent) && 'ontouchstart' in document) ||
+                  /iPad/.test(navigator.userAgent) ||
+                  (navigator.maxTouchPoints > 1 && screen.width <= 1024);
     
-    // Only show on iOS
-    if (!isIOS) return;
+    // DEBUG: Show detection result
+    alert('iOS detection result: ' + isIOS + '\nUser Agent: ' + navigator.userAgent);
+    
+    // TEMPORARILY REMOVE iOS CHECK FOR TESTING
+    // if (!isIOS) return;
     
     // Check if button already exists
-    if (document.getElementById('manual-bark-btn')) return;
+    if (document.getElementById('manual-bark-container')) {
+        alert('Button already exists');
+        return;
+    }
     
     // Check if user already has Bark key saved
     const checkExisting = async () => {
-        if (!CONFIG.myUsername) return;
+        if (!CONFIG.myUsername) {
+            alert('No username yet');
+            return;
+        }
+        
+        alert('Checking if Bark key exists for user: ' + CONFIG.myUsername);
         
         try {
             const userDoc = await db.collection('users').doc(CONFIG.myUsername).get();
             if (userDoc.data()?.barkDeviceKey) {
+                alert('Bark already enabled for this user');
                 console.log('✅ Bark already enabled');
                 return;
             }
         } catch (e) {
             console.log('Could not check Bark status:', e);
+            alert('Error checking Bark status: ' + e.message);
         }
+        
+        alert('Creating manual Bark button...');
         
         // Create button container
         const container = document.createElement('div');
@@ -675,10 +697,15 @@ function showManualBarkButton() {
         let target = document.querySelector('.users-panel');
         if (!target) target = document.querySelector('.right-panels');
         if (!target) target = document.getElementById('users-container')?.parentElement;
+        if (!target) target = document.querySelector('.main-content');
         
         if (target) {
             target.insertBefore(container, target.firstChild);
+            alert('✅ Manual Bark button added to page!');
             console.log('✅ Manual Bark button added');
+        } else {
+            alert('❌ Could not find container for Bark button');
+            console.error('❌ Could not find container for Bark button');
         }
         
         // Setup click handler
@@ -741,12 +768,14 @@ function showManualBarkButton() {
                 }, 2000);
                 
                 console.log('✅ Bark key saved');
+                alert('Bark key saved successfully!');
                 
             } catch (error) {
                 console.error('❌ Failed to save:', error);
                 status.textContent = '❌ Failed to save. Try again.';
                 button.disabled = false;
                 button.textContent = '🔔 Set Up Bark Notifications';
+                alert('Failed to save: ' + error.message);
             }
         };
     };
@@ -886,9 +915,12 @@ document.addEventListener('DOMContentLoaded', function() {
 // ==================== LOGIN COMPLETE EVENT ====================
 window.addEventListener('login-complete', () => {
     console.log('📱 Login complete, checking push subscriptions...');
+    alert('Login complete event fired!');  // DEBUG
     setTimeout(() => {
         window.autoSubscribeToPush();
+        alert('Calling showManualBarkButton...');  // DEBUG
         showManualBarkButton();
+		
         // 🔧 UPDATED: Show Bark button for iOS users with improved detection
         const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
                       (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) ||
