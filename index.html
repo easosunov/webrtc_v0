@@ -464,6 +464,55 @@
         })();
     </script>
     <!-- ==================== END DEBUG PANEL ==================== -->
-    
+  
+    <!-- PERMISSION BUTTON - ADDED FOR TESTING -->
+    <div id="permission-box" style="position: fixed; bottom: 120px; left: 10px; right: 10px; background: #2196F3; padding: 15px; border-radius: 10px; text-align: center; z-index: 99999;">
+        <button id="allow-notif-btn" style="background: white; color: #2196F3; padding: 15px; font-size: 18px; font-weight: bold; border: none; border-radius: 10px; width: 100%; cursor: pointer;">
+            🔔 TAP TO ALLOW NOTIFICATIONS
+        </button>
+        <div id="notif-status" style="color: white; margin-top: 8px; font-size: 12px;"></div>
+    </div>
+
+    <script>
+        (function() {
+            const btn = document.getElementById('allow-notif-btn');
+            const statusDiv = document.getElementById('notif-status');
+            
+            if (!btn) return;
+            
+            btn.onclick = async function() {
+                btn.disabled = true;
+                btn.textContent = 'Requesting...';
+                statusDiv.textContent = 'Please wait...';
+                
+                try {
+                    const permission = await Notification.requestPermission();
+                    console.log('Permission result:', permission);
+                    
+                    if (permission === 'granted') {
+                        statusDiv.innerHTML = '✅ PERMISSION GRANTED! You will now receive calls.';
+                        statusDiv.style.color = '#90EE90';
+                        btn.textContent = '✅ ALLOWED';
+                        btn.style.background = '#4CAF50';
+                        
+                        setTimeout(() => {
+                            location.reload();
+                        }, 1500);
+                    } else {
+                        statusDiv.innerHTML = '❌ Permission denied. Go to Settings → Notifications → WebRTC Communicator → Allow';
+                        statusDiv.style.color = '#ff9999';
+                        btn.disabled = false;
+                        btn.textContent = '🔔 TRY AGAIN';
+                    }
+                } catch (err) {
+                    statusDiv.innerHTML = '❌ Error: ' + err.message;
+                    btn.disabled = false;
+                    btn.textContent = '🔔 TRY AGAIN';
+                }
+            };
+        })();
+    </script>
+
+  
 </body>
 </html>
