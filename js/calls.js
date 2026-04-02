@@ -354,6 +354,7 @@ window.callUser = async function(targetUsername) {
     }
 };
 
+
 // ==================== ANSWER FUNCTION ====================
 window.answerCall = async function(callId, callerId, offer) {
     console.log(`✅ Answering call from ${callerId}`);
@@ -385,6 +386,18 @@ window.answerCall = async function(callId, callerId, offer) {
             answeredAt: firebase.firestore.FieldValue.serverTimestamp()
         });
         
+        // ========== STOP RINGING IMMEDIATELY ==========
+        // This tells the Cloud Function to stop sending notifications
+        try {
+            console.log(`🛑 Telling server to stop ringing for call ${callId}`);
+            const response = await fetch(`https://us-central1-webrtc-v0.cloudfunctions.net/stopRinging?callId=${callId}`);
+            const result = await response.json();
+            console.log('Stop ringing response:', result);
+        } catch (err) {
+            console.error('Failed to stop ringing:', err);
+        }
+        // ========== END STOP RINGING ==========
+        
         console.log('📤 Answer sent');
         
         updateAllCallButtons(callerId, 'incall');
@@ -396,6 +409,7 @@ window.answerCall = async function(callId, callerId, offer) {
             }, 2000);
         }
         
+        // Listen for call end
         const callListener = db.collection('calls').doc(callId).onSnapshot((snapshot) => {
             if (!snapshot.exists) return;
             const data = snapshot.data();
@@ -412,6 +426,7 @@ window.answerCall = async function(callId, callerId, offer) {
             }
         });
         
+        // Listen for ICE candidates
         db.collection('ice-candidates')
             .where('callId', '==', callId)
             .where('fromUserId', '==', callerId)
