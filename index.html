@@ -402,212 +402,141 @@
         }
     </script>
 
-    <!-- ==================== DEBUG PANEL - INSIDE BODY ==================== -->
-    <div id="debug-panel" style="position: fixed; bottom: 10px; left: 10px; right: 10px; background: rgba(0,0,0,0.9); color: #0f0; padding: 12px; font-size: 11px; font-family: monospace; border-radius: 8px; z-index: 99999; backdrop-filter: blur(5px); word-break: break-all; border: 1px solid #0f0;">
-        <div><strong>🔍 DEBUG PANEL</strong></div>
-        <div id="debug-status">Initializing...</div>
+    <!-- ==================== DEBUG PANEL - COMPACT VERSION ==================== -->
+    <div id="debug-panel" style="position: fixed; bottom: 5px; left: 5px; right: 5px; background: rgba(0,0,0,0.8); color: #0f0; padding: 6px; font-size: 9px; font-family: monospace; border-radius: 5px; z-index: 9999; backdrop-filter: blur(5px); display: flex; flex-wrap: wrap; gap: 8px;">
+        <div id="debug-status">🔍...</div>
         <div id="debug-sw-status"></div>
         <div id="debug-permission"></div>
         <div id="debug-pwa"></div>
     </div>
 
     <script>
-        // Debug panel for iPad - shows status without console
+        // Compact debug panel update
         (function() {
             const debugStatus = document.getElementById('debug-status');
             const debugSW = document.getElementById('debug-sw-status');
             const debugPermission = document.getElementById('debug-permission');
             const debugPWA = document.getElementById('debug-pwa');
             
-            function debugLog(message) {
-                console.log(message);
-                if (debugStatus) {
-                    debugStatus.innerHTML = new Date().toLocaleTimeString() + ': ' + message;
-                }
-            }
+            if (debugPermission) debugPermission.innerHTML = '🔔 ' + Notification.permission;
             
-            // Check notification permission
-            debugPermission.innerHTML = '🔔 Notification: ' + Notification.permission;
-            
-            // Check if running as PWA
             const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
-            debugPWA.innerHTML = '📱 PWA Mode: ' + (isStandalone ? 'YES' : 'NO');
+            if (debugPWA) debugPWA.innerHTML = '📱 PWA: ' + (isStandalone ? 'YES' : 'NO');
             
-            // Check service worker
             if ('serviceWorker' in navigator) {
-                debugLog('Service Worker API available');
-                
                 navigator.serviceWorker.ready.then(reg => {
-                    debugLog('✅ SW ready. Active: ' + (reg.active ? 'yes' : 'no'));
-                    if (reg.active) {
-                        debugSW.innerHTML = '✅ Service Worker: ACTIVE (' + reg.active.state + ')';
-                        debugSW.style.color = '#0f0';
-                    } else {
-                        debugSW.innerHTML = '⚠️ Service Worker: registered but NOT active';
-                        debugSW.style.color = '#ff0';
-                    }
+                    if (debugSW) debugSW.innerHTML = '✅ SW: ' + (reg.active ? 'ACTIVE' : 'NO');
                 }).catch(err => {
-                    debugLog('❌ SW error: ' + err.message);
-                    debugSW.innerHTML = '❌ Service Worker error: ' + err.message;
-                    debugSW.style.color = '#f00';
-                });
-                
-                // Also check for existing registrations
-                navigator.serviceWorker.getRegistrations().then(regs => {
-                    debugLog('Total SW registrations: ' + regs.length);
+                    if (debugSW) debugSW.innerHTML = '❌ SW error';
                 });
             } else {
-                debugLog('❌ Service Worker API NOT available');
-                debugSW.innerHTML = '❌ Service Worker NOT supported';
-                debugSW.style.color = '#f00';
+                if (debugSW) debugSW.innerHTML = '❌ SW not supported';
             }
         })();
     </script>
-    <!-- ==================== END DEBUG PANEL ==================== -->
-  
-    <!-- PERMISSION BUTTON - ADDED FOR TESTING -->
-    <div id="permission-box" style="position: fixed; bottom: 120px; left: 10px; right: 10px; background: #2196F3; padding: 15px; border-radius: 10px; text-align: center; z-index: 99999;">
-        <button id="allow-notif-btn" style="background: white; color: #2196F3; padding: 15px; font-size: 18px; font-weight: bold; border: none; border-radius: 10px; width: 100%; cursor: pointer;">
-            🔔 TAP TO ALLOW NOTIFICATIONS
+
+    <!-- ==================== BOTTOM ACTION BUTTONS ==================== -->
+    <div id="action-buttons" style="position: fixed; bottom: 55px; right: 10px; z-index: 9999; display: flex; flex-direction: column; gap: 8px;">
+        <button id="create-push-sub-btn" style="background: #4CAF50; color: white; padding: 8px 12px; font-size: 11px; font-weight: bold; border: none; border-radius: 20px; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.2);">
+            📢 Push Sub
         </button>
-        <div id="notif-status" style="color: white; margin-top: 8px; font-size: 12px;"></div>
+        
+        <button id="allow-notif-btn" style="background: #2196F3; color: white; padding: 8px 12px; font-size: 11px; font-weight: bold; border: none; border-radius: 20px; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.2);">
+            🔔 Allow
+        </button>
     </div>
 
     <script>
-        (function() {
-            const btn = document.getElementById('allow-notif-btn');
-            const statusDiv = document.getElementById('notif-status');
-            
-            if (!btn) return;
-            
-            btn.onclick = async function() {
-                btn.disabled = true;
-                btn.textContent = 'Requesting...';
-                statusDiv.textContent = 'Please wait...';
+        // Push Subscription Button
+        const pushBtn = document.getElementById('create-push-sub-btn');
+        if (pushBtn) {
+            pushBtn.onclick = async function() {
+                pushBtn.disabled = true;
+                pushBtn.textContent = '...';
+                
+                try {
+                    if (!('serviceWorker' in navigator)) throw new Error('SW not supported');
+                    const registration = await navigator.serviceWorker.ready;
+                    let subscription = await registration.pushManager.getSubscription();
+                    
+                    if (subscription) {
+                        alert('✅ Already subscribed!');
+                        pushBtn.disabled = false;
+                        pushBtn.textContent = '📢 Push Sub';
+                        return;
+                    }
+                    
+                    const vapidKey = 'BH33WjtMVo0Y_bml_nke0gtVqahGcPd6m-yjh__LBHp6Ahvfq-vN-m25D2MzMB3e1jbTGwQRGt5ufKEhSyj6Yv0';
+                    const base64 = vapidKey.replace(/-/g, '+').replace(/_/g, '/');
+                    const applicationServerKey = new Uint8Array(atob(base64).split('').map(c => c.charCodeAt(0)));
+                    
+                    subscription = await registration.pushManager.subscribe({
+                        userVisibleOnly: true,
+                        applicationServerKey: applicationServerKey
+                    });
+                    
+                    const subObject = {
+                        endpoint: subscription.endpoint,
+                        expirationTime: subscription.expirationTime,
+                        keys: {
+                            p256dh: btoa(String.fromCharCode.apply(null, new Uint8Array(subscription.getKey('p256dh')))),
+                            auth: btoa(String.fromCharCode.apply(null, new Uint8Array(subscription.getKey('auth'))))
+                        }
+                    };
+                    
+                    if (CONFIG && CONFIG.myUsername) {
+                        await db.collection('users').doc(CONFIG.myUsername).update({
+                            webPushSubscription: subObject
+                        });
+                    }
+                    
+                    alert('✅ Push subscription created!');
+                    
+                } catch (err) {
+                    alert('❌ Error: ' + err.message);
+                } finally {
+                    pushBtn.disabled = false;
+                    pushBtn.textContent = '📢 Push Sub';
+                }
+            };
+        }
+        
+        // Permission Button
+        const permBtn = document.getElementById('allow-notif-btn');
+        if (permBtn) {
+            permBtn.onclick = async function() {
+                permBtn.disabled = true;
+                permBtn.textContent = '...';
                 
                 try {
                     const permission = await Notification.requestPermission();
-                    console.log('Permission result:', permission);
-                    
                     if (permission === 'granted') {
-                        statusDiv.innerHTML = '✅ PERMISSION GRANTED! You will now receive calls.';
-                        statusDiv.style.color = '#90EE90';
-                        btn.textContent = '✅ ALLOWED';
-                        btn.style.background = '#4CAF50';
-                        
-                        setTimeout(() => {
-                            location.reload();
-                        }, 1500);
+                        alert('✅ Permission granted! Page will reload.');
+                        location.reload();
                     } else {
-                        statusDiv.innerHTML = '❌ Permission denied. Go to Settings → Notifications → WebRTC Communicator → Allow';
-                        statusDiv.style.color = '#ff9999';
-                        btn.disabled = false;
-                        btn.textContent = '🔔 TRY AGAIN';
+                        alert('❌ Permission denied');
+                        permBtn.disabled = false;
+                        permBtn.textContent = '🔔 Allow';
                     }
                 } catch (err) {
-                    statusDiv.innerHTML = '❌ Error: ' + err.message;
-                    btn.disabled = false;
-                    btn.textContent = '🔔 TRY AGAIN';
+                    alert('❌ Error: ' + err.message);
+                    permBtn.disabled = false;
+                    permBtn.textContent = '🔔 Allow';
                 }
             };
-        })();
-    </script>
-
-    </script>
-
-<!-- ==================== PUSH SUBSCRIPTION BUTTON ==================== -->
-<div id="push-sub-box" style="position: fixed; bottom: 240px; left: 10px; right: 10px; background: #4CAF50; padding: 15px; border-radius: 10px; text-align: center; z-index: 99999;">
-    <button id="create-push-sub-btn" style="background: white; color: #4CAF50; padding: 15px; font-size: 18px; font-weight: bold; border: none; border-radius: 10px; width: 100%; cursor: pointer;">
-        📢 CREATE PUSH SUBSCRIPTION
-    </button>
-    <div id="push-sub-status" style="color: white; margin-top: 8px; font-size: 12px;"></div>
-</div>
-
-<script>
-    (function() {
-        const btn = document.getElementById('create-push-sub-btn');
-        const statusDiv = document.getElementById('push-sub-status');
-        
-        if (!btn) {
-            console.log('Push subscription button not found');
-            return;
         }
-        
-        btn.onclick = async function() {
-            btn.disabled = true;
-            btn.textContent = 'Creating...';
-            statusDiv.innerHTML = 'Checking service worker...';
-            
-            try {
-                if (!('serviceWorker' in navigator)) {
-                    throw new Error('Service Worker not supported');
-                }
-                
-                const registration = await navigator.serviceWorker.ready;
-                statusDiv.innerHTML = 'Service worker ready, checking existing subscription...';
-                
-                let subscription = await registration.pushManager.getSubscription();
-                
-                if (subscription) {
-                    statusDiv.innerHTML = '✅ Push subscription already exists!';
-                    statusDiv.style.color = '#90EE90';
-                    btn.textContent = '✅ ALREADY REGISTERED';
-                    return;
-                }
-                
-                statusDiv.innerHTML = 'No subscription found, creating one...';
-                
-                const vapidKey = 'BH33WjtMVo0Y_bml_nke0gtVqahGcPd6m-yjh__LBHp6Ahvfq-vN-m25D2MzMB3e1jbTGwQRGt5ufKEhSyj6Yv0';
-                const base64 = vapidKey.replace(/-/g, '+').replace(/_/g, '/');
-                const applicationServerKey = new Uint8Array(atob(base64).split('').map(c => c.charCodeAt(0)));
-                
-                subscription = await registration.pushManager.subscribe({
-                    userVisibleOnly: true,
-                    applicationServerKey: applicationServerKey
-                });
-                
-                statusDiv.innerHTML = '✅ Push subscription created! Saving to account...';
-                
-                // Convert the subscription to a plain object that Firestore can store
-                const subscriptionObject = {
-                    endpoint: subscription.endpoint,
-                    expirationTime: subscription.expirationTime,
-                    keys: {
-                        p256dh: btoa(String.fromCharCode.apply(null, new Uint8Array(subscription.getKey('p256dh')))),
-                        auth: btoa(String.fromCharCode.apply(null, new Uint8Array(subscription.getKey('auth'))))
-                    }
-                };
-                
-                if (CONFIG && CONFIG.myUsername) {
-                    await db.collection('users').doc(CONFIG.myUsername).update({
-                        webPushSubscription: subscriptionObject
-                    });
-                    statusDiv.innerHTML = '✅ Push subscription saved to your account!';
-                    statusDiv.style.color = '#90EE90';
-                    btn.textContent = '✅ SUBSCRIBED';
-                } else {
-                    statusDiv.innerHTML = '⚠️ Created but not saved (not logged in)';
-                }
-                
-                setTimeout(() => {
-                    location.reload();
-                }, 2000);
-                
-            } catch (err) {
-                console.error('Error:', err);
-                statusDiv.innerHTML = '❌ Error: ' + err.message;
-                statusDiv.style.color = '#ff9999';
-                btn.disabled = false;
-                btn.textContent = '📢 TRY AGAIN';
-            }
-        };
-    })();
-</script>
-<!-- ==================== END PUSH SUBSCRIPTION BUTTON ==================== -->
+    </script>
+
+    <style>
+        /* Make sure the orange button is visible */
+        #bark-setup-container {
+            margin: 10px !important;
+            z-index: 100 !important;
+        }
+        .right-panels {
+            padding-bottom: 80px !important;
+        }
+    </style>
   
-</body>
-</html>
-
-
 </body>
 </html>
