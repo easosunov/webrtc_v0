@@ -435,7 +435,7 @@
         })();
     </script>
 
-    <!-- ==================== BOTTOM ACTION BUTTONS (AUTO-HIDE) ==================== -->
+    <!-- ==================== BOTTOM ACTION BUTTONS ==================== -->
     <div id="action-buttons" style="position: fixed; bottom: 55px; right: 10px; z-index: 9999; display: flex; flex-direction: column; gap: 8px;">
         <button id="create-push-sub-btn" style="background: #4CAF50; color: white; padding: 8px 12px; font-size: 11px; font-weight: bold; border: none; border-radius: 20px; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.2);">
             📢 Push Sub
@@ -447,13 +447,20 @@
     </div>
 
     <script>
-        // Auto-hide buttons when already completed
-        async function updateButtonVisibility() {
+        function hidePushButton() {
+            const btn = document.getElementById('create-push-sub-btn');
+            if (btn) btn.style.display = 'none';
+        }
+        
+        function hideAllowButton() {
+            const btn = document.getElementById('allow-notif-btn');
+            if (btn) btn.style.display = 'none';
+        }
+        
+        async function checkAndHideButtons() {
             // Check notification permission
-            const allowBtn = document.getElementById('allow-notif-btn');
-            if (allowBtn && Notification.permission === 'granted') {
-                allowBtn.style.display = 'none';
-                console.log('🔔 Allow button hidden - permission already granted');
+            if (Notification.permission === 'granted') {
+                hideAllowButton();
             }
             
             // Check push subscription
@@ -461,30 +468,30 @@
                 try {
                     const registration = await navigator.serviceWorker.ready;
                     const subscription = await registration.pushManager.getSubscription();
-                    const pushBtn = document.getElementById('create-push-sub-btn');
-                    if (pushBtn && subscription) {
-                        pushBtn.style.display = 'none';
-                        console.log('📢 Push button hidden - subscription exists');
+                    if (subscription) {
+                        hidePushButton();
                     }
-                } catch (err) {
-                    console.log('Push check error:', err);
+                } catch (e) {
+                    console.log('Push check error:', e);
                 }
             }
         }
         
-        // Run on page load
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', updateButtonVisibility);
-        } else {
-            updateButtonVisibility();
-        }
-        
-        // Also run after login
+        // Run check AFTER login (when user is authenticated)
         window.addEventListener('login-complete', () => {
-            setTimeout(updateButtonVisibility, 1000);
+            setTimeout(checkAndHideButtons, 2000);
         });
         
-        // Push Subscription Button
+        // Also run when page becomes visible (user returns to app)
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) {
+                setTimeout(checkAndHideButtons, 1000);
+            }
+        });
+        
+        // ============================================================
+        // PUSH SUBSCRIPTION BUTTON
+        // ============================================================
         const pushBtn = document.getElementById('create-push-sub-btn');
         if (pushBtn) {
             pushBtn.onclick = async function() {
@@ -498,7 +505,9 @@
                     
                     if (subscription) {
                         alert('✅ Already subscribed!');
-                        pushBtn.style.display = 'none';
+                        hidePushButton();
+                        pushBtn.disabled = false;
+                        pushBtn.textContent = '📢 Push Sub';
                         return;
                     }
                     
@@ -527,7 +536,7 @@
                     }
                     
                     alert('✅ Push subscription created!');
-                    pushBtn.style.display = 'none';
+                    hidePushButton();
                     
                 } catch (err) {
                     alert('❌ Error: ' + err.message);
@@ -537,7 +546,9 @@
             };
         }
         
-        // Permission Button
+        // ============================================================
+        // PERMISSION BUTTON
+        // ============================================================
         const permBtn = document.getElementById('allow-notif-btn');
         if (permBtn) {
             permBtn.onclick = async function() {
@@ -548,8 +559,9 @@
                     const permission = await Notification.requestPermission();
                     if (permission === 'granted') {
                         alert('✅ Permission granted!');
-                        permBtn.style.display = 'none';
-                        setTimeout(updateButtonVisibility, 500);
+                        hideAllowButton();
+                        // Check push subscription after permission granted
+                        setTimeout(checkAndHideButtons, 1000);
                     } else {
                         alert('❌ Permission denied');
                         permBtn.disabled = false;
@@ -565,7 +577,6 @@
     </script>
 
     <style>
-        /* Ensure orange button is visible */
         #bark-setup-container {
             margin: 10px !important;
             z-index: 100 !important;
