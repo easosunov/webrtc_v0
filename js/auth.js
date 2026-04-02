@@ -125,6 +125,115 @@ function handleKeypadInput(digit) {
     updateDisplay();
 }
 
+// ==================== SINGLE ACTIVE DEVICE MANAGEMENT ====================
+
+async function setActiveDevice(username) {
+    console.log(`🔧 Setting active device for ${username}`);
+    
+    // Detect current device type
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+                  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const isAndroid = /Android/.test(navigator.userAgent);
+    const deviceType = isIOS ? 'ios' : (isAndroid ? 'android' : 'desktop');
+    
+    console.log(`📱 Device type detected: ${deviceType}`);
+    
+    // Get current user document
+    const userRef = db.collection('users').doc(username);
+    const userDoc = await userRef.get();
+    const userData = userDoc.data() || {};
+    
+    // Prepare updates - CLEAR ALL push tokens first
+    const updates = {
+        // Clear ALL existing tokens
+        fcmToken: firebase.firestore.FieldValue.delete(),
+        fcmEnabled: firebase.firestore.FieldValue.delete(),
+        barkDeviceKey: firebase.firestore.FieldValue.delete(),
+        barkEnabled: firebase.firestore.FieldValue.delete(),
+        webPushSubscription: firebase.firestore.FieldValue.delete(),
+        webPushEnabled: firebase.firestore.FieldValue.delete(),
+        
+        // Set active device info
+        activeDevice: deviceType,
+        activeDeviceLastSeen: firebase.firestore.FieldValue.serverTimestamp(),
+        lastLogin: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    
+    // Now add back ONLY the token for THIS device type
+    if (deviceType === 'ios') {
+        // For iOS, we need the Bark key (preserve existing if any)
+        if (userData.barkDeviceKey) {
+            updates.barkDeviceKey = userData.barkDeviceKey;
+            updates.barkEnabled = true;
+            console.log('🍎 iOS device - keeping existing Bark key');
+        } else {
+            console.log('🍎 iOS device - no Bark key found, user will need to set it up');
+        }
+    } 
+    else if (deviceType === 'android') {
+        // For Android, create new FCM token
+        if (window.messaging) {
+            try {
+                const token = await window.messaging.getToken({
+                    vapidKey: window.VAPID_PUBLIC_KEY
+                });
+                if (token) {
+                    updates.fcmToken = token;
+                    updates.fcmEnabled = true;
+                    console.log('📱 Android FCM token obtained');
+                }
+            } catch (err) {
+                console.log('FCM token error:', err);
+            }
+        }
+    }
+    else {
+        // For desktop, create Web Push subscription
+        if ('serviceWorker' in navigator) {
+            try {
+                const registration = await navigator.serviceWorker.ready;
+                let subscription = await registration.pushManager.getSubscription();
+                
+                if (!subscription) {
+                    const vapidKey = window.VAPID_PUBLIC_KEY;
+                    const base64 = vapidKey.replace(/-/g, '+').replace(/_/g, '/');
+                    const applicationServerKey = new Uint8Array(atob(base64).split('').map(c => c.charCodeAt(0)));
+                    
+                    subscription = await registration.pushManager.subscribe({
+                        userVisibleOnly: true,
+                        applicationServerKey: applicationServerKey
+                    });
+                }
+                
+                if (subscription) {
+                    const subObject = {
+                        endpoint: subscription.endpoint,
+                        expirationTime: subscription.expirationTime,
+                        keys: {
+                            p256dh: btoa(String.fromCharCode.apply(null, new Uint8Array(subscription.getKey('p256dh')))),
+                            auth: btoa(String.fromCharCode.apply(null, new Uint8Array(subscription.getKey('auth'))))
+                        }
+                    };
+                    updates.webPushSubscription = subObject;
+                    updates.webPushEnabled = true;
+                    console.log('💻 Web Push subscription saved');
+                }
+            } catch (err) {
+                console.log('Web Push error:', err);
+            }
+        }
+    }
+    
+    // Apply the updates
+    await userRef.update(updates);
+    console.log(`✅ Active device set to: ${deviceType}`);
+    
+    // Store device type locally for reference
+    localStorage.setItem('activeDevice', deviceType);
+    
+    return deviceType;
+}
+
 // ==================== CLEAR OLD ICE-CANDIDATES ON LOGIN ====================
 async function clearOldIceCandidates() {
     console.log('🧹 Entering clearOldIceCandidates function');
@@ -300,7 +409,6 @@ async function setupAndroidFCM() {
     }
 }
 
-
 // ==================== AUTHENTICATION ====================
 async function login() {
     console.log('🚨 Login function called!');
@@ -352,6 +460,11 @@ async function login() {
         
         console.log('✅ UI updated, showing call screen');
         
+        // ===== SET ACTIVE DEVICE - THIS CLEANS UP OLD TOKENS =====
+        console.log('🔜 Setting active device and cleaning old tokens...');
+        await setActiveDevice(CONFIG.myUsername);
+        console.log('✅ Active device set');
+        
         // ===== CLEAR OLD ICE-CANDIDATES ON LOGIN =====
         console.log('🔜 About to call clearOldIceCandidates...');
         await clearOldIceCandidates();
@@ -399,9 +512,6 @@ async function login() {
         // ===== SHOW INSTALL BUTTON (ONCE) =====
         await checkAndShowInstallButton();
         
-        // ===== ANDROID FCM TOKEN SETUP =====
-        await setupAndroidFCM();
-        
         // ===== DISPATCH LOGIN COMPLETE EVENT =====
         window.dispatchEvent(new CustomEvent('login-complete', { 
             detail: { username: CONFIG.myUsername } 
@@ -421,6 +531,19 @@ async function logout() {
     console.log('Logout function called');
     try {
         if (window.hangup) await window.hangup();
+        
+        // Clean up active device on logout
+        if (CONFIG.myUsername) {
+            try {
+                await db.collection('users').doc(CONFIG.myUsername).update({
+                    activeDevice: firebase.firestore.FieldValue.delete(),
+                    lastLogout: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                console.log('✅ Active device cleared on logout');
+            } catch (err) {
+                console.log('Logout cleanup error:', err);
+            }
+        }
         
         if (CONFIG.localStream) {
             CONFIG.localStream.getTracks().forEach(track => track.stop());
@@ -449,3 +572,4 @@ async function logout() {
 // Make functions available globally
 window.login = login;
 window.logout = logout;
+window.setActiveDevice = setActiveDevice;
