@@ -478,6 +478,7 @@ window.listenForIncomingCalls = function() {
     
     console.log(`👂 Listening for incoming calls as ${CONFIG.myUsername}...`);
     
+    // Listener for NEW incoming calls (ringing)
     db.collection('calls')
         .where('calleeId', '==', CONFIG.myUsername)
         .where('status', '==', 'ringing')
@@ -501,6 +502,34 @@ window.listenForIncomingCalls = function() {
             });
         }, (error) => {
             console.log(`❌ Error listening for calls: ${error.message}`);
+        });
+    
+    // ========== NEW: Listener for STATUS CHANGES on calls ==========
+    // This closes the modal when the caller hangs up or call ends
+    db.collection('calls')
+        .where('calleeId', '==', CONFIG.myUsername)
+        .onSnapshot((snapshot) => {
+            snapshot.docChanges().forEach(change => {
+                // Check for modified calls (status changed)
+                if (change.type === 'modified') {
+                    const callData = change.doc.data();
+                    const callId = change.doc.id;
+                    
+                    // If there's an active incoming call modal and this call is no longer ringing
+                    if (CONFIG.currentIncomingCall && 
+                        CONFIG.currentIncomingCall.callId === callId && 
+                        callData.status !== 'ringing') {
+                        
+                        console.log(`📞 Call ${callId} status changed to ${callData.status}, closing modal and stopping ringtone`);
+                        
+                        if (window.hideIncomingCallModal) {
+                            window.hideIncomingCallModal();
+                        }
+                    }
+                }
+            });
+        }, (error) => {
+            console.log(`❌ Error listening for call status changes: ${error.message}`);
         });
 };
 
