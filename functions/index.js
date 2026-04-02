@@ -193,7 +193,7 @@ async function startBarkRinging(userId, callerName, callId, callerId) {
                 endedAt: admin.firestore.FieldValue.serverTimestamp()
             }).catch(err => logger.error(`Failed to update timeout status: ${err.message}`));
         }
-    }, 30000);
+    }, 60000);
 }
 
 // ==================== CLOUD FUNCTIONS ====================
