@@ -1,5 +1,10 @@
 // Global DOM object
+// VERSION: 2.0 - ADDED PERMANENT TEST BUTTON
+console.log('🚀 UI.JS VERSION 2.0 - PERMANENT TEST BUTTON ADDED');
+alert('UI.JS VERSION 2.0 - If you see this, cache is cleared!');
+
 window.dom = {};
+
 
 // Flag to track UI initialization
 let uiInitialized = false;
