@@ -376,6 +376,43 @@ exports.rejectCall = onRequest(async (req, res) => {
     }
 });
 
+exports.stopRinging = onRequest(async (req, res) => {
+    const callId = req.query.callId;
+    
+    logger.log(`🛑 STOP RINGING requested for call ${callId}`);
+    
+    if (!callId) {
+        res.status(400).json({ error: 'Missing callId' });
+        return;
+    }
+    
+    let stopped = false;
+    
+    // Clean up Android intervals
+    if (activeCalls.has(callId)) {
+        clearInterval(activeCalls.get(callId));
+        activeCalls.delete(callId);
+        logger.log(`✅ Stopped FCM ringing for call ${callId}`);
+        stopped = true;
+    }
+    
+    // Clean up Bark intervals
+    const barkKey = `bark_${callId}`;
+    if (activeCalls.has(barkKey)) {
+        clearInterval(activeCalls.get(barkKey));
+        activeCalls.delete(barkKey);
+        logger.log(`✅ Stopped Bark ringing for call ${callId}`);
+        stopped = true;
+    }
+    
+    res.status(200).json({ success: true, stopped: stopped });
+});
+
+exports.cleanupStaleRingingCalls = onRequest(async (req, res) => {
+    // ... existing code ...
+});
+
+
 // Clean up stale ringing calls (can be triggered by cron job)
 exports.cleanupStaleRingingCalls = onRequest(async (req, res) => {
     try {
