@@ -1,7 +1,6 @@
 /**
  * Cloud Functions for WebRTC Communicator
- * Dual Push System: FCM for Android, Bark for iOS, Web Push for other browsers
- * iOS: Repeated Bark pushes every 3 seconds to simulate ringing
+ * Single Active Device: Only the last logged-in device receives notifications
  */
 
 const { onDocumentCreated, onDocumentUpdated } = require('firebase-functions/v2/firestore');
@@ -84,7 +83,6 @@ async function startRinging(userId, callerName, callId, callerId) {
     
     // Set up interval for repeated pushes every 3 seconds
     const interval = setInterval(async () => {
-        // Check if call still exists and is still ringing
         const callDoc = await db.collection('calls').doc(callId).get();
         if (!callDoc.exists) {
             logger.log(`📞 Call ${callId} ended, stopping Android ringing`);
@@ -94,7 +92,6 @@ async function startRinging(userId, callerName, callId, callerId) {
         }
         
         const callData = callDoc.data();
-        // Stop if call is no longer ringing (answered, cancelled, rejected, timeout)
         if (callData.status !== 'ringing') {
             logger.log(`📞 Call ${callId} status changed to ${callData.status}, stopping Android ringing`);
             clearInterval(interval);
@@ -102,21 +99,19 @@ async function startRinging(userId, callerName, callId, callerId) {
             return;
         }
         
-        // Send another push
         await sendAndroidPush(userId, callerName, callId, callerId);
         
     }, 3000);
     
     activeCalls.set(callId, interval);
     
-    // Auto-stop after 120 seconds (40 pushes max)
+    // Auto-stop after 120 seconds
     setTimeout(() => {
         if (activeCalls.has(callId)) {
             logger.log(`⏰ Android ringing timeout for call ${callId}`);
             clearInterval(activeCalls.get(callId));
             activeCalls.delete(callId);
             
-            // Update call status to timeout
             db.collection('calls').doc(callId).update({
                 status: 'timeout',
                 endedAt: admin.firestore.FieldValue.serverTimestamp()
@@ -127,7 +122,6 @@ async function startRinging(userId, callerName, callId, callerId) {
 
 // ==================== iOS (BARK) PUSH FUNCTIONS ====================
 
-// Send a single Bark notification
 async function sendBarkPush(userId, callerName, callId, callerId) {
     const userDoc = await db.collection('users').doc(userId).get();
     if (!userDoc.exists) return false;
@@ -140,7 +134,7 @@ async function sendBarkPush(userId, callerName, callId, callerId) {
     const barkUrl = `https://api.day.app/${deviceKey}/Incoming Call/${encodedCallerName}?call=1&group=call_${callId}&level=critical&sound=ringtone`;
     
     try {
-        const response = await fetch(barkUrl);
+        await fetch(barkUrl);
         logger.log(`🍎 Bark notification sent to ${userId} for call ${callId}`);
         return true;
     } catch (error) {
@@ -149,9 +143,7 @@ async function sendBarkPush(userId, callerName, callId, callerId) {
     }
 }
 
-// Send repeated Bark pushes for ringing calls (iOS only)
 async function startBarkRinging(userId, callerName, callId, callerId) {
-    // Clear any existing interval for this call
     const barkKey = `bark_${callId}`;
     if (activeCalls.has(barkKey)) {
         clearInterval(activeCalls.get(barkKey));
@@ -160,12 +152,9 @@ async function startBarkRinging(userId, callerName, callId, callerId) {
     
     logger.log(`🔔 Starting Bark ringing for call ${callId} to ${userId}`);
     
-    // Send first push immediately
     await sendBarkPush(userId, callerName, callId, callerId);
     
-    // Set up interval for repeated pushes every 3 seconds
     const interval = setInterval(async () => {
-        // Check if call still exists and is still ringing
         const callDoc = await db.collection('calls').doc(callId).get();
         if (!callDoc.exists) {
             logger.log(`📞 Call ${callId} ended, stopping Bark ringing`);
@@ -175,7 +164,6 @@ async function startBarkRinging(userId, callerName, callId, callerId) {
         }
         
         const callData = callDoc.data();
-        // Stop if call is no longer ringing (answered, cancelled, rejected, timeout)
         if (callData.status !== 'ringing') {
             logger.log(`📞 Call ${callId} status changed to ${callData.status}, stopping Bark ringing`);
             clearInterval(interval);
@@ -183,21 +171,18 @@ async function startBarkRinging(userId, callerName, callId, callerId) {
             return;
         }
         
-        // Send another Bark push
         await sendBarkPush(userId, callerName, callId, callerId);
         
     }, 3000);
     
     activeCalls.set(barkKey, interval);
     
-    // Auto-stop after 120 seconds (40 pushes max)
     setTimeout(() => {
         if (activeCalls.has(barkKey)) {
             logger.log(`⏰ Bark ringing timeout for call ${callId}`);
             clearInterval(activeCalls.get(barkKey));
             activeCalls.delete(barkKey);
             
-            // Update call status to timeout
             db.collection('calls').doc(callId).update({
                 status: 'timeout',
                 endedAt: admin.firestore.FieldValue.serverTimestamp()
@@ -223,24 +208,118 @@ exports.onCallCreated = onDocumentCreated('calls/{callId}', async (event) => {
             ? (callerDoc.data().displayname || callerDoc.data().displayName || call.callerId)
             : call.callerId;
         
-        // Get callee's user data
         const calleeDoc = await db.collection('users').doc(call.calleeId).get();
         const calleeData = calleeDoc.data() || {};
         
-        const hasFCM = !!calleeData.fcmToken;
-        const hasBark = !!calleeData.barkDeviceKey;
+        // Log ALL available data for debugging
+        logger.log(`🔍 User ${call.calleeId} data: activeDevice=${calleeData.activeDevice}, hasBark=${!!calleeData.barkDeviceKey}, hasFCM=${!!calleeData.fcmToken}, hasWebPush=${!!calleeData.webPushSubscription}`);
         
-        if (hasFCM) {
-            // Android: start repeated ringing via FCM
-            logger.log(`📱 Android user detected, starting FCM ringing for ${call.calleeId}`);
-            await startRinging(call.calleeId, callerName, callId, call.callerId);
-        } else if (hasBark) {
-            // iOS: start repeated ringing via Bark
-            logger.log(`🍎 iOS user detected, starting Bark ringing for ${call.calleeId}`);
+        // Check for Bark FIRST - before any fallback
+        if (calleeData.barkDeviceKey) {
+            logger.log(`🍎 Sending Bark to iOS device for ${call.calleeId}`);
             await startBarkRinging(call.calleeId, callerName, callId, call.callerId);
-        } else {
-            // Fallback to Web Push (single push)
-            if (calleeData?.webPushSubscription) {
+        } 
+        else if (calleeData.fcmToken) {
+            logger.log(`📱 Sending FCM to Android device for ${call.calleeId}`);
+            await startRinging(call.calleeId, callerName, callId, call.callerId);
+        } 
+        else if (calleeData.webPushSubscription) {
+            logger.log(`💻 Sending Web Push to desktop for ${call.calleeId}`);
+            const webPayload = JSON.stringify({
+                title: '📞 Incoming Call',
+                body: `Call from ${callerName}`,
+                icon: 'https://easosunov.github.io/webrtc_v0/favicon.ico',
+                callId: callId,
+                callerId: call.callerId,
+                callerName: callerName,
+                url: '/webrtc_v0/'
+            });
+            await webpush.sendNotification(calleeData.webPushSubscription, webPayload);
+        }
+        else {
+            logger.log(`⚠️ No push method available for ${call.calleeId}`);
+        }
+        
+        // Log notification
+        await db.collection('notifications').add({
+            userId: call.calleeId,
+            callId: callId,
+            callerId: call.callerId,
+            callerName: callerName,
+            method: calleeData.barkDeviceKey ? 'bark' : (calleeData.fcmToken ? 'fcm' : (calleeData.webPushSubscription ? 'webpush' : 'none')),
+            status: 'sent',
+            timestamp: admin.firestore.FieldValue.serverTimestamp()
+        });
+        
+    } catch (error) {
+        logger.error(`❌ Push error:`, error.message);
+    }
+    
+    return null;
+});
+
+    const call = event.data.data();
+    const callId = event.params.callId;
+
+    logger.log(`📞 New call: ${callId}`);
+
+    if (call.status !== 'ringing') return null;
+    if (call.callerId === call.calleeId) return null;
+
+    try {
+        const callerDoc = await db.collection('users').doc(call.callerId).get();
+        const callerName = callerDoc.exists
+            ? (callerDoc.data().displayname || callerDoc.data().displayName || call.callerId)
+            : call.callerId;
+        
+        const calleeDoc = await db.collection('users').doc(call.calleeId).get();
+        const calleeData = calleeDoc.data() || {};
+        
+        // Check the active device type
+        const activeDevice = calleeData.activeDevice; // 'ios', 'android', or 'desktop'
+        
+        logger.log(`📱 Active device for ${call.calleeId}: ${activeDevice || 'unknown'}`);
+        
+        let notificationSent = false;
+        
+        // Send notification based on active device
+        if (activeDevice === 'ios' && calleeData.barkDeviceKey) {
+            logger.log(`🍎 Sending Bark to iOS device for ${call.calleeId}`);
+            await startBarkRinging(call.calleeId, callerName, callId, call.callerId);
+            notificationSent = true;
+        } 
+        else if (activeDevice === 'android' && calleeData.fcmToken) {
+            logger.log(`📱 Sending FCM to Android device for ${call.calleeId}`);
+            await startRinging(call.calleeId, callerName, callId, call.callerId);
+            notificationSent = true;
+        } 
+        else if (activeDevice === 'desktop' && calleeData.webPushSubscription) {
+            logger.log(`💻 Sending Web Push to desktop for ${call.calleeId}`);
+            const webPayload = JSON.stringify({
+                title: '📞 Incoming Call',
+                body: `Call from ${callerName}`,
+                icon: 'https://easosunov.github.io/webrtc_v0/favicon.ico',
+                callId: callId,
+                callerId: call.callerId,
+                callerName: callerName,
+                url: '/webrtc_v0/'
+            });
+            await webpush.sendNotification(calleeData.webPushSubscription, webPayload);
+            notificationSent = true;
+        }
+        
+        // Fallback: try to detect from available tokens
+        if (!notificationSent) {
+            if (calleeData.barkDeviceKey) {
+                logger.log(`🍎 Fallback: Sending Bark to ${call.calleeId}`);
+                await startBarkRinging(call.calleeId, callerName, callId, call.callerId);
+                notificationSent = true;
+            } else if (calleeData.fcmToken) {
+                logger.log(`📱 Fallback: Sending FCM to ${call.calleeId}`);
+                await startRinging(call.calleeId, callerName, callId, call.callerId);
+                notificationSent = true;
+            } else if (calleeData.webPushSubscription) {
+                logger.log(`💻 Fallback: Sending Web Push to ${call.calleeId}`);
                 const webPayload = JSON.stringify({
                     title: '📞 Incoming Call',
                     body: `Call from ${callerName}`,
@@ -250,9 +329,8 @@ exports.onCallCreated = onDocumentCreated('calls/{callId}', async (event) => {
                     callerName: callerName,
                     url: '/webrtc_v0/'
                 });
-                
                 await webpush.sendNotification(calleeData.webPushSubscription, webPayload);
-                logger.log(`✅ Web Push sent to ${call.calleeId}`);
+                notificationSent = true;
             } else {
                 logger.log(`⚠️ No push method available for ${call.calleeId}`);
             }
@@ -264,7 +342,7 @@ exports.onCallCreated = onDocumentCreated('calls/{callId}', async (event) => {
             callId: callId,
             callerId: call.callerId,
             callerName: callerName,
-            method: hasFCM ? 'fcm_ringing' : (hasBark ? 'bark_ringing' : 'webpush'),
+            method: activeDevice || 'fallback',
             status: 'sent',
             timestamp: admin.firestore.FieldValue.serverTimestamp()
         });
@@ -283,21 +361,18 @@ exports.onCallEnded = onDocumentUpdated('calls/{callId}', async (event) => {
     
     const callId = event.params.callId;
     
-    // Check if call status changed FROM 'ringing' TO any non-ringing status
     const wasRinging = before.status === 'ringing';
-    const isEnded = after.status !== 'ringing';  // includes: answered, ended, cancelled, rejected, timeout
+    const isEnded = after.status !== 'ringing';
     
     if (wasRinging && isEnded) {
         logger.log(`📞 Call ${callId} changed from ${before.status} to ${after.status}, stopping all ringing`);
         
-        // Clean up Android intervals
         if (activeCalls.has(callId)) {
             logger.log(`🛑 Stopping FCM ringing for call ${callId}`);
             clearInterval(activeCalls.get(callId));
             activeCalls.delete(callId);
         }
         
-        // Clean up Bark intervals
         const barkKey = `bark_${callId}`;
         if (activeCalls.has(barkKey)) {
             logger.log(`🍎 Stopping Bark ringing for call ${callId}`);
@@ -346,14 +421,12 @@ exports.rejectCall = onRequest(async (req, res) => {
         
         const call = callDoc.data();
         
-        // Only reject if call is still ringing
         if (call.status === 'ringing') {
             await db.collection('calls').doc(callId).update({
                 status: 'rejected',
                 endedAt: admin.firestore.FieldValue.serverTimestamp()
             });
             
-            // Clean up intervals immediately
             if (activeCalls.has(callId)) {
                 clearInterval(activeCalls.get(callId));
                 activeCalls.delete(callId);
@@ -364,7 +437,7 @@ exports.rejectCall = onRequest(async (req, res) => {
                 activeCalls.delete(barkKey);
             }
             
-            logger.log(`📞 Call ${callId} rejected via notification dismiss`);
+            logger.log(`📞 Call ${callId} rejected`);
             res.status(200).json({ success: true, status: 'rejected' });
         } else {
             res.status(200).json({ success: true, status: call.status });
@@ -376,10 +449,10 @@ exports.rejectCall = onRequest(async (req, res) => {
     }
 });
 
-// Clean up stale ringing calls (can be triggered by cron job)
+// Clean up stale ringing calls
 exports.cleanupStaleRingingCalls = onRequest(async (req, res) => {
     try {
-        const staleTime = Date.now() - 120000; // 2 minutes ago
+        const staleTime = Date.now() - 120000;
         const staleCalls = await db.collection('calls')
             .where('status', '==', 'ringing')
             .get();
@@ -393,7 +466,6 @@ exports.cleanupStaleRingingCalls = onRequest(async (req, res) => {
                 const callId = doc.id;
                 logger.log(`🧹 Cleaning up stale call: ${callId}`);
                 
-                // Clean up intervals
                 if (activeCalls.has(callId)) {
                     clearInterval(activeCalls.get(callId));
                     activeCalls.delete(callId);
@@ -404,7 +476,6 @@ exports.cleanupStaleRingingCalls = onRequest(async (req, res) => {
                     activeCalls.delete(barkKey);
                 }
                 
-                // Update call status
                 await doc.ref.update({
                     status: 'timeout',
                     endedAt: admin.firestore.FieldValue.serverTimestamp()
