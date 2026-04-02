@@ -453,21 +453,135 @@ window.showEnablePushButton = function() {
 // ==================== BARK (iOS) REGISTRATION - SIMPLIFIED ====================
 
 // Extract key from URL
-function extractBarkKey(input) {
-    if (!input) return null;
-    input = input.trim();
+// SIMPLE BUTTON - with debugging
+function addBarkSetupButton() {
+    console.log('🔍 addBarkSetupButton() STARTED');
     
-    if (input.includes('api.day.app/')) {
-        const match = input.match(/api\.day\.app\/([^\/]+)/);
-        if (match && match[1]) return match[1];
+    // Remove any existing button first
+    const existing = document.getElementById('bark-setup-container');
+    if (existing) {
+        console.log('Removing existing button container');
+        existing.remove();
     }
     
-    if (input.length > 20 && /^[a-zA-Z0-9]+$/.test(input)) {
-        return input;
+    // Check if user is logged in
+    if (!CONFIG || !CONFIG.myUsername) {
+        console.log('❌ No user logged in (CONFIG.myUsername is null/undefined)');
+        return;
     }
     
-    return null;
+    console.log('✅ User is logged in:', CONFIG.myUsername);
+    
+    const checkAndAdd = async () => {
+        console.log('🔍 checkAndAdd() STARTED');
+        
+        try {
+            const userDoc = await db.collection('users').doc(CONFIG.myUsername).get();
+            const userData = userDoc.data();
+            console.log('User data retrieved:', userData ? 'has data' : 'no data');
+            
+            if (userData && userData.barkDeviceKey) {
+                console.log('✅ Bark already enabled for this user - skipping button');
+                return;
+            }
+            console.log('No Bark key found - creating button');
+        } catch (e) {
+            console.log('Error checking user data:', e.message);
+        }
+        
+        // Create button container
+        console.log('Creating button container...');
+        const container = document.createElement('div');
+        container.id = 'bark-setup-container';
+        container.style.cssText = 'background: #ff9800; padding: 15px; margin: 10px 0; border-radius: 10px; text-align: center;';
+        
+        const button = document.createElement('button');
+        button.textContent = '🍎 Set Up iOS Call Notifications (Bark)';
+        button.style.cssText = 'background: white; color: #ff9800; padding: 12px; border: none; border-radius: 8px; width: 100%; font-size: 14px; font-weight: bold; cursor: pointer;';
+        
+        button.onclick = async () => {
+            console.log('Button clicked!');
+            button.disabled = true;
+            button.textContent = 'Setting up...';
+            
+            const barkUrl = prompt(
+                '🍎 Set up iOS Call Notifications\n\n' +
+                '1. Open the Bark app\n' +
+                '2. Tap the "Service" tab\n' +
+                '3. Tap "Copy Test"\n' +
+                '4. Paste the URL here\n\n' +
+                'Paste the URL here:'
+            );
+            
+            if (!barkUrl) {
+                button.disabled = false;
+                button.textContent = '🍎 Set Up iOS Call Notifications (Bark)';
+                return;
+            }
+            
+            // Extract key from URL
+            let barkKey = null;
+            if (barkUrl.includes('api.day.app/')) {
+                const match = barkUrl.match(/api\.day\.app\/([^\/]+)/);
+                if (match) barkKey = match[1];
+            }
+            
+            if (!barkKey && barkUrl.length > 20) {
+                barkKey = barkUrl;
+            }
+            
+            if (!barkKey) {
+                alert('❌ Invalid URL. Please copy the full URL from Bark.');
+                button.disabled = false;
+                button.textContent = '🍎 Set Up iOS Call Notifications (Bark)';
+                return;
+            }
+            
+            try {
+                await db.collection('users').doc(CONFIG.myUsername).update({
+                    barkDeviceKey: barkKey,
+                    barkEnabled: true,
+                    barkLastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                
+                localStorage.setItem('bark_device_key', barkKey);
+                alert('✅ Bark notifications enabled!');
+                container.remove();
+                
+            } catch (error) {
+                console.error('❌ Failed to save:', error);
+                alert('❌ Failed to save: ' + error.message);
+                button.disabled = false;
+                button.textContent = '🍎 Set Up iOS Call Notifications (Bark)';
+            }
+        };
+        
+        container.appendChild(button);
+        
+        // Find where to add the button
+        console.log('Looking for container to add button...');
+        let target = document.querySelector('.users-panel');
+        if (!target) target = document.querySelector('.right-panels');
+        if (!target) target = document.getElementById('users-container')?.parentElement;
+        if (!target) target = document.querySelector('.main-content');
+        
+        console.log('Target found?', target ? 'YES' : 'NO');
+        if (target) {
+            target.insertBefore(container, target.firstChild);
+            console.log('✅ Bark setup button added to page!');
+            // Also show a temporary alert for debugging
+            alert('Bark button added! Look for the orange box.');
+        } else {
+            console.error('❌ Could not find container for Bark button');
+            alert('Could not find where to add the button. Check console.');
+        }
+    };
+    
+    checkAndAdd();
 }
+
+
+
 
 // Save Bark key
 async function saveBarkDeviceKey() {
@@ -687,15 +801,22 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
+
 // ==================== LOGIN COMPLETE EVENT ====================
 window.addEventListener('login-complete', () => {
-    console.log('📱 Login complete');
+    console.log('📱 Login complete event FIRED');
+    alert('Login complete!');  // DEBUG - will confirm event fires
+    
     setTimeout(() => {
+        console.log('Calling autoSubscribeToPush...');
         window.autoSubscribeToPush();
-        // SIMPLE: Just add the Bark button
+        
+        console.log('Calling addBarkSetupButton...');
+        alert('About to add Bark button');  // DEBUG
         addBarkSetupButton();
     }, 1000);
 });
+
 
 // ==================== CHECK ON PAGE LOAD ====================
 setTimeout(() => {
