@@ -51,7 +51,8 @@ async function sendAndroidPush(userId, callerName, callId, callerId) {
                 priority: 'high',
                 defaultSound: true,
                 defaultVibrateTimings: true,
-                sticky: true
+                sticky: true,
+                onlyAlertOnce: true  // 🔧 ADD THIS - plays sound only for first notification
             }
         }
     };
@@ -65,6 +66,7 @@ async function sendAndroidPush(userId, callerName, callId, callerId) {
         return false;
     }
 }
+
 
 // Android ringing using recursive setTimeout
 async function startRinging(userId, callerName, callId, callerId) {
