@@ -1,518 +1,83 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, shrink-to-fit=no">
-    <title>WebRTC Communicator</title>
-    
-    <!-- PWA Manifest -->
-    <link rel="manifest" href="/webrtc_v0/manifest.json">
-    <meta name="theme-color" content="#667eea">
-    
-    <!-- iOS Web App Settings -->
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="WebRTC Chat">
-    <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23667eea'/%3E%3Ctext x='50' y='70' font-size='50' text-anchor='middle' fill='white'%3E📞%3C/text%3E%3C/svg%3E">
-    
-    <!-- Main Styles -->
-    <link rel="stylesheet" href="/webrtc_v0/css/styles.css">
-</head>
-<body>
-    <div class="container">
-        <!-- Login Screen -->
-        <div id="login-screen">
-            <div class="login-header">
-                <h1>📞 WebRTC Communicator</h1>
-                <p>Введите ваш код доступа для входа</p>
-            </div>
-            
-            <div class="keypad">
-                <div class="display" id="code-display"></div>
-                
-                <div class="keypad-grid">
-                    <button class="keypad-btn" data-digit="1" data-key="1">1</button>
-                    <button class="keypad-btn" data-digit="2" data-key="2">2</button>
-                    <button class="keypad-btn" data-digit="3" data-key="3">3</button>
-                    <button class="keypad-btn" data-digit="4" data-key="4">4</button>
-                    <button class="keypad-btn" data-digit="5" data-key="5">5</button>
-                    <button class="keypad-btn" data-digit="6" data-key="6">6</button>
-                    <button class="keypad-btn" data-digit="7" data-key="7">7</button>
-                    <button class="keypad-btn" data-digit="8" data-key="8">8</button>
-                    <button class="keypad-btn" data-digit="9" data-key="9">9</button>
-                    <button class="keypad-btn special" data-digit="clear" data-key="C">C</button>
-                    <button class="keypad-btn" data-digit="0" data-key="0">0</button>
-                    <button class="keypad-btn special" data-digit="back" data-key="⌫">⌫</button>
-                </div>
-                
-                <button class="enter-btn" id="login-btn" disabled>Вход</button>
-                
-                <div class="key-hint">
-                    <span>⌫</span> Удалить • <span>C</span> Очистить • <span>Enter</span> Вход
-                </div>
-                
-                <div id="login-status" class="status-message"></div>
-            </div>
-        </div>
-        
-        <!-- Call Screen -->
-        <div id="call-screen">
-            <div class="call-header">
-                <div class="user-info">
-                    Вы вошли как: <span id="current-user"></span>
-                </div>
-            </div>
-            
-            <div class="main-content">
-                <!-- Left side: Video section -->
-                <div class="video-section">
-                    <div class="video-container" id="video-container">
-                        <div class="video-box">
-                            <video id="local-video" autoplay playsinline muted></video>
-                        </div>
-                        <div class="video-box">
-                            <video id="remote-video" autoplay playsinline></video>
-                        </div>
-                    </div>
-                    
-                    <div class="call-controls">
-                        <button class="call-btn hangup" id="hangup-btn" disabled>Повесить трубку</button>
-                        <button id="switch-camera-btn" class="camera-switch-btn" onclick="switchCamera()" style="display: none;">
-                            🔄 Переключить камеру
-                        </button>
-                    </div>
-                </div>
-                
-                <!-- Right side: All panels stacked vertically -->
-                <div class="right-panels">
-                    <!-- Connection Status Area -->
-                    <div id="call-status-area">
-                        <span id="call-status-text"></span>
-                    </div>
-                    
-                    <!-- Available Users Panel -->
-                    <div class="users-panel">
-                        <h3>Доступные пользователи</h3>
-                        <div id="users-container"></div>
-                    </div>
-                    
-                    <!-- Chat Section -->
-                    <div class="chat-section">
-                        <div class="chat-layout">
-                            <div class="chats-sidebar" id="chats-view">
-                                <div class="chats-header">
-                                    <h3>Чаты</h3>
-                                    <button class="new-chat-btn" onclick="showUsersForChat()">➕ Новый чат</button>
-                                </div>
-                                <div id="chats-container"></div>
-                            </div>
-                            
-                            <div class="chat-view" id="chat-view" style="display: none;">
-                                <div class="chat-view-header">
-                                    <button class="back-btn" onclick="closeChat()">←</button>
-                                    <h3 id="current-chat-name">Выберите чат</h3>
-                                    <button class="delete-chat-header-btn" onclick="deleteCurrentChat()" title="Удалить этот чат">🗑️</button>
-                                </div>
-                                <div class="chat-messages-container" id="chat-messages"></div>
-                                <div class="chat-input-area">
-                                    <input type="text" id="message-input" placeholder="Введите сообщение...">
-                                    <button onclick="sendMessage()">Отправить</button>
-                                </div>
-                                <input type="hidden" id="current-chat-id">
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Android Background Listener Panel -->
-                    <div class="apk-panel">
-                        <div class="apk-header">
-                            <span>📱</span>
-                            <h4>Android Фоновый слушатель</h4>
-                        </div>
-                        <div class="apk-description">
-                            Запустите фоновый сервис для получения уведомлений когда браузер закрыт.
-                        </div>
-                        <div class="apk-buttons">
-                            <button id="startApkBtn" onclick="startApkListener()" class="apk-start-btn">
-                                ▶️ Запустить
-                            </button>
-                            <button onclick="stopApkListener()" class="apk-stop-btn">
-                                ⏹️ Остановить
-                            </button>
-                        </div>
-                        <div id="apkStatus" class="apk-status">
-                            ℹ️ Не запущен
-                        </div>
-                    </div>
-                    
-                    <!-- Install App Button -->
-                    <div id="install-app-section" style="display: none; background: #4CAF50; padding: 15px; margin: 10px 0; border-radius: 10px; text-align: center;">
-                        <div style="font-size: 14px; font-weight: bold; margin-bottom: 8px; color: white;">📱 Установить приложение</div>
-                        <button id="manual-install-btn" style="background: white; color: #4CAF50; padding: 12px; border: none; border-radius: 8px; width: 100%; font-size: 14px; font-weight: bold;">
-                            ➕ Добавить на главный экран
-                        </button>
-                        <div id="install-status" style="margin-top: 8px; color: white; font-size: 11px;"></div>
-                    </div>
-                    
-                    <!-- Notification Settings Guide -->
-                    <div id="notification-guide" style="display: none; background: #ff9800; padding: 15px; margin: 10px 0; border-radius: 10px; text-align: left;">
-                        <div style="font-size: 14px; font-weight: bold; margin-bottom: 10px; color: white;">🔔 Включить уведомления</div>
-                        <div style="font-size: 12px; color: white; margin-bottom: 8px;">Следуйте этим шагам:</div>
-                        <ol style="color: white; margin-left: 20px; font-size: 12px; line-height: 1.6;">
-                            <li>Настройки → Приложения → Chrome → Уведомления</li>
-                            <li>Нажмите <strong>Показать неиспользуемые категории</strong></li>
-                            <li>Нажмите <strong>easosunov.github.io</strong></li>
-                            <li>Включите <strong>ВСЕ</strong> переключатели</li>
-                        </ol>
-                        <button id="close-notification-guide" style="background: white; color: #ff9800; padding: 8px; border: none; border-radius: 5px; width: 100%; margin-top: 10px; font-size: 12px;">
-                            Я сделал это
-                        </button>
-                    </div>
-                    
-                    <!-- FCM Test Button -->
-                    <div id="fcm-test-section" style="background: #2196F3; padding: 15px; margin: 10px 0; border-radius: 10px; text-align: center;">
-                        <div style="font-size: 14px; font-weight: bold; margin-bottom: 8px; color: white;">📱 Android FCM Тест</div>
-                        <button id="fcm-test-btn" style="background: white; color: #2196F3; padding: 12px; border: none; border-radius: 8px; width: 100%; font-size: 14px; font-weight: bold;">
-                            🔔 Получить токен и проверить
-                        </button>
-                        <div id="fcm-test-status" style="margin-top: 8px; color: white; font-size: 11px;"></div>
-                    </div>
-                    
-                    <!-- APK Download Link (Android only) -->
-                    <div id="apk-download-section" style="background: #f0f7ff; padding: 15px; margin: 10px 0; border-radius: 10px; text-align: center; border: 1px solid #cce5ff;">
-                        <div style="font-size: 14px; font-weight: bold; margin-bottom: 8px; color: #0066cc;">📱 APK Фоновый слушатель для Android</div>
-                        <div style="font-size: 12px; color: #555; margin-bottom: 10px;">Скачайте и установите только для Android. Включает уведомления о звонках когда приложение закрыто.</div>
-                        <a href="/webrtc_v0/WebRTCListener.apk" download style="background: #28a745; color: white; padding: 10px 20px; text-decoration: none; border-radius: 8px; display: inline-block; font-size: 14px; font-weight: bold;">
-                            ⬇️ Скачать APK
-                        </a>
-                        <div style="font-size: 11px; color: #888; margin-top: 8px;">Версия 1.0 | Размер: ~5MB</div>
-                    </div>
-                    
-                    <!-- Bark Setup Button Container - Bottom of screen -->
-                    <div id="bark-setup-container-placeholder" style="width: 100%; margin-top: 20px;"></div>
-
-                    <!-- Logout Button - VERY BOTTOM -->
-                    <div class="logout-container">
-                        <button class="logout-btn" id="logout-btn">Выход</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Modals -->
-    <div id="modal-overlay"></div>
-    <div id="incoming-call-modal">
-        <h3>📞 Входящий звонок</h3>
-        <p id="caller-name">Загрузка...</p>
-        <div class="modal-buttons">
-            <button class="modal-btn accept" id="accept-call">Ответить</button>
-            <button class="modal-btn reject" id="reject-call">Отклонить</button>
-        </div>
-    </div>
-
-    <div id="status-modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 3000;"></div>
-    <div id="status-modal" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 20px; border-radius: 10px; z-index: 3001; min-width: 250px; text-align: center;">
-        <h3 id="status-modal-title" style="margin-bottom: 10px;">Статус</h3>
-        <p id="status-modal-message" style="margin-bottom: 15px;"></p>
-        <button id="status-modal-ok" style="padding: 8px 20px; background: #667eea; color: white; border: none; border-radius: 5px; cursor: pointer;">OK</button>
-    </div>
-
-    <!-- Firebase SDKs -->
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging-compat.js"></script>
-
-    <!-- Install Prompt Handler -->
-    <script>
-        let deferredPrompt = null;
-        
-        window.addEventListener('beforeinstallprompt', (e) => {
-            e.preventDefault();
-            deferredPrompt = e;
-            window.deferredPrompt = deferredPrompt;
-            console.log('✅ Install prompt captured');
-        });
-        
-        if (window.matchMedia('(display-mode: standalone)').matches) {
-            console.log('📱 Running as installed PWA');
-        } else {
-            console.log('🌐 Running in browser');
-        }
     </script>
 
-    <!-- Video toggle -->
-    <script>
-        let videoMode = 'normal';
-        document.addEventListener('DOMContentLoaded', function() {
-            const remoteVideo = document.getElementById('remote-video');
-            if (remoteVideo) remoteVideo.addEventListener('click', toggleVideoMode);
-        });
-        function toggleVideoMode() {
-            const container = document.getElementById('video-container');
-            const remote = document.getElementById('remote-video');
-            if (!container || !remote) return;
-            if (videoMode === 'normal') {
-                container.classList.add('fullscreen-mode');
-                videoMode = 'fullscreen';
-            } else {
-                container.classList.remove('fullscreen-mode');
-                videoMode = 'normal';
-            }
-        }
-    </script>
-
-    <!-- JavaScript Modules -->
-    <script src="/webrtc_v0/js/config.js"></script>
-    <script src="/webrtc_v0/js/ui.js"></script>
-    <script src="/webrtc_v0/js/init.js"></script>
-    <script src="/webrtc_v0/js/auth.js"></script>
-    <script src="/webrtc_v0/js/users.js"></script>
-    <script src="/webrtc_v0/js/webrtc.js"></script>
-    <script src="/webrtc_v0/js/calls.js"></script>
-    <script src="/webrtc_v0/js/apk.js"></script>
-    <script src="/webrtc_v0/js/chat.js"></script>
-    
-    <!-- Service Workers -->
-    <script>
-        // Web Push Service Worker (for Windows/iOS)
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/webrtc_v0/sw.js')
-                .then(reg => console.log('✅ Web Push SW registered'))
-                .catch(err => console.log('❌ Web Push SW failed:', err));
-        }
-        
-        // FCM Service Worker (for Android)
-        if ('serviceWorker' in navigator && window.messaging) {
-            navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/' })
-                .then(reg => {
-                    console.log('✅ FCM SW registered at root');
-                    if (window.messaging) {
-                        window.messaging.useServiceWorker(reg);
-                    }
-                })
-                .catch(err => console.log('❌ FCM SW failed:', err));
-        }
-    </script>
-    
-    <!-- Install Button and Notification Guide Script -->
-    <script>
-        const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
-        const installSection = document.getElementById('install-app-section');
-        const notificationGuide = document.getElementById('notification-guide');
-        const guideDismissed = localStorage.getItem('notification_guide_dismissed');
-        
-        if (!isStandalone) {
-            if (installSection) installSection.style.display = 'block';
-        } else {
-            if (Notification.permission !== 'granted' && !guideDismissed) {
-                console.log('App installed, notifications not granted - showing guide');
-                setTimeout(() => {
-                    if (notificationGuide) notificationGuide.style.display = 'block';
-                }, 2000);
-            }
-        }
-        
-        document.getElementById('manual-install-btn')?.addEventListener('click', async () => {
-            const statusDiv = document.getElementById('install-status');
-            
-            if (window.deferredPrompt) {
-                window.deferredPrompt.prompt();
-                const result = await window.deferredPrompt.userChoice;
-                if (result.outcome === 'accepted') {
-                    statusDiv.innerHTML = '✅ Приложение установлено!';
-                    statusDiv.style.color = '#90EE90';
-                    if (installSection) installSection.style.display = 'none';
-                    
-                    console.log('Installation complete - showing notification guide');
-                    if (notificationGuide) {
-                        notificationGuide.style.display = 'block';
-                    }
-                } else {
-                    statusDiv.innerHTML = '❌ Установка отменена';
-                }
-                window.deferredPrompt = null;
-            } else {
-                statusDiv.innerHTML = '📱 Нажмите меню (⋮) → "Установить приложение" или "Добавить на главный экран"';
-                statusDiv.style.color = '#ffd966';
-            }
-        });
-        
-        document.getElementById('close-notification-guide')?.addEventListener('click', () => {
-            localStorage.setItem('notification_guide_dismissed', 'true');
-            if (notificationGuide) notificationGuide.style.display = 'none';
-        });
-    </script>
-    
-    <!-- FCM Test Button Script -->
-    <script>
-        const fcmTestBtn = document.getElementById('fcm-test-btn');
-        const fcmTestStatus = document.getElementById('fcm-test-status');
-        
-        if (fcmTestBtn) {
-            fcmTestBtn.addEventListener('click', async () => {
-                fcmTestStatus.innerHTML = 'Тестирование...';
-                fcmTestStatus.style.color = 'white';
-                
-                try {
-                    if (!CONFIG || !CONFIG.myUsername) {
-                        fcmTestStatus.innerHTML = '❌ Пожалуйста, войдите сначала';
-                        return;
-                    }
-                    
-                    fcmTestStatus.innerHTML = `✅ Вы вошли как ${CONFIG.myUsername}<br>`;
-                    
-                    if (!window.messaging) {
-                        fcmTestStatus.innerHTML = '❌ FCM недоступен';
-                        return;
-                    }
-                    fcmTestStatus.innerHTML += '✅ FCM доступен<br>';
-                    
-                    if (Notification.permission !== 'granted') {
-                        const perm = await Notification.requestPermission();
-                        if (perm !== 'granted') {
-                            fcmTestStatus.innerHTML = '❌ Разрешение на уведомления отклонено';
-                            return;
-                        }
-                    }
-                    fcmTestStatus.innerHTML += '✅ Разрешение получено<br>';
-                    
-                    fcmTestStatus.innerHTML += 'Получение токена...<br>';
-                    const token = await window.messaging.getToken({
-                        vapidKey: window.VAPID_PUBLIC_KEY
-                    });
-                    
-                    if (token) {
-                        fcmTestStatus.innerHTML += `✅ Токен: ${token.substring(0, 40)}...<br>Сохранение...`;
-                        await db.collection('users').doc(CONFIG.myUsername).update({
-                            fcmToken: token,
-                            fcmEnabled: true,
-                            fcmLastUpdated: firebase.firestore.FieldValue.serverTimestamp()
-                        });
-                        fcmTestStatus.innerHTML = '✅ Токен FCM сохранен! Закройте приложение и сделайте тестовый звонок.';
-                        fcmTestStatus.style.color = '#90EE90';
-                    } else {
-                        fcmTestStatus.innerHTML = '❌ Токен не получен';
-                    }
-                } catch (err) {
-                    fcmTestStatus.innerHTML = `❌ Ошибка: ${err.message}`;
-                    console.error(err);
-                }
-            });
-        }
-    </script>
-
-    <!-- ==================== DEBUG PANEL - INSIDE BODY ==================== -->
-    <div id="debug-panel" style="position: fixed; bottom: 10px; left: 10px; right: 10px; background: rgba(0,0,0,0.9); color: #0f0; padding: 12px; font-size: 11px; font-family: monospace; border-radius: 8px; z-index: 99999; backdrop-filter: blur(5px); word-break: break-all; border: 1px solid #0f0;">
-        <div><strong>🔍 DEBUG PANEL</strong></div>
-        <div id="debug-status">Initializing...</div>
-        <div id="debug-sw-status"></div>
-        <div id="debug-permission"></div>
-        <div id="debug-pwa"></div>
-    </div>
-
-    <script>
-        // Debug panel for iPad - shows status without console
-        (function() {
-            const debugStatus = document.getElementById('debug-status');
-            const debugSW = document.getElementById('debug-sw-status');
-            const debugPermission = document.getElementById('debug-permission');
-            const debugPWA = document.getElementById('debug-pwa');
-            
-            function debugLog(message) {
-                console.log(message);
-                if (debugStatus) {
-                    debugStatus.innerHTML = new Date().toLocaleTimeString() + ': ' + message;
-                }
-            }
-            
-            // Check notification permission
-            debugPermission.innerHTML = '🔔 Notification: ' + Notification.permission;
-            
-            // Check if running as PWA
-            const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
-            debugPWA.innerHTML = '📱 PWA Mode: ' + (isStandalone ? 'YES' : 'NO');
-            
-            // Check service worker
-            if ('serviceWorker' in navigator) {
-                debugLog('Service Worker API available');
-                
-                navigator.serviceWorker.ready.then(reg => {
-                    debugLog('✅ SW ready. Active: ' + (reg.active ? 'yes' : 'no'));
-                    if (reg.active) {
-                        debugSW.innerHTML = '✅ Service Worker: ACTIVE (' + reg.active.state + ')';
-                        debugSW.style.color = '#0f0';
-                    } else {
-                        debugSW.innerHTML = '⚠️ Service Worker: registered but NOT active';
-                        debugSW.style.color = '#ff0';
-                    }
-                }).catch(err => {
-                    debugLog('❌ SW error: ' + err.message);
-                    debugSW.innerHTML = '❌ Service Worker error: ' + err.message;
-                    debugSW.style.color = '#f00';
-                });
-                
-                // Also check for existing registrations
-                navigator.serviceWorker.getRegistrations().then(regs => {
-                    debugLog('Total SW registrations: ' + regs.length);
-                });
-            } else {
-                debugLog('❌ Service Worker API NOT available');
-                debugSW.innerHTML = '❌ Service Worker NOT supported';
-                debugSW.style.color = '#f00';
-            }
-        })();
-    </script>
-    <!-- ==================== END DEBUG PANEL ==================== -->
-  
-    <!-- PERMISSION BUTTON - ADDED FOR TESTING -->
-    <div id="permission-box" style="position: fixed; bottom: 120px; left: 10px; right: 10px; background: #2196F3; padding: 15px; border-radius: 10px; text-align: center; z-index: 99999;">
-        <button id="allow-notif-btn" style="background: white; color: #2196F3; padding: 15px; font-size: 18px; font-weight: bold; border: none; border-radius: 10px; width: 100%; cursor: pointer;">
-            🔔 TAP TO ALLOW NOTIFICATIONS
+    <!-- ==================== PUSH SUBSCRIPTION BUTTON ==================== -->
+    <div id="push-sub-box" style="position: fixed; bottom: 240px; left: 10px; right: 10px; background: #4CAF50; padding: 15px; border-radius: 10px; text-align: center; z-index: 99999;">
+        <button id="create-push-sub-btn" style="background: white; color: #4CAF50; padding: 15px; font-size: 18px; font-weight: bold; border: none; border-radius: 10px; width: 100%; cursor: pointer;">
+            📢 CREATE PUSH SUBSCRIPTION
         </button>
-        <div id="notif-status" style="color: white; margin-top: 8px; font-size: 12px;"></div>
+        <div id="push-sub-status" style="color: white; margin-top: 8px; font-size: 12px;"></div>
     </div>
 
     <script>
         (function() {
-            const btn = document.getElementById('allow-notif-btn');
-            const statusDiv = document.getElementById('notif-status');
+            const btn = document.getElementById('create-push-sub-btn');
+            const statusDiv = document.getElementById('push-sub-status');
             
-            if (!btn) return;
+            if (!btn) {
+                console.log('Push subscription button not found');
+                return;
+            }
             
             btn.onclick = async function() {
                 btn.disabled = true;
-                btn.textContent = 'Requesting...';
-                statusDiv.textContent = 'Please wait...';
+                btn.textContent = 'Creating...';
+                statusDiv.innerHTML = 'Checking service worker...';
                 
                 try {
-                    const permission = await Notification.requestPermission();
-                    console.log('Permission result:', permission);
-                    
-                    if (permission === 'granted') {
-                        statusDiv.innerHTML = '✅ PERMISSION GRANTED! You will now receive calls.';
-                        statusDiv.style.color = '#90EE90';
-                        btn.textContent = '✅ ALLOWED';
-                        btn.style.background = '#4CAF50';
-                        
-                        setTimeout(() => {
-                            location.reload();
-                        }, 1500);
-                    } else {
-                        statusDiv.innerHTML = '❌ Permission denied. Go to Settings → Notifications → WebRTC Communicator → Allow';
-                        statusDiv.style.color = '#ff9999';
-                        btn.disabled = false;
-                        btn.textContent = '🔔 TRY AGAIN';
+                    if (!('serviceWorker' in navigator)) {
+                        throw new Error('Service Worker not supported');
                     }
+                    
+                    const registration = await navigator.serviceWorker.ready;
+                    statusDiv.innerHTML = 'Service worker ready, checking existing subscription...';
+                    
+                    let subscription = await registration.pushManager.getSubscription();
+                    
+                    if (subscription) {
+                        statusDiv.innerHTML = '✅ Push subscription already exists!';
+                        statusDiv.style.color = '#90EE90';
+                        btn.textContent = '✅ ALREADY REGISTERED';
+                        return;
+                    }
+                    
+                    statusDiv.innerHTML = 'No subscription found, creating one...';
+                    
+                    const vapidKey = 'BH33WjtMVo0Y_bml_nke0gtVqahGcPd6m-yjh__LBHp6Ahvfq-vN-m25D2MzMB3e1jbTGwQRGt5ufKEhSyj6Yv0';
+                    const base64 = vapidKey.replace(/-/g, '+').replace(/_/g, '/');
+                    const applicationServerKey = new Uint8Array(atob(base64).split('').map(c => c.charCodeAt(0)));
+                    
+                    subscription = await registration.pushManager.subscribe({
+                        userVisibleOnly: true,
+                        applicationServerKey: applicationServerKey
+                    });
+                    
+                    statusDiv.innerHTML = '✅ Push subscription created successfully!';
+                    statusDiv.style.color = '#90EE90';
+                    btn.textContent = '✅ SUBSCRIBED';
+                    
+                    if (CONFIG && CONFIG.myUsername) {
+                        statusDiv.innerHTML = 'Saving to Firestore...';
+                        await db.collection('users').doc(CONFIG.myUsername).update({
+                            webPushSubscription: subscription
+                        });
+                        statusDiv.innerHTML = '✅ Push subscription saved to your account!';
+                    }
+                    
+                    setTimeout(() => {
+                        location.reload();
+                    }, 2000);
+                    
                 } catch (err) {
+                    console.error('Error:', err);
                     statusDiv.innerHTML = '❌ Error: ' + err.message;
+                    statusDiv.style.color = '#ff9999';
                     btn.disabled = false;
-                    btn.textContent = '🔔 TRY AGAIN';
+                    btn.textContent = '📢 TRY AGAIN';
                 }
             };
         })();
     </script>
-
+    <!-- ==================== END PUSH SUBSCRIPTION BUTTON ==================== -->
   
 </body>
 </html>
