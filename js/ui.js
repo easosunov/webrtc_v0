@@ -511,52 +511,61 @@ async function saveBarkDeviceKey() {
 }
 
 // Bark Setup Button - Appends to bottom of right panel (SINGLE FUNCTION)
+// Bark Setup Button - DEBUG VERSION
 function addBarkSetupButton() {
     console.log('🔍 addBarkSetupButton() STARTED');
-    
-    // FIRST: Remove ALL existing bark buttons from anywhere
-    const allExistingButtons = document.querySelectorAll('#bark-setup-container, #enable-bark-btn, .enable-bark-btn, #manual-bark-container');
-    allExistingButtons.forEach(el => {
-        console.log('Removing existing button:', el.id || el.className);
-        el.remove();
-    });
+    alert('addBarkSetupButton() called!'); // DEBUG
     
     // Check if user is logged in
     if (!CONFIG || !CONFIG.myUsername) {
         console.log('❌ No user logged in');
+        alert('No user logged in'); // DEBUG
         return;
     }
     
+    alert('User is logged in: ' + CONFIG.myUsername); // DEBUG
+    
     const checkAndAdd = async () => {
+        alert('Inside checkAndAdd'); // DEBUG
+        
         try {
             const userDoc = await db.collection('users').doc(CONFIG.myUsername).get();
             const userData = userDoc.data();
+            alert('User data retrieved. Has bark key? ' + !!(userData && userData.barkDeviceKey)); // DEBUG
             
             if (userData && userData.barkDeviceKey) {
                 console.log('✅ Bark already enabled - skipping button');
+                alert('Bark already enabled - no button needed'); // DEBUG
                 return;
             }
         } catch (e) {
             console.log('Error checking user data:', e.message);
+            alert('Error checking user data: ' + e.message); // DEBUG
         }
+        
+        alert('Looking for .right-panels...'); // DEBUG
         
         // Find the right-panels container
         const rightPanels = document.querySelector('.right-panels');
         if (!rightPanels) {
             console.error('❌ Could not find .right-panels');
+            alert('❌ .right-panels NOT found! Check HTML structure.'); // DEBUG
             return;
         }
         
-        console.log('✅ Found .right-panels');
+        alert('✅ Found .right-panels. Looking for placeholder...'); // DEBUG
         
-        // Find or create placeholder at the BOTTOM
+        // Find or create placeholder
         let placeholder = document.getElementById('bark-setup-container-placeholder');
         if (!placeholder) {
-            console.log('Creating placeholder at bottom of right-panels');
+            alert('Placeholder not found, creating it...'); // DEBUG
             placeholder = document.createElement('div');
             placeholder.id = 'bark-setup-container-placeholder';
-            placeholder.style.cssText = 'width: 100%; margin-top: 20px;';
+            placeholder.style.cssText = 'width: 100%; margin-top: 20px; background: red; padding: 10px;';
             rightPanels.appendChild(placeholder);
+            alert('Placeholder created and appended to rightPanels'); // DEBUG
+        } else {
+            alert('Placeholder found'); // DEBUG
         }
         
         // Clear placeholder
@@ -565,7 +574,7 @@ function addBarkSetupButton() {
         // Create button container
         const container = document.createElement('div');
         container.id = 'bark-setup-container';
-        container.style.cssText = 'background: #ff9800; padding: 12px; margin: 10px 0; border-radius: 10px; text-align: center;';
+        container.style.cssText = 'background: #ff9800; padding: 12px; margin: 10px 0; border-radius: 10px; text-align: center; border: 3px solid red;';
         
         const button = document.createElement('button');
         button.textContent = '🍎 Enable iOS Call Notifications (Bark)';
@@ -590,7 +599,6 @@ function addBarkSetupButton() {
                 return;
             }
             
-            // Extract key from URL
             let barkKey = null;
             if (barkUrl.includes('api.day.app/')) {
                 const match = barkUrl.match(/api\.day\.app\/([^\/]+)/);
@@ -639,16 +647,19 @@ function addBarkSetupButton() {
         
         container.appendChild(button);
         placeholder.appendChild(container);
+        alert('✅ Button added to placeholder! Scroll to see it.'); // DEBUG
         console.log('✅ Bark button added at bottom of right panel');
         
-        // Scroll to show the button (useful on mobile)
+        // Scroll to show the button
         setTimeout(() => {
-            container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            container.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            alert('Scrolled to button'); // DEBUG
         }, 500);
     };
     
     checkAndAdd();
 }
+
 
 // ==================== AUTO-SUBSCRIBE ====================
 window.autoSubscribeToPush = async function() {
