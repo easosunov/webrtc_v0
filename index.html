@@ -403,4 +403,60 @@
         }
     </script>
 </body>
+
+<!-- Debug Panel - Shows service worker status -->
+<div id="debug-panel" style="position: fixed; bottom: 10px; left: 10px; right: 10px; background: rgba(0,0,0,0.8); color: #0f0; padding: 10px; font-size: 10px; font-family: monospace; border-radius: 8px; z-index: 99999; backdrop-filter: blur(5px); word-break: break-all;">
+    <div id="debug-status">Initializing...</div>
+    <div id="debug-sw-status"></div>
+</div>
+
+<script>
+    // Debug panel for iPad - shows status without console
+    const debugStatus = document.getElementById('debug-status');
+    const debugSW = document.getElementById('debug-sw-status');
+    
+    function debugLog(message) {
+        console.log(message);
+        if (debugStatus) {
+            debugStatus.innerHTML = new Date().toLocaleTimeString() + ': ' + message;
+        }
+    }
+    
+    // Check service worker
+    if ('serviceWorker' in navigator) {
+        debugLog('Service Worker API available');
+        
+        navigator.serviceWorker.ready.then(reg => {
+            debugLog('✅ SW ready. Active: ' + (reg.active ? 'yes' : 'no'));
+            if (reg.active) {
+                debugSW.innerHTML = '✅ Service Worker Active: ' + reg.active.state;
+            } else {
+                debugSW.innerHTML = '⚠️ Service Worker registered but not active';
+            }
+        }).catch(err => {
+            debugLog('❌ SW error: ' + err.message);
+            debugSW.innerHTML = '❌ Service Worker error: ' + err.message;
+        });
+        
+        // Also check for existing registrations
+        navigator.serviceWorker.getRegistrations().then(regs => {
+            debugLog('Total SW registrations: ' + regs.length);
+            regs.forEach((reg, i) => {
+                debugLog(`  Registration ${i}: scope=${reg.scope}, active=${!!reg.active}`);
+            });
+        });
+    } else {
+        debugLog('❌ Service Worker API NOT available');
+        debugSW.innerHTML = '❌ Service Worker not supported in this browser';
+    }
+    
+    // Check notification permission
+    debugLog('Notification permission: ' + Notification.permission);
+    
+    // Check if running as PWA
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+    debugLog('Running as PWA: ' + (isStandalone ? 'YES' : 'NO'));
+</script>
+
+
 </html>
