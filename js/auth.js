@@ -125,6 +125,72 @@ function handleKeypadInput(digit) {
     updateDisplay();
 }
 
+// ==================== REMEMBER ME ====================
+
+function saveUserSession(username, displayName) {
+    localStorage.setItem('webrtc_user', JSON.stringify({
+        username: username,
+        displayName: displayName,
+        timestamp: Date.now()
+    }));
+    console.log('✅ User session saved');
+}
+
+function clearUserSession() {
+    localStorage.removeItem('webrtc_user');
+    console.log('🗑️ User session cleared');
+}
+
+async function restoreUserSession() {
+    const saved = localStorage.getItem('webrtc_user');
+    if (!saved) return false;
+    
+    try {
+        const userData = JSON.parse(saved);
+        const username = userData.username;
+        
+        console.log(`🔄 Attempting to restore session for ${username}`);
+        
+        const userDoc = await db.collection('users').doc(username).get();
+        if (!userDoc.exists) {
+            console.log('❌ User no longer exists, clearing session');
+            clearUserSession();
+            return false;
+        }
+        
+        const userDocData = userDoc.data();
+        CONFIG.myUsername = username;
+        CONFIG.myDisplayName = userDocData.displayname || userDocData.displayName || username;
+        CONFIG.isAdmin = userDocData.isadmin || userDocData.isAdmin || false;
+        
+        console.log(`✅ Session restored for ${CONFIG.myDisplayName}`);
+        
+        if (window.dom && window.dom.currentUserSpan) {
+            window.dom.currentUserSpan.textContent = CONFIG.myDisplayName;
+        }
+        if (window.dom && window.dom.loginScreen) window.dom.loginScreen.style.display = 'none';
+        if (window.dom && window.dom.callScreen) window.dom.callScreen.style.display = 'block';
+        
+        await setActiveDevice(CONFIG.myUsername);
+        await clearOldIceCandidates();
+        if (window.initMedia) await window.initMedia();
+        if (window.loadUsers) await window.loadUsers();
+        if (window.listenForIncomingCalls) window.listenForIncomingCalls();
+        
+        window.dispatchEvent(new CustomEvent('login-complete', { 
+            detail: { username: CONFIG.myUsername } 
+        }));
+        
+        return true;
+        
+    } catch (error) {
+        console.error('❌ Session restore error:', error);
+        clearUserSession();
+        return false;
+    }
+}
+
+
 // ==================== SINGLE ACTIVE DEVICE MANAGEMENT ====================
 
 async function setActiveDevice(username) {
