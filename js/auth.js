@@ -82,6 +82,12 @@ function initAuth() {
     updateDisplay();
     authInitialized = true;
     console.log('✅ Auth initialized successfully');
+    
+    // After auth is initialized, try to restore session
+    setTimeout(() => {
+        restoreUserSession();
+    }, 500);
+    
     return true;
 }
 
@@ -125,7 +131,7 @@ function handleKeypadInput(digit) {
     updateDisplay();
 }
 
-// ==================== REMEMBER ME ====================
+// ==================== REMEMBER ME FUNCTIONS ====================
 
 function saveUserSession(username, displayName) {
     localStorage.setItem('webrtc_user', JSON.stringify({
@@ -133,7 +139,7 @@ function saveUserSession(username, displayName) {
         displayName: displayName,
         timestamp: Date.now()
     }));
-    console.log('✅ User session saved');
+    console.log('✅ User session saved for', username);
 }
 
 function clearUserSession() {
@@ -143,7 +149,16 @@ function clearUserSession() {
 
 async function restoreUserSession() {
     const saved = localStorage.getItem('webrtc_user');
-    if (!saved) return false;
+    if (!saved) {
+        console.log('📭 No saved session found');
+        return false;
+    }
+    
+    // Don't restore if already logged in
+    if (CONFIG.myUsername) {
+        console.log('👤 User already logged in as', CONFIG.myUsername);
+        return false;
+    }
     
     try {
         const userData = JSON.parse(saved);
@@ -151,6 +166,15 @@ async function restoreUserSession() {
         
         console.log(`🔄 Attempting to restore session for ${username}`);
         
+        // Check if session is too old (30 days max)
+        const maxAge = 30 * 24 * 60 * 60 * 1000;
+        if (userData.timestamp && (Date.now() - userData.timestamp) > maxAge) {
+            console.log('⏰ Session expired (30 days), clearing');
+            clearUserSession();
+            return false;
+        }
+        
+        // Verify user still exists in Firestore
         const userDoc = await db.collection('users').doc(username).get();
         if (!userDoc.exists) {
             console.log('❌ User no longer exists, clearing session');
@@ -165,18 +189,41 @@ async function restoreUserSession() {
         
         console.log(`✅ Session restored for ${CONFIG.myDisplayName}`);
         
+        // Update UI
         if (window.dom && window.dom.currentUserSpan) {
             window.dom.currentUserSpan.textContent = CONFIG.myDisplayName;
         }
-        if (window.dom && window.dom.loginScreen) window.dom.loginScreen.style.display = 'none';
-        if (window.dom && window.dom.callScreen) window.dom.callScreen.style.display = 'block';
+        if (window.dom && window.dom.loginScreen) {
+            window.dom.loginScreen.style.display = 'none';
+        }
+        if (window.dom && window.dom.callScreen) {
+            window.dom.callScreen.style.display = 'block';
+        }
         
-        await setActiveDevice(CONFIG.myUsername);
-        await clearOldIceCandidates();
-        if (window.initMedia) await window.initMedia();
-        if (window.loadUsers) await window.loadUsers();
-        if (window.listenForIncomingCalls) window.listenForIncomingCalls();
+        // Set active device (cleans up old tokens)
+        if (typeof setActiveDevice === 'function') {
+            await setActiveDevice(CONFIG.myUsername);
+        }
         
+        // Initialize other modules
+        if (typeof clearOldIceCandidates === 'function') {
+            await clearOldIceCandidates();
+        }
+        
+        // Initialize media and other components with error handling
+        try {
+            if (window.initMedia) await window.initMedia();
+        } catch (e) { console.error('initMedia error:', e); }
+        
+        try {
+            if (window.loadUsers) await window.loadUsers();
+        } catch (e) { console.error('loadUsers error:', e); }
+        
+        try {
+            if (window.listenForIncomingCalls) window.listenForIncomingCalls();
+        } catch (e) { console.error('listenForIncomingCalls error:', e); }
+        
+        // Dispatch login complete event
         window.dispatchEvent(new CustomEvent('login-complete', { 
             detail: { username: CONFIG.myUsername } 
         }));
@@ -189,7 +236,6 @@ async function restoreUserSession() {
         return false;
     }
 }
-
 
 // ==================== SINGLE ACTIVE DEVICE MANAGEMENT ====================
 
@@ -526,6 +572,9 @@ async function login() {
         
         console.log('✅ UI updated, showing call screen');
         
+        // ===== SAVE SESSION =====
+        saveUserSession(CONFIG.myUsername, CONFIG.myDisplayName);
+        
         // ===== SET ACTIVE DEVICE - THIS CLEANS UP OLD TOKENS =====
         console.log('🔜 Setting active device and cleaning old tokens...');
         await setActiveDevice(CONFIG.myUsername);
@@ -611,6 +660,9 @@ async function logout() {
             }
         }
         
+        // ===== CLEAR SESSION =====
+        clearUserSession();
+        
         if (CONFIG.localStream) {
             CONFIG.localStream.getTracks().forEach(track => track.stop());
             CONFIG.localStream = null;
@@ -639,3 +691,5 @@ async function logout() {
 window.login = login;
 window.logout = logout;
 window.setActiveDevice = setActiveDevice;
+window.restoreUserSession = restoreUserSession;
+window.clearUserSession = clearUserSession;
