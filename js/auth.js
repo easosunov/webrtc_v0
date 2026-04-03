@@ -83,14 +83,24 @@ function initAuth() {
     authInitialized = true;
     console.log('✅ Auth initialized successfully');
     
-    // After auth is initialized, try to restore session
+    // ===== SESSION RESTORATION - LONGER DELAY ON WINDOWS =====
+    const isWindowsPlatform = navigator.userAgent.indexOf('Windows') !== -1;
+    const delay = isWindowsPlatform ? 3000 : 500;
+    
+    console.log(`🖥️ Platform: ${isWindowsPlatform ? 'Windows' : 'Mobile'}, waiting ${delay}ms before session restore`);
+    
     setTimeout(() => {
-        restoreUserSession();
-    }, 500);
+        // Only restore if no user is logged in and not in login process
+        if (!CONFIG.myUsername && !currentCode) {
+            console.log('🔄 No user logged in, attempting session restore...');
+            restoreUserSession();
+        } else {
+            console.log('👤 User already logged in or login in progress, skipping restore');
+        }
+    }, delay);
     
     return true;
 }
-
 // Separate keyboard handler function
 function handleKeyDown(event) {
     if (window.dom && window.dom.callScreen && window.dom.callScreen.style.display === 'block') return;
@@ -147,7 +157,15 @@ function clearUserSession() {
     console.log('🗑️ User session cleared');
 }
 
+
 async function restoreUserSession() {
+    // On Windows, add a small extra delay to ensure DOM is ready
+    const isWindowsPlatform = navigator.userAgent.indexOf('Windows') !== -1;
+    if (isWindowsPlatform) {
+        console.log('🪟 Windows detected, adding extra delay for DOM readiness...');
+        await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    
     const saved = localStorage.getItem('webrtc_user');
     if (!saved) {
         console.log('📭 No saved session found');
@@ -157,6 +175,12 @@ async function restoreUserSession() {
     // Don't restore if already logged in
     if (CONFIG.myUsername) {
         console.log('👤 User already logged in as', CONFIG.myUsername);
+        return false;
+    }
+    
+    // Don't restore if user is typing a login code
+    if (currentCode && currentCode.length > 0) {
+        console.log('📝 User is typing a code, skipping auto-restore');
         return false;
     }
     
@@ -171,6 +195,13 @@ async function restoreUserSession() {
         if (userData.timestamp && (Date.now() - userData.timestamp) > maxAge) {
             console.log('⏰ Session expired (30 days), clearing');
             clearUserSession();
+            return false;
+        }
+        
+        // Make sure Firestore is ready
+        if (!db) {
+            console.log('⏳ Firestore not ready, will retry in 1 second...');
+            setTimeout(() => restoreUserSession(), 1000);
             return false;
         }
         
@@ -236,6 +267,7 @@ async function restoreUserSession() {
         return false;
     }
 }
+
 
 // ==================== SINGLE ACTIVE DEVICE MANAGEMENT ====================
 
