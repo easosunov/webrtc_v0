@@ -38,11 +38,57 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(clients.claim());
 });
 
-// ==================== FETCH ====================
+// ==================== FETCH (UPDATED FOR SHARE TARGET) ====================
 self.addEventListener('fetch', (event) => {
+  const request = event.request;
+  const url = new URL(request.url);
+  
+  // Handle Web Share Target POST requests
+  if (request.method === 'POST' && url.pathname === '/webrtc_v0/') {
+    console.log('📤 SW: Handling share target POST request');
+    
+    event.respondWith((async () => {
+      let sharedData = {
+        title: null,
+        text: null,
+        url: null
+      };
+      
+      try {
+        // Parse form data from the POST request
+        const formData = await request.formData();
+        sharedData.title = formData.get('title');
+        sharedData.text = formData.get('text');
+        sharedData.url = formData.get('url');
+        
+        console.log('📤 SW: Received shared data:', sharedData);
+        
+        // Store shared data in cache for when the app opens
+        const cache = await caches.open('shared-data');
+        await cache.put('/webrtc_v0/pending-share', new Response(JSON.stringify({
+          sharedData,
+          timestamp: Date.now()
+        })));
+        
+      } catch (error) {
+        console.error('❌ SW: Error parsing share data:', error);
+      }
+      
+      // Return the main page with a flag indicating shared content
+      // This tells the app to check for pending shares
+      const response = await fetch('/webrtc_v0/index.html');
+      const newResponse = new Response(response.body, response);
+      newResponse.headers.set('X-Pending-Share', 'true');
+      
+      return newResponse;
+    })());
+    return;
+  }
+  
+  // Normal GET requests - serve from cache or network
   event.respondWith(
-    caches.match(event.request).then((res) => {
-      return res || fetch(event.request);
+    caches.match(request).then((res) => {
+      return res || fetch(request);
     })
   );
 });
