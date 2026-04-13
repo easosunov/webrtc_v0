@@ -237,7 +237,8 @@ window.callUser = async function(targetUsername) {
         startRingbackTone();
         
         await window.createPeerConnection(targetUsername, true);
-        
+        window.listenForVideoControlSignals();
+		
         const offer = await CONFIG.peerConnection.createOffer();
         await CONFIG.peerConnection.setLocalDescription(offer);
         
@@ -371,7 +372,8 @@ window.answerCall = async function(callId, callerId, offer) {
         currentCallIdForLog = null;
         
         await window.createPeerConnection(callerId, false);
-        
+        window.listenForVideoControlSignals();
+		
         await CONFIG.peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
         
         const answer = await CONFIG.peerConnection.createAnswer();
