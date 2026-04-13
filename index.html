@@ -241,26 +241,105 @@
         }
     </script>
 
-    <!-- Video toggle -->
-    <script>
-        let videoMode = 'normal';
-        document.addEventListener('DOMContentLoaded', function() {
-            const remoteVideo = document.getElementById('remote-video');
-            if (remoteVideo) remoteVideo.addEventListener('click', toggleVideoMode);
-        });
-        function toggleVideoMode() {
-            const container = document.getElementById('video-container');
-            const remote = document.getElementById('remote-video');
-            if (!container || !remote) return;
-            if (videoMode === 'normal') {
-                container.classList.add('fullscreen-mode');
-                videoMode = 'fullscreen';
+
+    <!-- Video toggle for remote (fullscreen) AND local (audio-only mode) -->
+<script>
+    let videoMode = 'normal';
+    let isAudioOnlyMode = false; // Track audio-only state
+    
+    document.addEventListener('DOMContentLoaded', function() {
+        const remoteVideo = document.getElementById('remote-video');
+        const localVideo = document.getElementById('local-video');
+        
+        // Remote video tap -> toggle fullscreen (existing behavior)
+        if (remoteVideo) {
+            remoteVideo.addEventListener('click', toggleVideoMode);
+        }
+        
+        // Local video tap -> toggle audio-only mode (NEW)
+        if (localVideo) {
+            localVideo.addEventListener('click', toggleAudioOnlyMode);
+        }
+    });
+    
+    // Existing function for remote video fullscreen
+    function toggleVideoMode() {
+        const container = document.getElementById('video-container');
+        const remote = document.getElementById('remote-video');
+        if (!container || !remote) return;
+        if (videoMode === 'normal') {
+            container.classList.add('fullscreen-mode');
+            videoMode = 'fullscreen';
+        } else {
+            container.classList.remove('fullscreen-mode');
+            videoMode = 'normal';
+        }
+    }
+    
+    // NEW: Toggle audio-only mode when local video is tapped
+    async function toggleAudioOnlyMode() {
+        if (isAudioOnlyMode) {
+            // Switch back to audio+video
+            await window.restoreVideoBothWays();
+            showAudioOnlyNotification('🎥 Video restored - both ways', false);
+        } else {
+            // Switch to audio-only
+            await window.killVideoBothWays();
+            showAudioOnlyNotification('🔇 Audio-only mode - video disabled both ways', true);
+        }
+        isAudioOnlyMode = !isAudioOnlyMode;
+        
+        // Visual feedback on local video
+        const localVideo = document.getElementById('local-video');
+        if (localVideo) {
+            if (isAudioOnlyMode) {
+                localVideo.style.opacity = '0.7';
+                localVideo.style.border = '2px solid #ff9800';
             } else {
-                container.classList.remove('fullscreen-mode');
-                videoMode = 'normal';
+                localVideo.style.opacity = '1';
+                localVideo.style.border = 'none';
             }
         }
-    </script>
+    }
+    
+    function showAudioOnlyNotification(message, isAudioOnly) {
+        // Create temporary notification
+        const notification = document.createElement('div');
+        notification.textContent = message;
+        notification.style.cssText = `
+            position: fixed;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: ${isAudioOnly ? '#ff9800' : '#4caf50'};
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            z-index: 2000;
+            animation: fadeOut 2s ease-in-out forwards;
+        `;
+        document.body.appendChild(notification);
+        setTimeout(() => notification.remove(), 2000);
+    }
+    
+    // Add CSS animation if not exists
+    if (!document.querySelector('#audio-only-styles')) {
+        const style = document.createElement('style');
+        style.id = 'audio-only-styles';
+        style.textContent = `
+            @keyframes fadeOut {
+                0% { opacity: 1; }
+                70% { opacity: 1; }
+                100% { opacity: 0; visibility: hidden; }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+</script>
+	
+	
+	
 
     <!-- JavaScript Modules -->
     <script src="/webrtc_v0/js/config.js"></script>
