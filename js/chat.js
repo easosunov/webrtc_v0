@@ -190,6 +190,79 @@ window.openChat = async function(chatId) {
     }
 };
 
+// Send a direct message to a user (creates chat if needed)
+window.sendDirectMessage = async function(targetUsername, messageText) {
+    if (!CONFIG.myUsername) {
+        console.error('Not logged in');
+        return false;
+    }
+    
+    if (!messageText || messageText.trim() === '') {
+        return false;
+    }
+    
+    const chatId = [CONFIG.myUsername, targetUsername].sort().join('_');
+    
+    try {
+        // Get target user's display name
+        const targetUserDoc = await db.collection('users').doc(targetUsername).get();
+        const targetDisplayName = targetUserDoc.data()?.displayname || targetUsername;
+        
+        // Create or update chat document
+        const chatRef = db.collection('chats').doc(chatId);
+        const chatDoc = await chatRef.get();
+        
+        if (!chatDoc.exists) {
+            await chatRef.set({
+                participants: [CONFIG.myUsername, targetUsername],
+                participantNames: {
+                    [CONFIG.myUsername]: CONFIG.myDisplayName,
+                    [targetUsername]: targetDisplayName
+                },
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                lastMessage: messageText,
+                lastMessageTime: firebase.firestore.FieldValue.serverTimestamp(),
+                lastMessageSender: CONFIG.myUsername,
+                unreadCount: {
+                    [CONFIG.myUsername]: 0,
+                    [targetUsername]: 1
+                }
+            });
+        } else {
+            await chatRef.update({
+                lastMessage: messageText,
+                lastMessageTime: firebase.firestore.FieldValue.serverTimestamp(),
+                lastMessageSender: CONFIG.myUsername,
+                [`unreadCount.${targetUsername}`]: firebase.firestore.FieldValue.increment(1)
+            });
+        }
+        
+        // Add message to messages subcollection
+        const messagesRef = chatRef.collection('messages');
+        await messagesRef.add({
+            text: messageText,
+            senderId: CONFIG.myUsername,
+            senderName: CONFIG.myDisplayName,
+            timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+            type: 'text'
+        });
+        
+        console.log(`✅ Message sent to ${targetUsername}`);
+        
+        // Refresh chat list if open
+        if (window.loadChats) {
+            window.loadChats();
+        }
+        
+        return true;
+        
+    } catch (error) {
+        console.error('❌ Failed to send message:', error);
+        return false;
+    }
+};
+
+
 // ==================== LOAD MESSAGES ====================
 async function loadMessages(chatId) {
     const messagesContainer = document.getElementById('chat-messages');
