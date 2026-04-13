@@ -203,6 +203,255 @@ window.createPeerConnection = async function(targetUsername, isCaller = true) {
     return CONFIG.peerConnection;
 };
 
+// ==================== AUDIO-ONLY MODE (BOTH WAYS) ====================
+
+// Kill video in both directions
+window.killVideoBothWays = async function() {
+    console.log('🎥 Killing video both ways - entering audio-only mode');
+    
+    // 1. Stop sending local video
+    if (CONFIG.localStream) {
+        const videoTracks = CONFIG.localStream.getVideoTracks();
+        videoTracks.forEach(track => {
+            track.enabled = false;
+            console.log('📹 Local video track disabled');
+        });
+    }
+    
+    // 2. Stop receiving remote video
+    if (CONFIG.peerConnection) {
+        const receivers = CONFIG.peerConnection.getReceivers();
+        receivers.forEach(receiver => {
+            if (receiver.track && receiver.track.kind === 'video') {
+                receiver.track.enabled = false;
+                console.log('📺 Remote video reception disabled');
+            }
+        });
+    }
+    
+    // 3. Notify peer via signaling (so they also stop sending)
+    if (CONFIG.currentCallId && CONFIG.currentCallPartner) {
+        await notifyPeerVideoKill();
+    }
+    
+    // 4. Update UI to show audio-only mode
+    if (window.showConnectionStatus) {
+        window.showConnectionStatus('🔇 Audio-only mode - video disabled', 'warning');
+    }
+    
+    // Store state
+    CONFIG.isAudioOnlyMode = true;
+};
+
+// Restore video in both directions
+window.restoreVideoBothWays = async function() {
+    console.log('🎥 Restoring video both ways - exiting audio-only mode');
+    
+    // 1. Restore sending local video
+    if (CONFIG.localStream) {
+        const videoTracks = CONFIG.localStream.getVideoTracks();
+        if (videoTracks.length > 0) {
+            videoTracks.forEach(track => {
+                track.enabled = true;
+                console.log('📹 Local video track re-enabled');
+            });
+        } else {
+            // No video track exists - need to add one
+            await addVideoTrackToLocalStream();
+        }
+    } else {
+        // No local stream - need to reinitialize
+        await window.initMedia();
+    }
+    
+    // 2. Restore receiving remote video
+    if (CONFIG.peerConnection) {
+        const receivers = CONFIG.peerConnection.getReceivers();
+        receivers.forEach(receiver => {
+            if (receiver.track && receiver.track.kind === 'video') {
+                receiver.track.enabled = true;
+                console.log('📺 Remote video reception re-enabled');
+            }
+        });
+    }
+    
+    // 3. Notify peer via signaling to restore their video
+    if (CONFIG.currentCallId && CONFIG.currentCallPartner) {
+        await notifyPeerVideoRestore();
+    }
+    
+    // 4. Update UI
+    if (window.showConnectionStatus) {
+        window.showConnectionStatus('🎥 Video restored - full quality', 'success');
+        setTimeout(() => window.clearConnectionStatus(), 3000);
+    }
+    
+    // Store state
+    CONFIG.isAudioOnlyMode = false;
+};
+
+// Add video track to existing local stream
+async function addVideoTrackToLocalStream() {
+    try {
+        const videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        const videoTrack = videoStream.getVideoTracks()[0];
+        
+        if (CONFIG.localStream) {
+            CONFIG.localStream.addTrack(videoTrack);
+        } else {
+            CONFIG.localStream = videoStream;
+        }
+        
+        // Update local video element
+        if (window.dom && window.dom.localVideo) {
+            window.dom.localVideo.srcObject = CONFIG.localStream;
+        }
+        
+        // Add track to peer connection if in call
+        if (CONFIG.peerConnection && CONFIG.isInCall) {
+            CONFIG.peerConnection.addTrack(videoTrack, CONFIG.localStream);
+            
+            // Need to renegotiate
+            const offer = await CONFIG.peerConnection.createOffer();
+            await CONFIG.peerConnection.setLocalDescription(offer);
+            
+            if (CONFIG.currentCallId) {
+                await db.collection('calls').doc(CONFIG.currentCallId).update({
+                    offer: {
+                        type: offer.type,
+                        sdp: offer.sdp
+                    },
+                    renegotiation: true
+                });
+            }
+        }
+        
+        console.log('✅ Video track added to local stream');
+    } catch (error) {
+        console.error('❌ Failed to add video track:', error);
+    }
+}
+
+// Notify peer to kill their video
+async function notifyPeerVideoKill() {
+    if (!CONFIG.currentCallPartner || !CONFIG.currentCallId) return;
+    
+    try {
+        // Store video-kill signal in Firestore
+        await db.collection('calls').doc(CONFIG.currentCallId).update({
+            videoKillRequested: true,
+            videoKillTimestamp: firebase.firestore.FieldValue.serverTimestamp(),
+            videoKillFrom: CONFIG.myUsername
+        });
+        
+        console.log('📡 Video kill signal sent to peer');
+    } catch (error) {
+        console.error('❌ Failed to send video kill signal:', error);
+    }
+}
+
+// Notify peer to restore video
+async function notifyPeerVideoRestore() {
+    if (!CONFIG.currentCallPartner || !CONFIG.currentCallId) return;
+    
+    try {
+        await db.collection('calls').doc(CONFIG.currentCallId).update({
+            videoKillRequested: false,
+            videoRestoreTimestamp: firebase.firestore.FieldValue.serverTimestamp(),
+            videoRestoreFrom: CONFIG.myUsername
+        });
+        
+        console.log('📡 Video restore signal sent to peer');
+    } catch (error) {
+        console.error('❌ Failed to send video restore signal:', error);
+    }
+}
+
+// Listen for video kill/restore signals from peer
+window.listenForVideoControlSignals = function() {
+    if (!CONFIG.myUsername) return;
+    
+    // Listen for video kill signals during active call
+    const callId = CONFIG.currentCallId;
+    if (!callId) return;
+    
+    db.collection('calls').doc(callId).onSnapshot((snapshot) => {
+        if (!snapshot.exists) return;
+        const data = snapshot.data();
+        
+        // Check if peer requested video kill
+        if (data.videoKillRequested === true && 
+            data.videoKillFrom !== CONFIG.myUsername &&
+            !CONFIG.isAudioOnlyMode) {
+            
+            console.log('📡 Peer requested audio-only mode');
+            
+            // Kill video but don't send signal back (avoid loop)
+            if (CONFIG.localStream) {
+                CONFIG.localStream.getVideoTracks().forEach(track => {
+                    track.enabled = false;
+                });
+            }
+            if (CONFIG.peerConnection) {
+                CONFIG.peerConnection.getReceivers().forEach(receiver => {
+                    if (receiver.track && receiver.track.kind === 'video') {
+                        receiver.track.enabled = false;
+                    }
+                });
+            }
+            
+            CONFIG.isAudioOnlyMode = true;
+            
+            // Update UI feedback
+            const localVideo = document.getElementById('local-video');
+            if (localVideo) {
+                localVideo.style.opacity = '0.7';
+                localVideo.style.border = '2px solid #ff9800';
+            }
+            
+            if (window.showConnectionStatus) {
+                window.showConnectionStatus('🔇 Peer switched to audio-only mode', 'warning');
+            }
+        }
+        
+        // Check if peer requested video restore
+        if (data.videoKillRequested === false && 
+            data.videoRestoreFrom !== CONFIG.myUsername &&
+            CONFIG.isAudioOnlyMode) {
+            
+            console.log('📡 Peer requested video restore');
+            
+            // Restore video but don't send signal back
+            if (CONFIG.localStream) {
+                CONFIG.localStream.getVideoTracks().forEach(track => {
+                    track.enabled = true;
+                });
+            }
+            if (CONFIG.peerConnection) {
+                CONFIG.peerConnection.getReceivers().forEach(receiver => {
+                    if (receiver.track && receiver.track.kind === 'video') {
+                        receiver.track.enabled = true;
+                    }
+                });
+            }
+            
+            CONFIG.isAudioOnlyMode = false;
+            
+            const localVideo = document.getElementById('local-video');
+            if (localVideo) {
+                localVideo.style.opacity = '1';
+                localVideo.style.border = 'none';
+            }
+            
+            if (window.showConnectionStatus) {
+                window.showConnectionStatus('🎥 Video restored by peer', 'success');
+                setTimeout(() => window.clearConnectionStatus(), 3000);
+            }
+        }
+    });
+};
+
+
 // ==================== CAMERA SWITCHING ====================
 let currentFacingMode = 'user';
 let hasMultipleCameras = false;
