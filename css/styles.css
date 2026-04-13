@@ -1177,3 +1177,25 @@ body {
         padding-right: max(15px, env(safe-area-inset-right));
     }
 }
+
+/* Version Footer - appears at bottom of screen */
+.version-footer {
+    text-align: center;
+    padding: 12px;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.7);
+    background: rgba(0, 0, 0, 0.2);
+    margin-top: 20px;
+    border-radius: 8px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* Mobile adjustment */
+@media (max-width: 768px) {
+    .version-footer {
+        padding: 8px;
+        font-size: 10px;
+        margin-top: 10px;
+    }
+}
