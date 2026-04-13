@@ -902,6 +902,37 @@
     }, 500);
 </script>
 
+
+<!--  Auto-update checker - minimum version -->
+<script>
+
+const APP_VERSION = '4.0.0';
+
+async function checkForUpdates() {
+    try {
+        const response = await fetch('/webrtc_v0/version.json?t=' + Date.now());
+        const data = await response.json();
+        
+        const savedVersion = localStorage.getItem('app_version');
+        
+        if (!savedVersion) {
+            localStorage.setItem('app_version', APP_VERSION);
+        } else if (data.version !== savedVersion) {
+            if (confirm('New version available! Update now?')) {
+                localStorage.setItem('app_version', data.version);
+                window.location.reload(true);
+            }
+        }
+    } catch(e) { console.log('Update check failed:', e); }
+}
+
+checkForUpdates();
+// Check when app returns to foreground
+document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) checkForUpdates();
+});
+</script>
+
  
 </body>
 </html>
