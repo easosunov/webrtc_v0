@@ -8,7 +8,7 @@
   "background_color": "#667eea",
   "orientation": "portrait",
   "share_target": {
-    "action": "/webrtc_v0/",
+    "action": "https://easosunov.github.io/webrtc_v0/",
     "method": "GET",
     "enctype": "application/x-www-form-urlencoded",
     "params": {
