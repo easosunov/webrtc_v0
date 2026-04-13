@@ -494,27 +494,30 @@
 
     <script>
         // Compact debug panel update
-        (function() {
-            const debugStatus = document.getElementById('debug-status');
-            const debugSW = document.getElementById('debug-sw-status');
-            const debugPermission = document.getElementById('debug-permission');
-            const debugPWA = document.getElementById('debug-pwa');
-            
-            if (debugPermission) debugPermission.innerHTML = '🔔 ' + Notification.permission;
-            
-            const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
-            if (debugPWA) debugPWA.innerHTML = '📱 PWA: ' + (isStandalone ? 'YES' : 'NO');
-            
-            if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.ready.then(reg => {
-                    if (debugSW) debugSW.innerHTML = '✅ SW: ' + (reg.active ? 'ACTIVE' : 'NO');
-                }).catch(err => {
-                    if (debugSW) debugSW.innerHTML = '❌ SW error';
-                });
-            } else {
-                if (debugSW) debugSW.innerHTML = '❌ SW not supported';
-            }
-        })();
+(function() {
+    const debugStatus = document.getElementById('debug-status');
+    const debugSW = document.getElementById('debug-sw-status');
+    const debugPermission = document.getElementById('debug-permission');
+    const debugPWA = document.getElementById('debug-pwa');
+    const debugVersion = document.getElementById('debug-version');
+    
+    if (debugPermission) debugPermission.innerHTML = '🔔 ' + Notification.permission;
+    
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+    if (debugPWA) debugPWA.innerHTML = '📱 PWA: ' + (isStandalone ? 'YES' : 'NO');
+    
+    if (debugVersion) debugVersion.innerHTML = '📦 Версия ' + (window.APP_VERSION || '4.0.0');
+    
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.ready.then(reg => {
+            if (debugSW) debugSW.innerHTML = '✅ SW: ' + (reg.active ? 'ACTIVE' : 'NO');
+        }).catch(err => {
+            if (debugSW) debugSW.innerHTML = '❌ SW error';
+        });
+    } else {
+        if (debugSW) debugSW.innerHTML = '❌ SW not supported';
+    }
+})();
     </script>
 
     <style>
@@ -908,7 +911,7 @@
     <!-- Auto-update checker - minimum version -->
     <script>
         const APP_VERSION = '4.0.0';
-
+		window.APP_VERSION = APP_VERSION;  // Add this line
         // Display version on screen
         const versionSpan = document.getElementById('app-version');
         if (versionSpan) versionSpan.textContent = APP_VERSION;
