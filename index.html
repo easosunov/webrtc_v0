@@ -489,6 +489,11 @@
         <div id="debug-pwa"></div>
     </div>
 
+<div class="version-info" style="text-align: center; padding: 10px; font-size: 11px; color: #888;">
+    Version <span id="app-version">4.0.0</span>
+</div>
+
+
     <script>
         // Compact debug panel update
         (function() {
@@ -907,6 +912,10 @@
 <script>
 
 const APP_VERSION = '4.0.0';
+
+// Display version on screen
+const versionSpan = document.getElementById('app-version');
+if (versionSpan) versionSpan.textContent = APP_VERSION;
 
 async function checkForUpdates() {
     try {
