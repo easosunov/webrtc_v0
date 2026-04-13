@@ -7,6 +7,16 @@
   "theme_color": "#667eea",
   "background_color": "#667eea",
   "orientation": "portrait",
+  "share_target": {
+    "action": "/webrtc_v0/",
+    "method": "GET",
+    "enctype": "application/x-www-form-urlencoded",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  },
   "icons": [
     {
       "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23667eea'/%3E%3Ctext x='50' y='70' font-size='50' text-anchor='middle' fill='white'%3E📞%3C/text%3E%3C/svg%3E",
