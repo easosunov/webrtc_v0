@@ -10,7 +10,7 @@
   "orientation": "portrait",
   "share_target": {
     "action": "/webrtc_v0/",
-    "method": "POST",
+    "method": "GET",
     "enctype": "application/x-www-form-urlencoded",
     "params": {
       "title": "title",
