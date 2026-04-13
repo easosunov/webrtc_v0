@@ -523,6 +523,385 @@
             padding-bottom: 80px !important;
         }
     </style>
-  
+ 
+<!-- Share Target Handler - Receives shared URLs from other apps -->
+<script>
+    // Parse shared data from URL when app is opened via share
+    function handleSharedContent() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const sharedTitle = urlParams.get('title');
+        const sharedText = urlParams.get('text');
+        const sharedUrl = urlParams.get('url');
+        
+        // Check if we have shared content
+        if (sharedUrl || sharedText) {
+            console.log('📤 Received shared content:', { sharedTitle, sharedText, sharedUrl });
+            
+            // Store shared content to be processed after login
+            window.pendingSharedContent = {
+                title: sharedTitle,
+                text: sharedText,
+                url: sharedUrl,
+                timestamp: Date.now()
+            };
+            
+            // Clear URL parameters without reloading
+            window.history.replaceState({}, document.title, window.location.pathname);
+        }
+        
+        // Also handle Web Share Target v2 (postMessage based)
+        if (window.opener && window.opener !== window) {
+            try {
+                window.opener.postMessage({
+                    type: 'web-share-target',
+                    data: {
+                        title: sharedTitle,
+                        text: sharedText,
+                        url: sharedUrl
+                    }
+                }, '*');
+            } catch (e) {
+                console.log('Could not send to opener:', e);
+            }
+        }
+    }
+    
+    // Process pending shared content after login
+    function processPendingSharedContent() {
+        if (window.pendingSharedContent && CONFIG.myUsername) {
+            const content = window.pendingSharedContent;
+            console.log('📤 Processing pending shared content after login');
+            
+            // Show dialog to select recipient
+            showShareRecipientDialog(content);
+            
+            // Clear pending content
+            window.pendingSharedContent = null;
+        }
+    }
+    
+    // Show dialog to select chat recipient
+    async function showShareRecipientDialog(sharedContent) {
+        // Get list of users who have chat history
+        const usersWithChats = await getUsersWithChatHistory();
+        
+        if (usersWithChats.length === 0) {
+            // No existing chats, show all available users
+            showAllUsersForSharing(sharedContent);
+            return;
+        }
+        
+        // Create modal for recipient selection
+        const modal = document.createElement('div');
+        modal.id = 'share-recipient-modal';
+        modal.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            z-index: 5000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        `;
+        
+        const modalContent = document.createElement('div');
+        modalContent.style.cssText = `
+            background: white;
+            border-radius: 12px;
+            max-width: 90%;
+            width: 320px;
+            max-height: 80%;
+            overflow-y: auto;
+            padding: 20px;
+        `;
+        
+        // Format the shared content preview
+        let previewHtml = '';
+        if (sharedContent.url) {
+            previewHtml = `
+                <div style="background: #f0f0f0; padding: 10px; border-radius: 8px; margin-bottom: 15px;">
+                    <div style="font-size: 12px; color: #666;">🔗 Sharing:</div>
+                    <div style="word-break: break-all; font-size: 14px;">
+                        <a href="${sharedContent.url}" target="_blank">${sharedContent.url.substring(0, 50)}${sharedContent.url.length > 50 ? '...' : ''}</a>
+                    </div>
+                    ${sharedContent.title ? `<div style="font-size: 12px; color: #888; margin-top: 5px;">${sharedContent.title}</div>` : ''}
+                </div>
+            `;
+        } else if (sharedContent.text) {
+            previewHtml = `
+                <div style="background: #f0f0f0; padding: 10px; border-radius: 8px; margin-bottom: 15px;">
+                    <div style="font-size: 12px; color: #666;">📝 Sharing:</div>
+                    <div style="font-size: 14px;">${sharedContent.text.substring(0, 100)}${sharedContent.text.length > 100 ? '...' : ''}</div>
+                </div>
+            `;
+        }
+        
+        modalContent.innerHTML = `
+            <h3 style="margin: 0 0 15px 0;">Share to chat</h3>
+            ${previewHtml}
+            <div style="margin-bottom: 10px; font-size: 14px; color: #555;">Select recipient:</div>
+            <div id="share-recipient-list" style="max-height: 300px; overflow-y: auto;"></div>
+            <button id="share-cancel-btn" style="margin-top: 15px; padding: 8px 16px; background: #ccc; border: none; border-radius: 6px; width: 100%; cursor: pointer;">Cancel</button>
+        `;
+        
+        modal.appendChild(modalContent);
+        document.body.appendChild(modal);
+        
+        // Populate recipient list
+        const recipientList = document.getElementById('share-recipient-list');
+        
+        // Add "New chat" option
+        const newChatDiv = document.createElement('div');
+        newChatDiv.style.cssText = `
+            padding: 12px;
+            margin-bottom: 8px;
+            background: #e3f2fd;
+            border-radius: 8px;
+            cursor: pointer;
+            text-align: center;
+        `;
+        newChatDiv.innerHTML = '➕ New chat with someone else';
+        newChatDiv.onclick = () => {
+            modal.remove();
+            showAllUsersForSharing(sharedContent);
+        };
+        recipientList.appendChild(newChatDiv);
+        
+        // Add separator
+        const separator = document.createElement('div');
+        separator.style.cssText = 'border-top: 1px solid #ddd; margin: 10px 0;';
+        recipientList.appendChild(separator);
+        
+        // Add recent chats
+        for (const user of usersWithChats) {
+            const userDiv = document.createElement('div');
+            userDiv.style.cssText = `
+                padding: 12px;
+                margin-bottom: 8px;
+                background: #f5f5f5;
+                border-radius: 8px;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                gap: 10px;
+            `;
+            userDiv.innerHTML = `
+                <span style="font-size: 20px;">👤</span>
+                <span style="flex: 1;">${escapeHtml(user.displayName || user.username)}</span>
+                <span style="font-size: 12px; color: #888;">${user.username}</span>
+            `;
+            userDiv.onclick = () => {
+                modal.remove();
+                sendSharedContentToUser(sharedContent, user.username, user.displayName);
+            };
+            recipientList.appendChild(userDiv);
+        }
+        
+        document.getElementById('share-cancel-btn').onclick = () => modal.remove();
+    }
+    
+    // Show all available users for sharing
+    async function showAllUsersForSharing(sharedContent) {
+        // Get all users except current user
+        const usersSnapshot = await db.collection('users')
+            .where('username', '!=', CONFIG.myUsername)
+            .get();
+        
+        const users = [];
+        usersSnapshot.forEach(doc => {
+            const data = doc.data();
+            users.push({
+                username: doc.id,
+                displayName: data.displayname || doc.id
+            });
+        });
+        
+        const modal = document.createElement('div');
+        modal.id = 'share-users-modal';
+        modal.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            z-index: 5000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        `;
+        
+        const modalContent = document.createElement('div');
+        modalContent.style.cssText = `
+            background: white;
+            border-radius: 12px;
+            max-width: 90%;
+            width: 320px;
+            max-height: 80%;
+            overflow-y: auto;
+            padding: 20px;
+        `;
+        
+        // Format preview
+        let previewHtml = '';
+        if (sharedContent.url) {
+            previewHtml = `<div style="background: #f0f0f0; padding: 10px; border-radius: 8px; margin-bottom: 15px; word-break: break-all;">🔗 ${sharedContent.url.substring(0, 60)}...</div>`;
+        } else if (sharedContent.text) {
+            previewHtml = `<div style="background: #f0f0f0; padding: 10px; border-radius: 8px; margin-bottom: 15px;">📝 ${sharedContent.text.substring(0, 80)}...</div>`;
+        }
+        
+        modalContent.innerHTML = `
+            <h3 style="margin: 0 0 15px 0;">Share to chat</h3>
+            ${previewHtml}
+            <input type="text" id="share-search-input" placeholder="Search users..." style="width: 100%; padding: 8px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 6px;">
+            <div id="share-users-list" style="max-height: 300px; overflow-y: auto;"></div>
+            <button id="share-cancel-btn2" style="margin-top: 15px; padding: 8px 16px; background: #ccc; border: none; border-radius: 6px; width: 100%; cursor: pointer;">Cancel</button>
+        `;
+        
+        modal.appendChild(modalContent);
+        document.body.appendChild(modal);
+        
+        function renderUsers(filter = '') {
+            const filteredUsers = users.filter(u => 
+                u.username.toLowerCase().includes(filter.toLowerCase()) ||
+                (u.displayName && u.displayName.toLowerCase().includes(filter.toLowerCase()))
+            );
+            
+            const listDiv = document.getElementById('share-users-list');
+            listDiv.innerHTML = '';
+            
+            filteredUsers.forEach(user => {
+                const userDiv = document.createElement('div');
+                userDiv.style.cssText = `
+                    padding: 12px;
+                    margin-bottom: 8px;
+                    background: #f5f5f5;
+                    border-radius: 8px;
+                    cursor: pointer;
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                `;
+                userDiv.innerHTML = `
+                    <span style="font-size: 20px;">👤</span>
+                    <span style="flex: 1;">${escapeHtml(user.displayName)}</span>
+                    <span style="font-size: 12px; color: #888;">${escapeHtml(user.username)}</span>
+                `;
+                userDiv.onclick = () => {
+                    modal.remove();
+                    sendSharedContentToUser(sharedContent, user.username, user.displayName);
+                };
+                listDiv.appendChild(userDiv);
+            });
+        }
+        
+        renderUsers();
+        
+        const searchInput = document.getElementById('share-search-input');
+        searchInput.addEventListener('input', (e) => renderUsers(e.target.value));
+        
+        document.getElementById('share-cancel-btn2').onclick = () => modal.remove();
+    }
+    
+    // Send shared content to selected user
+    async function sendSharedContentToUser(sharedContent, targetUsername, targetDisplayName) {
+        let messageText = '';
+        
+        if (sharedContent.url) {
+            // Create a rich preview message
+            if (sharedContent.title) {
+                messageText = `📎 ${sharedContent.title}\n${sharedContent.url}`;
+            } else {
+                messageText = `🔗 ${sharedContent.url}`;
+            }
+        } else if (sharedContent.text) {
+            messageText = `📝 ${sharedContent.text}`;
+        }
+        
+        // Send via existing chat system
+        if (window.sendDirectMessage) {
+            await window.sendDirectMessage(targetUsername, messageText);
+            showShareSuccessNotification(`Shared with ${targetDisplayName || targetUsername}`);
+        } else {
+            console.error('sendDirectMessage not available');
+            showShareSuccessNotification('Failed to send: chat system not ready');
+        }
+    }
+    
+    // Helper: Get users with chat history
+    async function getUsersWithChatHistory() {
+        if (!CONFIG.myUsername) return [];
+        
+        const chatsSnapshot = await db.collection('chats')
+            .where('participants', 'array-contains', CONFIG.myUsername)
+            .get();
+        
+        const users = new Set();
+        for (const doc of chatsSnapshot.docs) {
+            const participants = doc.data().participants;
+            const otherUser = participants.find(p => p !== CONFIG.myUsername);
+            if (otherUser) {
+                const userDoc = await db.collection('users').doc(otherUser).get();
+                users.add({
+                    username: otherUser,
+                    displayName: userDoc.data()?.displayname || otherUser
+                });
+            }
+        }
+        
+        return Array.from(users);
+    }
+    
+    // Show success notification
+    function showShareSuccessNotification(message) {
+        const notification = document.createElement('div');
+        notification.style.cssText = `
+            position: fixed;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #4caf50;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            z-index: 5001;
+            animation: fadeOut 2s ease-in-out forwards;
+        `;
+        notification.textContent = message;
+        document.body.appendChild(notification);
+        setTimeout(() => notification.remove(), 2000);
+    }
+    
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
+    // Run on page load
+    handleSharedContent();
+    
+    // Listen for login-complete event to process pending shares
+    window.addEventListener('login-complete', () => {
+        setTimeout(processPendingSharedContent, 1000);
+    });
+    
+    // Also check periodically for a few seconds after login
+    let checkCount = 0;
+    const interval = setInterval(() => {
+        if (CONFIG.myUsername && window.pendingSharedContent) {
+            processPendingSharedContent();
+            clearInterval(interval);
+        }
+        checkCount++;
+        if (checkCount > 20) clearInterval(interval);
+    }, 500);
+</script>
+
+ 
 </body>
 </html>
