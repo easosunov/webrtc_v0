@@ -73,7 +73,10 @@ const CONFIG = {
     pushSubscription: null,
     pushSupported: false,
     qualityReduced: false,
-    originalVideoConstraints: null
+    originalVideoConstraints: null,
+	
+	// Audio-only mode flag
+	isAudioOnlyMode: false
 };
 
 // ==================== WEB PUSH CONFIGURATION ====================
